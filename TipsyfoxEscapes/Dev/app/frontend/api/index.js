@@ -1,9 +1,8 @@
 /**
- * Single serverless entry for all /api/* routes (see vercel.json rewrites).
+ * Serverless entry for all /api/* routes. Backend is bundled at build time in ./_bundle.
  */
 let expressHandler;
 
-/** Restore full /api/... path after Vercel rewrite to /api. */
 const normalizeApiUrl = (req) => {
   const query = req.url?.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
   const headerCandidates = [
@@ -22,7 +21,7 @@ const normalizeApiUrl = (req) => {
         return;
       }
     } catch {
-      /* try next header */
+      /* try next */
     }
   }
   if (!String(req.url ?? "").startsWith("/api")) {
@@ -34,7 +33,7 @@ const normalizeApiUrl = (req) => {
 export default async function handler(req, res) {
   normalizeApiUrl(req);
   if (!expressHandler) {
-    const mod = await import("../backend/dist/serverless.js");
+    const mod = await import("./_bundle/dist/serverless.js");
     expressHandler = mod.default;
   }
   return expressHandler(req, res);
