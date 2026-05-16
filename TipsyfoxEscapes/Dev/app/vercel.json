@@ -9,7 +9,8 @@
   },
   "rewrites": [
     { "source": "/api/health", "destination": "/api/health" },
-    { "source": "/api/(.*)", "destination": "/api" }
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "functions": {
     "api/health.js": {

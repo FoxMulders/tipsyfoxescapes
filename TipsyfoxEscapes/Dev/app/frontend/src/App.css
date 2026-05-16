@@ -2450,17 +2450,24 @@ label.checkbox-field {
   --glass-edge: rgba(200, 230, 235, 0.12);
   --blueprint-cyan: rgba(45, 200, 190, 0.5);
   --blueprint-amber: rgba(255, 190, 90, 0.45);
+  --studio-window-blur: 4px;
+  --studio-glass-specular-opacity: 0.08;
+  --studio-glass-grain-opacity: 0.02;
 }
 
 .glass-panel {
   position: relative;
   overflow: visible;
+  isolation: isolate;
+  transform: translateZ(0);
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.04) 0%, transparent 42%),
-    linear-gradient(210deg, rgba(10, 20, 24, 0.1) 0%, rgba(6, 14, 18, 0.16) 100%),
-    var(--glass-tint) !important;
-  backdrop-filter: blur(22px) saturate(1.12);
-  -webkit-backdrop-filter: blur(22px) saturate(1.12);
+    linear-gradient(rgba(255, 255, 255, 0) 49.65%, rgba(255, 255, 255, 0.012) 50%, rgba(255, 255, 255, 0) 50.4%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0) 32.85%, rgba(255, 255, 255, 0.01) 33.15%, rgba(255, 255, 255, 0) 33.45%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0) 66.15%, rgba(255, 255, 255, 0.01) 66.45%, rgba(255, 255, 255, 0) 66.75%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.014) 0%, transparent 38%),
+    linear-gradient(210deg, rgba(14, 20, 36, 0.03) 0%, rgba(8, 13, 26, 0.04) 100%) !important;
+  backdrop-filter: blur(var(--studio-window-blur)) saturate(1.02);
+  -webkit-backdrop-filter: blur(var(--studio-window-blur)) saturate(1.02);
   border: 1px solid var(--glass-edge) !important;
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.45),
@@ -2477,8 +2484,8 @@ label.checkbox-field {
   border-radius: inherit;
   pointer-events: none;
   z-index: 0;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, transparent 38%, transparent 62%, rgba(255, 255, 255, 0.02) 100%);
-  opacity: 0.35;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, transparent 38%, transparent 62%, rgba(60, 160, 168, 0.015) 100%);
+  opacity: var(--studio-glass-specular-opacity);
 }
 
 /* Control deck cards: top edge highlight + stronger specular */
@@ -2496,7 +2503,7 @@ label.checkbox-field {
   border-radius: inherit;
   pointer-events: none;
   z-index: 1;
-  opacity: 0.05;
+  opacity: var(--studio-glass-grain-opacity);
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.65'/%3E%3C/svg%3E");
 }
@@ -4075,72 +4082,19 @@ ul.auth-hero-para {
  * Control deck glass — ID selector so this always wins over .glass-panel (class-only rules
  * were losing in some builds / order). Tune frosted look here only.
  */
-#control-deck-studio {
-  isolation: isolate;
-  transform: translateZ(0);
-  --studio-window-blur: 4px;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0) 49.65%, rgba(255, 255, 255, 0.012) 50%, rgba(255, 255, 255, 0) 50.4%),
-    linear-gradient(90deg, rgba(255, 255, 255, 0) 32.85%, rgba(255, 255, 255, 0.01) 33.15%, rgba(255, 255, 255, 0) 33.45%),
-    linear-gradient(90deg, rgba(255, 255, 255, 0) 66.15%, rgba(255, 255, 255, 0.01) 66.45%, rgba(255, 255, 255, 0) 66.75%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.014) 0%, transparent 38%),
-    linear-gradient(210deg, rgba(14, 20, 36, 0.03) 0%, rgba(8, 13, 26, 0.04) 100%) !important;
-  backdrop-filter: blur(var(--studio-window-blur)) saturate(1.02) !important;
-  -webkit-backdrop-filter: blur(var(--studio-window-blur)) saturate(1.02) !important;
-}
-
-#control-deck-studio::before {
-  opacity: 0.08 !important;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, transparent 38%, transparent 62%, rgba(60, 160, 168, 0.015) 100%) !important;
-}
-
-#control-deck-studio::after {
-  opacity: 0.02 !important;
-}
-
 #control-deck-studio .mission-stats {
   background: rgba(6, 12, 18, 0.22) !important;
   backdrop-filter: blur(3px) !important;
   -webkit-backdrop-filter: blur(3px) !important;
 }
 
-/* Login panels: frosted glass (override .hero opaque gradient when .glass-panel is present) */
+/* Login hero: strip opaque .hero gradient so studio glass shows through */
 #auth-hero-panel.hero.glass-panel,
-#auth-card-panel.glass-panel {
+#control-deck-studio.hero.glass-panel {
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0%, transparent 42%),
-    linear-gradient(210deg, rgba(10, 20, 24, 0.08) 0%, rgba(6, 14, 18, 0.12) 100%),
-    rgba(8, 18, 22, 0.14) !important;
-  backdrop-filter: blur(18px) saturate(1.1) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(1.1) !important;
-  isolation: isolate;
-  transform: translateZ(0);
-}
-
-#auth-hero-panel.glass-panel::before,
-#auth-card-panel.glass-panel::before {
-  opacity: 0.22 !important;
-}
-
-#auth-hero-panel.glass-panel::after,
-#auth-card-panel.glass-panel::after {
-  opacity: 0.04 !important;
-}
-
-/* Signed-in shell: extra lift on top of lighter .glass-panel defaults */
-main.page-shell--layered .glass-panel {
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.03) 0%, transparent 42%),
-    linear-gradient(210deg, rgba(10, 20, 24, 0.07) 0%, rgba(6, 14, 18, 0.11) 100%),
-    rgba(8, 18, 22, 0.08) !important;
-  backdrop-filter: blur(16px) saturate(1.08) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(1.08) !important;
-}
-
-main.page-shell--layered .glass-panel::before {
-  opacity: 0.28 !important;
-}
-
-main.page-shell--layered .glass-panel::after {
-  opacity: 0.05 !important;
+    linear-gradient(rgba(255, 255, 255, 0) 49.65%, rgba(255, 255, 255, 0.012) 50%, rgba(255, 255, 255, 0) 50.4%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0) 32.85%, rgba(255, 255, 255, 0.01) 33.15%, rgba(255, 255, 255, 0) 33.45%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0) 66.15%, rgba(255, 255, 255, 0.01) 66.45%, rgba(255, 255, 255, 0) 66.75%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.014) 0%, transparent 38%),
+    linear-gradient(210deg, rgba(14, 20, 36, 0.03) 0%, rgba(8, 13, 26, 0.04) 100%) !important;
 }
