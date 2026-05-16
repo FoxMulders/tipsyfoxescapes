@@ -1,15 +1,23 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm ci --prefix backend && npm ci --prefix frontend",
-  "buildCommand": "node scripts/bundle-server.mjs && npm run build --prefix frontend",
+  "installCommand": "npm ci && npm ci --prefix backend && npm ci --prefix frontend",
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": "frontend/dist",
   "env": {
     "SKIP_VERSION_BUMP": "1"
   },
+  "rewrites": [
+    { "source": "/api/health", "destination": "/api/health" },
+    { "source": "/api/(.*)", "destination": "/api/$1" }
+  ],
   "functions": {
-    "api/**/*.js": {
+    "api/health.js": {
+      "maxDuration": 10
+    },
+    "api/[...path].js": {
       "maxDuration": 30,
-      "memory": 1024
+      "memory": 1024,
+      "includeFiles": "api/server.cjs"
     }
   }
 }
