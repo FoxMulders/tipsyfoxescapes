@@ -3,6 +3,9 @@
   "version": "1.0.3",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "bump:patch": "node scripts/bump-app-version.mjs patch",
     "bump:minor": "node scripts/bump-app-version.mjs minor",
@@ -21,7 +24,7 @@
   "devDependencies": {
     "@types/react": "^18.3.8",
     "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.2",
+    "@vitejs/plugin-react": "^5.2.0",
     "typescript": "^5.6.2",
     "vite": "^8.0.12"
   }
