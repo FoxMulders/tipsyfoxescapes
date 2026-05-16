@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm ci --prefix backend && npm ci --prefix frontend",
+  "buildCommand": "node scripts/bundle-server.mjs && npm run build --prefix frontend",
+  "outputDirectory": "frontend/dist",
+  "env": {
+    "SKIP_VERSION_BUMP": "1"
+  },
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  }
+}
