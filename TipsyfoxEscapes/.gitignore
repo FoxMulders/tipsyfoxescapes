@@ -20,6 +20,8 @@ pnpm-debug.log*
 **/node_modules/
 **/dist/
 **/build/
+api/server.cjs
+api/server.cjs.map
 **/.vite/
 **/.cache/
 **/*.tsbuildinfo

@@ -1,7 +1,6 @@
-/**
- * Vercel serverless entry for all /api/* routes.
- * Express is wrapped with serverless-http in Dev/app/backend (see dist/serverless.js).
- */
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 let expressHandler;
 
 const normalizeApiUrl = (req) => {
@@ -31,8 +30,8 @@ const normalizeApiUrl = (req) => {
 export default async function handler(req, res) {
   normalizeApiUrl(req);
   if (!expressHandler) {
-    const mod = await import("../Dev/app/backend/dist/serverless.js");
-    expressHandler = mod.default;
+    const mod = require("./server.cjs");
+    expressHandler = mod.default ?? mod;
   }
   return expressHandler(req, res);
 }

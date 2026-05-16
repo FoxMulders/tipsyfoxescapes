@@ -1,19 +1,19 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm ci --prefix Dev/app/backend && npm ci --prefix Dev/app/frontend",
-  "buildCommand": "npm run build --prefix Dev/app/backend && npm run build --prefix Dev/app/frontend",
+  "installCommand": "npm ci && npm ci --prefix Dev/app/backend && npm ci --prefix Dev/app/frontend",
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": "Dev/app/frontend/dist",
   "env": {
     "SKIP_VERSION_BUMP": "1"
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/api", "destination": "/api" }
   ],
   "functions": {
-    "api/index.js": {
+    "api/**/*.js": {
       "maxDuration": 30,
-      "includeFiles": "Dev/app/backend/dist/**,Dev/app/backend/node_modules/**"
+      "memory": 1024
     }
   }
 }
