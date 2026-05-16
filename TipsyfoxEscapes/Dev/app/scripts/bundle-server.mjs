@@ -15,7 +15,9 @@ await esbuild.build({
   target: "node20",
   format: "cjs",
   outfile,
-  sourcemap: true,
+  minify: true,
+  legalComments: "none",
+  sourcemap: false,
   logLevel: "info",
   mainFields: ["module", "main"],
 });

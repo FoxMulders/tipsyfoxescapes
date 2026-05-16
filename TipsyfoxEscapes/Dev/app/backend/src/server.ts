@@ -5050,17 +5050,9 @@ const recomputeIdCountersFromSessions = (): void => {
   }
 };
 
-export async function bootstrap(): Promise<void> {
-  await ensureDataDir();
-  await loadSkipHistory();
-  await loadUsers();
-  await loadOrganizationPools();
-  await loadUsageLedger();
-  await loadSavedPlans();
-  await loadAuthTokens(authTokens);
-  await loadPlanningSessions(sessions, deserializeSessionFromDisk);
-  recomputeIdCountersFromSessions();
+let bootstrapPromise: Promise<void> | null = null;
 
+const finishBootstrap = async (): Promise<void> => {
   let usersMigrated = false;
   for (const user of usersByEmail.values()) {
     if (user.isAdmin) continue;
@@ -5088,6 +5080,46 @@ export async function bootstrap(): Promise<void> {
     toPublicUser: (user) => toPublicUser(user as StoredUser),
   };
   registerBillingRoutes(app, () => billingRouteDeps!);
+};
+
+const loadDeferredStorage = async (): Promise<void> => {
+  await loadSkipHistory();
+  await loadOrganizationPools();
+  await loadUsageLedger();
+  await loadSavedPlans();
+  await loadPlanningSessions(sessions, deserializeSessionFromDisk);
+  recomputeIdCountersFromSessions();
+};
+
+export async function bootstrap(): Promise<void> {
+  if (bootstrapPromise) return bootstrapPromise;
+
+  bootstrapPromise = (async () => {
+    await ensureDataDir();
+    const onVercel = Boolean(process.env.VERCEL);
+
+    if (onVercel) {
+      await Promise.all([loadUsers(), loadAuthTokens(authTokens)]);
+      await finishBootstrap();
+      void loadDeferredStorage().catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn("[bootstrap] deferred storage load failed:", err);
+      });
+      return;
+    }
+
+    await loadSkipHistory();
+    await loadUsers();
+    await loadOrganizationPools();
+    await loadUsageLedger();
+    await loadSavedPlans();
+    await loadAuthTokens(authTokens);
+    await loadPlanningSessions(sessions, deserializeSessionFromDisk);
+    recomputeIdCountersFromSessions();
+    await finishBootstrap();
+  })();
+
+  return bootstrapPromise;
 }
 
 export { app };

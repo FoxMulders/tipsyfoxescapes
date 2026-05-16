@@ -5,6 +5,12 @@ const { join } = require("node:path");
 const requireFromHere = createRequire(__filename);
 const serverBundlePath = join(__dirname, "server.cjs");
 let expressHandler;
+const serverLoadPromise = existsSync(serverBundlePath)
+  ? Promise.resolve().then(() => {
+      const mod = requireFromHere(serverBundlePath);
+      expressHandler = mod.default ?? mod;
+    })
+  : null;
 
 /** Restore full /api/... path after rewrite to /api. */
 const normalizeApiUrl = (req) => {
@@ -48,6 +54,7 @@ module.exports = async function handler(req, res) {
     return;
   }
   try {
+    if (!expressHandler && serverLoadPromise) await serverLoadPromise;
     if (!expressHandler) {
       const mod = requireFromHere(serverBundlePath);
       expressHandler = mod.default ?? mod;
