@@ -1,0 +1,7046 @@
+import {
+  createElement,
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { flushSync } from "react-dom";
+import "./App.css";
+import {
+  customThemeCoachSynthesize,
+  customThemeCoachTurn,
+  enhancePlanInBrowser,
+  generateContextualInspirationInBrowser,
+  INSPIRATION_CATALOG,
+  isBrowserAiAvailable,
+  polishThemeBriefInBrowser,
+  probeBrowserLanguageModel,
+  type ContextualInspirationResult,
+  type CustomThemeCoachContext,
+  type CustomThemeCoachMessage,
+  type InspirationCatalogEntry,
+} from "./browserAi.ts";
+import { getOrCreateDeviceId } from "./deviceId.ts";
+
+const APP_BUILD_STAMP = typeof __APP_SEMVER__ !== "undefined" ? __APP_SEMVER__ : "0.0.0";
+
+type PuzzleReferenceLink = { title: string; url: string; creditTo?: string; affiliateUrl?: string };
+type Puzzle = {
+  id: string;
+  category: "logic" | "physical" | "electronic";
+  title: string;
+  objective: string;
+  howItWorks: string;
+  themeFitReason?: string;
+  referenceLinks: PuzzleReferenceLink[];
+  solveSteps: string[];
+  difficulty: "easy" | "medium" | "hard";
+  audienceTrack?: "main" | "youth_addon";
+  gatesAdultProgression?: boolean;
+  electronicDetails?: {
+    parts: string[];
+    wiringDiagram: string[];
+    wiringDiagramSvg: string;
+    buildSteps: string[];
+    arduinoCode: string;
+  };
+};
+
+function TrialBlur({ active, label, children }: { active: boolean; label: string; children: ReactNode }) {
+  if (!active) return <>{children}</>;
+  return (
+    <div className="trial-blur-wrap">
+      <div className="trial-blur-layer" aria-hidden="true">
+        {children}
+      </div>
+      <div className="trial-blur-overlay">
+        <p>{label}</p>
+      </div>
+    </div>
+  );
+}
+
+function PuzzleReferenceAttributions({ links }: { links: PuzzleReferenceLink[] }) {
+  if (!links?.length) return null;
+  return (
+    <ul className="reference-attributions muted">
+      {links.map((ref, i) => (
+        <li key={`${ref.title}-${i}`}>
+          <a href={ref.url} target="_blank" rel="noreferrer">
+            {ref.title}
+          </a>
+          {ref.creditTo ? <span className="credit-line"> — {ref.creditTo}</span> : null}
+          {ref.affiliateUrl ? (
+            <>
+              {" "}
+              <a className="affiliate-link" href={ref.affiliateUrl} target="_blank" rel="noreferrer sponsored">
+                Support creator / affiliate
+              </a>
+            </>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+type RecommendedPuzzleBrief = Pick<Puzzle, "id" | "title" | "category" | "objective" | "howItWorks" | "difficulty">;
+type Theme = { id: string; name: string; description: string; tldr?: string; recommendedPuzzles?: RecommendedPuzzleBrief[] };
+type StoryPlan = {
+  situation: string;
+  premise: string;
+  missionObjective: string;
+  progressionRule: string;
+  stages: Array<{
+    stage: number;
+    title: string;
+    storyBeat: string;
+    whyThisStageExists: string;
+    objective: string;
+    whatPlayersMustDo: string[];
+    requiredPuzzleIds: string[];
+    requiredPuzzleTitles: string[];
+    reveals: string;
+  }>;
+  puzzleLinks: Array<{
+    puzzleId: string;
+    puzzleTitle: string;
+    storyRole: string;
+    unlocks: string;
+  }>;
+  stagingDiagram?: string;
+};
+type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
+  provider: "local" | "google" | "facebook" | "github";
+  isAdmin: boolean;
+  roomAllowance: number;
+  savedRoomCount: number;
+  roomsRemaining: number;
+  hasFullCatalog: boolean;
+  billingTier: "admin" | "pack" | "trial" | "free";
+  exportCreditsRemaining: number;
+  orgPoolBonusSlots: number;
+  trialUsed: boolean;
+  trialRemaining: boolean;
+  canSaveRooms: boolean;
+};
+
+type BillingPlan = {
+  id: string;
+  name: string;
+  tagline: string;
+  priceLabel: string;
+  perRoomPriceLabel?: string | null;
+  priceCents: number;
+  currency: string;
+  roomsToAdd: number;
+  exportCreditsToAdd: number;
+  features: string[];
+  comparedTo: string;
+  purchasable: boolean;
+  highlight?: boolean;
+};
+
+const PricingComparedTo = ({ text }: { text: string }) => {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  return (
+    <p className="pricing-compared-inline muted" role="note">
+      <span className="pricing-compared-label">Compared to </span>
+      {trimmed}
+    </p>
+  );
+};
+
+const normalizeAuthUser = (raw: unknown): AuthUser | null => {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.id !== "string" || typeof o.email !== "string" || typeof o.name !== "string" || typeof o.provider !== "string") {
+    return null;
+  }
+  const isAdmin = Boolean(o.isAdmin);
+  let roomAllowance = Number(o.roomAllowance);
+  if (!Number.isFinite(roomAllowance) || roomAllowance < 0) {
+    roomAllowance = Boolean(o.subscriptionActive) ? 15 : 0;
+  }
+  roomAllowance = Math.floor(roomAllowance);
+  let savedRoomCount = Number(o.savedRoomCount);
+  if (!Number.isFinite(savedRoomCount) || savedRoomCount < 0) savedRoomCount = 0;
+  savedRoomCount = Math.floor(savedRoomCount);
+  let roomsRemaining = Number(o.roomsRemaining);
+  if (!Number.isFinite(roomsRemaining) || roomsRemaining < 0) {
+    roomsRemaining = Math.max(0, roomAllowance - savedRoomCount);
+  }
+  roomsRemaining = Math.floor(roomsRemaining);
+  let hasFullCatalog = Boolean(o.hasFullCatalog);
+  if (o.hasFullCatalog === undefined) {
+    hasFullCatalog = isAdmin || roomAllowance > 0;
+  }
+  let billingTier = o.billingTier as AuthUser["billingTier"];
+  if (billingTier !== "admin" && billingTier !== "pack" && billingTier !== "trial" && billingTier !== "free") {
+    if (isAdmin) billingTier = "admin";
+    else if (roomAllowance > 0) billingTier = "pack";
+    else if (Boolean(o.trialRemaining)) billingTier = "trial";
+    else billingTier = "free";
+  }
+  const trialUsed = Boolean(o.trialUsed);
+  const trialRemaining = Boolean(o.trialRemaining);
+  const canSaveRooms = Boolean(o.canSaveRooms) || isAdmin || roomAllowance > 0;
+  let exportCreditsRemaining = Number(o.exportCreditsRemaining);
+  if (!Number.isFinite(exportCreditsRemaining) || exportCreditsRemaining < 0) {
+    exportCreditsRemaining = isAdmin ? 1_000_000 : hasFullCatalog ? 50 : 0;
+  }
+  exportCreditsRemaining = Math.floor(exportCreditsRemaining);
+  let orgPoolBonusSlots = Number(o.orgPoolBonusSlots);
+  if (!Number.isFinite(orgPoolBonusSlots) || orgPoolBonusSlots < 0) orgPoolBonusSlots = 0;
+  orgPoolBonusSlots = Math.floor(orgPoolBonusSlots);
+  return {
+    id: o.id,
+    name: o.name,
+    email: o.email,
+    provider: o.provider as AuthUser["provider"],
+    isAdmin,
+    roomAllowance,
+    savedRoomCount,
+    roomsRemaining,
+    hasFullCatalog,
+    billingTier,
+    exportCreditsRemaining,
+    orgPoolBonusSlots,
+    trialUsed,
+    trialRemaining,
+    canSaveRooms,
+  };
+};
+type SavedPlanSummary = {
+  planId: string;
+  name: string;
+  approvedForBuild: boolean;
+  sessionId: string;
+  createdAt: string;
+  updatedAt: string;
+  themeName: string;
+  puzzleCount: number;
+};
+type SavedPlanPayload = {
+  planningInput: {
+    playersConcurrent: number;
+    participantsTotal: number;
+    sessionDurationMinutes: number;
+    environmentType: string;
+    availableItems: string[];
+    existingPuzzles: Array<{ name: string; link: string; roomPart: string }>;
+    roomDifficulty?: "easy" | "medium" | "hard";
+    youthAddOnEnabled?: boolean;
+    youthAddOnGatesAdultFlow?: boolean;
+    youthAddOnAgeNote?: string;
+    eventType?: string;
+    mainTrackPuzzleCountOverride?: number | null;
+    puzzleMixLogic?: number | null;
+    puzzleMixPhysical?: number | null;
+    puzzleMixElectronic?: number | null;
+    themeMustMatchEnvironment?: boolean;
+  };
+  themes: Theme[];
+  selectedThemeId: string;
+  puzzles: Puzzle[];
+  suggestedAdditions: string[];
+  suggestedAdditionsRequired?: string[];
+  storyPlan: StoryPlan | null;
+  compatibilityPassed: boolean;
+  exportContent: string;
+  themeCoachChat?: Array<{ id: string; role: "user" | "assistant"; content: string }>;
+};
+const API_BASE = "";
+/** Curated reading for hosts building physical / logic puzzles (Room details). */
+const INSPIRATION_DRAWER_CATEGORY_ORDER: InspirationCatalogEntry["category"][] = [
+  "Tech & DIY",
+  "Design & theory",
+  "Community & playthroughs",
+  "Visual ideas",
+  "Starter articles",
+];
+
+function inspirationCatalogEntryById(id: string): InspirationCatalogEntry | undefined {
+  return INSPIRATION_CATALOG.find((e) => e.id === id);
+}
+const HISTORY_STORAGE_KEY = "escape-room-builder-input-history-v1";
+const AUTH_STORAGE_KEY = "escape-room-builder-auth-v1";
+/** After idle sign-out, saved draft plan id so the next login can reopen the builder automatically. */
+const IDLE_RESUME_PLAN_ID_KEY = "escape-room-builder-idle-resume-plan-v1";
+/** Auto sign-out after this many milliseconds without user activity. */
+const AUTH_IDLE_SIGNOUT_MS = 30 * 60 * 1000;
+/** Show resume / stay-signed-in prompt this many milliseconds before sign-out. */
+const AUTH_IDLE_PROMPT_LEAD_MS = 90 * 1000;
+type InputHistory = Record<string, string[]>;
+const loadHistory = (): InputHistory => {
+  try {
+    const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as InputHistory;
+  } catch {
+    return {};
+  }
+};
+const saveHistory = (history: InputHistory): void => {
+  try {
+    window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+  } catch {
+    // Ignore localStorage failures.
+  }
+};
+
+const deriveThemeFitFallback = (themeName: string, themeDescription: string, puzzle: Puzzle): string => {
+  const themeText = `${themeName} ${themeDescription}`.toLowerCase();
+  const objective = puzzle.objective.toLowerCase();
+  const title = puzzle.title.toLowerCase();
+  const isPrison = themeText.includes("prison") || themeText.includes("lockdown") || themeText.includes("cell");
+  const isSciFi =
+    themeText.includes("guardians") ||
+    themeText.includes("galaxy") ||
+    themeText.includes("space") ||
+    themeText.includes("futur");
+
+  if (isPrison && (title.includes("lock") || objective.includes("lock"))) {
+    return `For "${themeName}", this fits naturally because lock-based progression matches prison security logic and makes the puzzle feel like part of a real containment system.`;
+  }
+  if (isSciFi && puzzle.category === "electronic") {
+    return `For "${themeName}", this fits because electronic interaction mirrors futuristic systems and reinforces the high-tech worldbuilding.`;
+  }
+  if (puzzle.category === "physical") {
+    return `For "${themeName}", this puzzle fits by using tactile mechanics that support believable in-world interactions.`;
+  }
+  if (puzzle.category === "logic") {
+    return `For "${themeName}", this puzzle fits by turning narrative clues into deduction, keeping the story progression coherent.`;
+  }
+  return `For "${themeName}", this puzzle supports the theme through its narrative role and progression function.`;
+};
+
+type RefusedPuzzleSlot = {
+  slotId: string;
+  category: Puzzle["category"];
+  audienceTrack?: Puzzle["audienceTrack"];
+  gatesAdultProgression?: boolean;
+};
+
+type PuzzleWindowBusy = { target: string; action: "replace" | "reject" | "fill" };
+
+function PuzzleRefusedWindow({
+  slot,
+  displayNumber,
+  busy,
+  onFillSlot,
+}: {
+  slot: RefusedPuzzleSlot;
+  displayNumber: number;
+  busy: boolean;
+  onFillSlot: (slotId: string) => void;
+}) {
+  return (
+    <article className="glass-panel puzzle-window puzzle-window--refused" aria-label={`Refused ${formatPuzzleCategory(slot.category)} puzzle slot`}>
+      <header className="puzzle-window-toolbar">
+        <span className="puzzle-number-badge" aria-hidden>
+          {displayNumber}
+        </span>
+        <div className="puzzle-window-toolbar-main">
+          <h4 className="puzzle-output-title">Puzzle removed</h4>
+          <p className="puzzle-type-field">
+            <span className="puzzle-field-label">Type</span>
+            <span className={`puzzle-type-pill puzzle-type-pill--${slot.category}`}>
+              {formatPuzzleCategory(slot.category)}
+            </span>
+          </p>
+        </div>
+      </header>
+      <div className="puzzle-window-body puzzle-window-body--empty">
+        <p className="muted">
+          You closed this puzzle. Generate another {formatPuzzleCategory(slot.category).toLowerCase()} idea when you are ready.
+        </p>
+        {slot.audienceTrack === "youth_addon" ? <p className="muted">Junior add-on track</p> : null}
+      </div>
+      <footer className="puzzle-window-footer">
+        <button type="button" className="primary-btn" disabled={busy} onClick={() => onFillSlot(slot.slotId)}>
+          {busy ? "Generating…" : "Generate another"}
+        </button>
+      </footer>
+    </article>
+  );
+}
+
+function PuzzleWindowsTrack({
+  puzzles,
+  refusedSlots,
+  numberOffset,
+  selectedThemeName,
+  selectedThemeDescription,
+  authUser,
+  arduinoPreviewPuzzleId,
+  puzzleWindowBusy,
+  onToggleArduinoPreview,
+  onReplace,
+  onReject,
+  onFillSlot,
+}: {
+  puzzles: Puzzle[];
+  refusedSlots: RefusedPuzzleSlot[];
+  numberOffset: number;
+  selectedThemeName: string;
+  selectedThemeDescription: string;
+  authUser: AuthUser | null;
+  arduinoPreviewPuzzleId: string | null;
+  puzzleWindowBusy: PuzzleWindowBusy | null;
+  onToggleArduinoPreview: (puzzleId: string) => void;
+  onReplace: (puzzleId: string) => void;
+  onReject: (puzzleId: string) => void;
+  onFillSlot: (slotId: string) => void;
+}) {
+  return (
+    <div className="puzzle-windows-grid">
+      {puzzles.map((puzzle, index) => (
+        <PuzzleWindowCard
+          key={puzzle.id}
+          puzzle={puzzle}
+          puzzleNumber={numberOffset + index + 1}
+          selectedThemeName={selectedThemeName}
+          selectedThemeDescription={selectedThemeDescription}
+          authUser={authUser}
+          arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
+          onToggleArduinoPreview={onToggleArduinoPreview}
+          onReplace={onReplace}
+          onReject={onReject}
+          replaceBusy={puzzleWindowBusy?.action === "replace" && puzzleWindowBusy.target === puzzle.id}
+          rejectBusy={puzzleWindowBusy?.action === "reject" && puzzleWindowBusy.target === puzzle.id}
+        />
+      ))}
+      {refusedSlots.map((slot, index) => (
+        <PuzzleRefusedWindow
+          key={slot.slotId}
+          slot={slot}
+          displayNumber={numberOffset + puzzles.length + index + 1}
+          busy={puzzleWindowBusy?.action === "fill" && puzzleWindowBusy.target === slot.slotId}
+          onFillSlot={onFillSlot}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PuzzleWindowCard({
+  puzzle,
+  puzzleNumber,
+  selectedThemeName,
+  selectedThemeDescription,
+  authUser,
+  arduinoPreviewPuzzleId,
+  onToggleArduinoPreview,
+  onReplace,
+  onReject,
+  replaceBusy,
+  rejectBusy,
+}: {
+  puzzle: Puzzle;
+  puzzleNumber: number;
+  selectedThemeName: string;
+  selectedThemeDescription: string;
+  authUser: AuthUser | null;
+  arduinoPreviewPuzzleId: string | null;
+  onToggleArduinoPreview: (puzzleId: string) => void;
+  onReplace: (puzzleId: string) => void;
+  onReject: (puzzleId: string) => void;
+  replaceBusy: boolean;
+  rejectBusy: boolean;
+}) {
+  const themeFit = puzzle.themeFitReason ?? deriveThemeFitFallback(selectedThemeName, selectedThemeDescription, puzzle);
+  const titleId = `puzzle-win-${puzzle.id}-title`;
+  return (
+    <article className="glass-panel puzzle-window" aria-labelledby={titleId}>
+      <header className="puzzle-window-toolbar">
+        <span className="puzzle-number-badge" aria-hidden>
+          {puzzleNumber}
+        </span>
+        <div className="puzzle-window-toolbar-main">
+          <h4 id={titleId} className="puzzle-output-title">
+            {puzzle.title}
+          </h4>
+          <p className="puzzle-type-field">
+            <span className="puzzle-field-label">Type</span>
+            <span className={`puzzle-type-pill puzzle-type-pill--${puzzle.category}`}>
+              {formatPuzzleCategory(puzzle.category)}
+            </span>
+          </p>
+        </div>
+        <button
+          type="button"
+          className="puzzle-window-close"
+          aria-label={`Refuse puzzle ${puzzleNumber}: ${puzzle.title}`}
+          disabled={rejectBusy || replaceBusy}
+          onClick={() => onReject(puzzle.id)}
+        >
+          ×
+        </button>
+      </header>
+      <div className="puzzle-window-body">
+      <p className="puzzle-meta-line">
+        <span className="puzzle-field-label puzzle-field-label--inline">Difficulty</span>
+        <span className="puzzle-difficulty-label">{formatDifficultyLabel(puzzle.difficulty)}</span>
+        {puzzle.audienceTrack === "youth_addon" ? (
+          <>
+            <span className="puzzle-meta-sep" aria-hidden>
+              {" "}
+              ·{" "}
+            </span>
+            <span className="puzzle-track-pill">Junior add-on</span>
+          </>
+        ) : null}
+        {puzzle.gatesAdultProgression ? (
+          <>
+            <span className="puzzle-meta-sep" aria-hidden>
+              {" "}
+              ·{" "}
+            </span>
+            <span className="puzzle-gate-pill">Gates adult flow</span>
+          </>
+        ) : null}
+      </p>
+      <p className="inline-space puzzle-objective-line">{puzzle.objective}</p>
+      <p className="inline-space">
+        <strong>How it works:</strong> {puzzle.howItWorks}
+      </p>
+      <p className="inline-space">
+        <strong>Why this fits the theme:</strong> {themeFit}
+      </p>
+      <PuzzleReferenceAttributions links={puzzle.referenceLinks ?? []} />
+      {puzzle.category === "electronic" && puzzle.electronicDetails?.arduinoCode?.trim() ? (
+        <div className="arduino-snippet-peek">
+          <button type="button" className="secondary-btn" onClick={() => onToggleArduinoPreview(puzzle.id)}>
+            {arduinoPreviewPuzzleId === puzzle.id ? "Hide Arduino preview" : "Preview Arduino code"}
+          </button>
+          {arduinoPreviewPuzzleId === puzzle.id ? (
+            <TrialBlur
+              active={!authUser}
+              label="Sign in for the full sketch in export plus complete wiring and build steps below."
+            >
+              <pre className="code-inline arduino-preview-panel">
+                {authUser
+                  ? puzzle.electronicDetails!.arduinoCode
+                  : `${(puzzle.electronicDetails!.arduinoCode ?? "").slice(0, 420)}\n…`}
+              </pre>
+            </TrialBlur>
+          ) : (
+            <p className="muted arduino-preview-hint">
+              Expand to read the same firmware block that appears in <strong>Export</strong> (sanity-check before you breadboard).
+            </p>
+          )}
+        </div>
+      ) : null}
+      {puzzle.category === "electronic" && puzzle.electronicDetails ? (
+        <div className="electronic-impl-block">
+          <p className="muted impl-heading">
+            <strong>Parts</strong>
+          </p>
+          <ul className="list-compact">
+            {(puzzle.electronicDetails.parts ?? []).map((part) => (
+              <li key={part}>{part}</li>
+            ))}
+          </ul>
+          <TrialBlur active={!authUser} label="Sign in to see wiring diagrams, build steps, and diagram SVG for your room.">
+            <p className="muted impl-heading">
+              <strong>Wiring notes</strong>
+            </p>
+            <ul className="list-compact">
+              {(puzzle.electronicDetails.wiringDiagram ?? []).map((wire) => (
+                <li key={wire}>{wire}</li>
+              ))}
+            </ul>
+            <p className="muted impl-heading">
+              <strong>Build steps</strong>
+            </p>
+            <ol className="list-compact">
+              {(puzzle.electronicDetails.buildSteps ?? []).map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            <p className="muted impl-heading">
+              <strong>Wiring diagram</strong>
+            </p>
+            <div
+              className="wiring-svg-host"
+              // eslint-disable-next-line react/no-danger -- SVG is authored server-side for this app.
+              dangerouslySetInnerHTML={{ __html: puzzle.electronicDetails.wiringDiagramSvg }}
+            />
+          </TrialBlur>
+        </div>
+      ) : null}
+      </div>
+      <footer className="puzzle-window-footer">
+        <button type="button" className="secondary-btn" disabled={replaceBusy || rejectBusy} onClick={() => onReplace(puzzle.id)}>
+          {replaceBusy ? "Generating…" : "Generate another"}
+        </button>
+      </footer>
+    </article>
+  );
+}
+
+function JuniorTrackEnvironmentIdeas() {
+  return (
+    <details className="junior-env-inspiration">
+      <summary>Environment-first story hooks (junior-friendly)</summary>
+      <p className="muted junior-env-inspiration-lead">
+        Re-skin ordinary furniture using your <strong>Room details</strong> tags so kids feel scale, humor, or mild spook without new
+        purchases—keep sight-lines and safety rules identical to the real room.
+      </p>
+      <ul className="list-compact junior-env-inspiration-list">
+        <li>
+          <strong>The giant’s living room (micro-scale):</strong> A pool table becomes a “vast green plain,” a sofa “leather
+          mountains,” a side table a “looming plateau”—you supply the perspective story; they navigate the epic in-place.
+        </li>
+        <li>
+          <strong>Ghost of a 1990s arcade:</strong> Lean into rec-room energy—balls become “trapped souls” to pot in order, joysticks
+          become séance toggles, high scores become séance phrases (keep lighting bright if needed for ages).
+        </li>
+        <li>
+          <strong>Sensory / perception:</strong> “Echo chamber” beats use sound and touch in dim (not dark) light; “2D glitch” uses
+          forced perspective murals where a clue only lines up from one standing spot.
+        </li>
+        <li>
+          <strong>Micro-world tech:</strong> “Inside the motherboard”—furniture reads as oversized resistors, fiber runs as power
+          conduits; breadcrumbs and pull-tabs become ant-scale props for a colony heist.
+        </li>
+        <li>
+          <strong>Weird history:</strong> A patent office of impossible inventions, or a greenhouse matching an imaginary codex—both
+          reward reading tables and specimens already in your space.
+        </li>
+        <li>
+          <strong>Mundane → surreal:</strong> A laundromat where washers sort “dimensions” to recover a sock-macguffin—great when your
+          venue already looks everyday.
+        </li>
+      </ul>
+    </details>
+  );
+}
+
+function JuniorGateIntegrationCallout({
+  youthAddOnEnabled,
+  youthAddOnGatesAdultFlow,
+  juniorGatingPuzzles,
+  juniorTrackPuzzles,
+}: {
+  youthAddOnEnabled: boolean;
+  youthAddOnGatesAdultFlow: boolean;
+  juniorGatingPuzzles: Puzzle[];
+  juniorTrackPuzzles: Puzzle[];
+}) {
+  if (!youthAddOnEnabled || !youthAddOnGatesAdultFlow) return null;
+  if (juniorGatingPuzzles.length > 0) {
+    return (
+      <div className="junior-gate-callout" role="note">
+        <h4 className="junior-gate-title">Junior track → main crew (gating on)</h4>
+        <p>
+          Hold the adults on the matching main-room beat until the junior crew delivers the outcome from the puzzle(s) below—usually
+          a spoken code, physical token, or shared lock state.
+        </p>
+        <ul className="list-compact junior-gate-list">
+          {juniorGatingPuzzles.map((p) => (
+            <li key={p.id}>
+              <strong>{p.title}</strong>
+              <span className="puzzle-gate-pill junior-gate-pill-inline">Gates adult flow</span>
+              <p className="muted junior-gate-objective">{p.objective}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  if (juniorTrackPuzzles.length > 0) {
+    return (
+      <p className="muted junior-gate-softnote">
+        Gating is enabled—check junior cards for <span className="puzzle-gate-pill junior-gate-pill-inline">Gates adult flow</span>.
+        The generator usually marks the first junior station when this option is on.
+      </p>
+    );
+  }
+  return null;
+}
+
+const collapseWs = (s: string): string => s.replace(/\s+/g, " ").trim();
+
+/** Mirrors `estimatePuzzleCount` in the backend for live UI feedback. */
+const estimateClientPuzzleCount = (playersConcurrent: number, sessionDurationMinutes: number): number => {
+  if (sessionDurationMinutes <= 5) return 1;
+  if (sessionDurationMinutes <= 10) return Math.min(2, Math.max(1, Math.ceil(playersConcurrent / 3)));
+  if (sessionDurationMinutes <= 15) return Math.min(3, Math.max(2, Math.ceil(playersConcurrent / 2)));
+  if (sessionDurationMinutes <= 30) {
+    const raw = Math.ceil((playersConcurrent * sessionDurationMinutes) / 38);
+    return Math.min(8, Math.max(2, raw));
+  }
+  const raw = Math.ceil((playersConcurrent * sessionDurationMinutes) / 30);
+  return Math.max(4, Math.min(18, raw));
+};
+
+function RollingPuzzleEstimate({ target }: { target: number }) {
+  const [display, setDisplay] = useState(target);
+  const displayRef = useRef(display);
+  const rafRef = useRef<number | null>(null);
+  displayRef.current = display;
+  useEffect(() => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    const from = displayRef.current;
+    if (from === target) return;
+    const t0 = performance.now();
+    const dur = 320;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - t0) / dur);
+      const ease = 1 - (1 - t) * (1 - t);
+      const v = Math.round(from + (target - from) * ease);
+      setDisplay(v);
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+      else rafRef.current = null;
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [target]);
+  return <span className="rolling-estimate-num">{display}</span>;
+}
+
+function RequiredFieldMark(): ReactNode {
+  return (
+    <span className="required-field-mark" title="Required" aria-hidden="true">
+      *
+    </span>
+  );
+}
+
+function MissionFlowMap({
+  stepLabels,
+  activeIndex,
+  youthAddOnEnabled,
+  forkSegmentIndex,
+}: {
+  stepLabels: readonly string[];
+  activeIndex: number;
+  youthAddOnEnabled: boolean;
+  forkSegmentIndex: number | null;
+}) {
+  const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const n = stepLabels.length;
+  const compact = n >= 6;
+  /* Spread nodes across a wide track so 5-step flows use the full header width cleanly. */
+  const segW = compact ? 72 : n <= 5 ? 132 : 96;
+  const w = Math.max(520, 56 + (n - 1) * segW);
+  const useFork = youthAddOnEnabled && forkSegmentIndex !== null && forkSegmentIndex >= 0 && forkSegmentIndex < n - 1;
+  const h = useFork ? 118 : 88;
+  const nodeY = useFork ? 56 : 44;
+  const nodeR = compact ? 9 : 11;
+  /** Stop connectors at the node ring (not the circle center) so lines don’t pierce halos awkwardly. */
+  const lineEndInset = nodeR + 4;
+  const xs = stepLabels.map((_, i) => 40 + i * ((w - 80) / Math.max(1, n - 1)));
+
+  const segComplete = (i: number) => activeIndex > i;
+  /** Segment i runs from node i to i+1; emphasize the leg that *leads into* the current step (not the leg leading out). */
+  const segActive = (i: number) => activeIndex === i + 1;
+  const nodeState = (i: number) => {
+    if (activeIndex > i) return "done";
+    if (activeIndex === i) return "active";
+    return "todo";
+  };
+
+  const pathD = (i: number): string | null => {
+    if (i >= n - 1) return null;
+    const x0 = xs[i] ?? 0;
+    const x1 = xs[i + 1] ?? 0;
+    const dir = Math.sign(x1 - x0) || 1;
+    const xa = x0 + dir * lineEndInset;
+    const xb = x1 - dir * lineEndInset;
+    if (Math.abs(xb - xa) < 6) {
+      return `M ${x0} ${nodeY} L ${x1} ${nodeY}`;
+    }
+    return `M ${xa} ${nodeY} L ${xb} ${nodeY}`;
+  };
+
+  const segStroke = (done: boolean, active: boolean): string => {
+    if (active) return "rgba(0, 242, 255, 0.98)";
+    if (done) return "rgba(175, 228, 255, 1)";
+    return "rgba(145, 188, 255, 0.92)";
+  };
+
+  const forkSeg = forkSegmentIndex ?? 0;
+  const forkBranchD =
+    useFork && forkSeg >= 0
+      ? (() => {
+          const x0 = xs[forkSeg] ?? 0;
+          const x1 = xs[forkSeg + 1] ?? 0;
+          const dir = Math.sign(x1 - x0) || 1;
+          const sx = x0 + dir * lineEndInset;
+          const ex = x1 - dir * lineEndInset;
+          const mid = (sx + ex) / 2;
+          const yTop = nodeY - 20;
+          const yBot = nodeY + 20;
+          return `M ${sx} ${nodeY} Q ${mid} ${yTop} ${ex} ${nodeY} M ${sx} ${nodeY} Q ${mid} ${yBot} ${ex} ${nodeY}`;
+        })()
+      : "";
+
+  const glowId = `missionFlowGlow-${reactId}`;
+
+  return (
+    <div
+      className={`mission-flow-map mission-flow-map--header ${compact ? "mission-flow-map--compact" : ""}`}
+      role="img"
+      aria-label="Mission progress map"
+      data-testid="mission-flow-map"
+    >
+      <svg className="mission-flow-svg" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <filter id={glowId} x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="2.2" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        {stepLabels.map((_, i) => {
+          if (i >= n - 1) return null;
+          const d = pathD(i);
+          if (!d) return null;
+          const done = segComplete(i);
+          const active = segActive(i);
+          const from = stepLabels[i] ?? `Step ${i + 1}`;
+          const to = stepLabels[i + 1] ?? `Step ${i + 2}`;
+          const segHint =
+            done ? `Completed: ${from} → ${to}` : active ? `Current leg: ${from} → ${to}` : `Upcoming: ${from} → ${to}`;
+          return (
+            <g key={`seg-g-${i}`} className="mission-flow-segment">
+              <title>{segHint}</title>
+              <path
+                d={d}
+                className="mission-flow-path-track"
+                fill="none"
+                stroke="rgba(52, 68, 108, 0.95)"
+                strokeWidth={6}
+                strokeLinecap="round"
+              />
+              <path
+                d={d}
+                className={`mission-flow-path ${done ? "mission-flow-path--done" : ""} ${active ? "mission-flow-path--active" : ""}`}
+                fill="none"
+                stroke={segStroke(done, active)}
+                strokeWidth={active ? 4.1 : done ? 3.5 : 3.1}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                filter={active ? `url(#${glowId})` : undefined}
+              />
+            </g>
+          );
+        })}
+        {forkBranchD ? (
+          <g className="mission-flow-fork-wrap">
+            <title>
+              Junior add-on branch on the leg between {stepLabels[forkSeg] ?? "Build"} and{" "}
+              {stepLabels[forkSeg + 1] ?? "Review"}: optional parallel track for younger players.
+            </title>
+            <path
+              d={forkBranchD}
+              className={`mission-flow-fork ${forkSeg >= 0 && activeIndex >= forkSeg ? "mission-flow-fork--live" : ""}`}
+              fill="none"
+              stroke="rgba(0,242,255,0.55)"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeDasharray="6 5"
+            />
+          </g>
+        ) : null}
+        {stepLabels.map((label, i) => {
+          const st = nodeState(i);
+          const cx = xs[i] ?? 0;
+          const nodeHint =
+            st === "done"
+              ? `${label}: completed`
+              : st === "active"
+                ? `${label}: you are here`
+                : `${label}: not started yet`;
+          return (
+            <g key={`flow-node-${i}-${label}`} transform={`translate(${cx}, ${nodeY})`} className={`mission-flow-node mission-flow-node--${st}`}>
+              <title>{nodeHint}</title>
+              <circle r={nodeR + 3} className="mission-flow-node-halo" />
+              <circle r={nodeR} className="mission-flow-node-ring" />
+              <text y={nodeR + 22} textAnchor="middle" className="mission-flow-node-label">
+                {label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      {useFork ? (
+        <p className="muted mission-flow-fork-caption">
+          Junior add-on: parallel branch on the Build → Review leg (adults + kids tracks).
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+const APP_PUBLIC_BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/");
+/** Global backdrop: couple on a ridge above an endless maze (`public/planning-maze-backdrop.png`). */
+const APP_GLOBAL_BACKDROP_URL = `${APP_PUBLIC_BASE}planning-maze-backdrop.png`;
+
+function AppAtmosphere() {
+  return (
+    <div className="app-atmosphere" data-backdrop="art" aria-hidden="true">
+      <div className="app-atmosphere__image-layer">
+        <img className="app-atmosphere__img app-atmosphere__img--base" src={APP_GLOBAL_BACKDROP_URL} alt="" decoding="async" />
+      </div>
+      <div className="app-atmosphere__veil" />
+    </div>
+  );
+}
+
+function wizardStepLabel(step: string): string {
+  switch (step) {
+    case "saved":
+      return "Saved";
+    case "setup":
+      return "Room";
+    case "themes":
+      return "Theme";
+    case "themes-puzzles":
+      return "Build";
+    case "output-review":
+      return "Review";
+    case "output-export":
+      return "Export";
+    default:
+      return step;
+  }
+}
+
+function parseItemChips(raw: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const part of raw.split(",")) {
+    const t = part.trim();
+    if (!t) continue;
+    const k = t.toLowerCase().replace(/\s+/g, " ");
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out;
+}
+
+/** Paid-room / ticketed contexts: players expect a clearly unique experience vs other venues. */
+function isCommercialVenueEventContext(raw: string): boolean {
+  const t = raw.trim().toLowerCase();
+  if (!t) return false;
+  if (/\bcommercial\b/.test(t)) return true;
+  if (/\bticketed\b/.test(t)) return true;
+  if (/\bfranchise\b/.test(t)) return true;
+  if (/\b(escape|exit)\s*room\b/.test(t) && /\b(venue|business|studio|company|tourist|attraction)\b/.test(t)) return true;
+  return false;
+}
+
+/** Presets for environment combobox (editable; datalist + free text). */
+const ENVIRONMENT_PRESETS = [
+  "Living room",
+  "Family room / rec room",
+  "Garage",
+  "Basement",
+  "Kitchen",
+  "Dining room",
+  "Office / study",
+  "Classroom",
+  "Conference room",
+  "Retail / pop-up space",
+  "Backyard / patio",
+  "Indoor party venue",
+  "Warehouse / studio",
+] as const;
+
+const EVENT_CONTEXT_PRESETS = [
+  "Commercial escape venue (ticketed)",
+  "Corporate team building",
+  "Halloween party",
+  "Christmas / winter holiday party",
+  "Birthday party",
+  "Wedding reception activity",
+  "School or camp program",
+  "Nonprofit fundraiser",
+  "Private home party",
+] as const;
+
+function corpusMentionsEscapeRoom(envRaw: string, eventRaw: string): boolean {
+  const c = `${envRaw} ${eventRaw}`.toLowerCase();
+  return /\b(escape|exit)\s*room\b|\bescape\s+game\b|\bpuzzle\s*room\b|\bimmersive\s+experience\b/.test(c);
+}
+
+/** Dedupe datalist / suggestion rows case-insensitively while preserving first-seen casing. */
+function dedupeStringsPreserveOrder(items: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of items) {
+    const t = raw.trim();
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out;
+}
+
+/** Curated escape-room anchors: each entry includes a concrete puzzle role (not décor-only). Sharp tools and similar hazards are omitted. */
+type SuggestedPropOption = {
+  label: string;
+  purpose: string;
+};
+
+const PROP_LABEL_BLOCKLIST =
+  /\b(knives?|knife|blade|razor|machete|axe|chainsaw|firearm|gun|ammunition|bleach|ammonia|chlorine|torch\s*\(propane\)|blow-?torch)\b/i;
+
+function mergePropOptions(map: Map<string, SuggestedPropOption>, options: SuggestedPropOption[]): void {
+  for (const o of options) {
+    if (PROP_LABEL_BLOCKLIST.test(o.label)) continue;
+    const k = o.label.toLowerCase().replace(/\s+/g, " ");
+    if (!map.has(k)) map.set(k, o);
+  }
+}
+
+/** Suggested prop rows for the environment picker—cross-checked to common home / venue escape staging, safety-first. */
+function getSuggestedPropOptionsForPlanning(envRaw: string, eventRaw: string): SuggestedPropOption[] {
+  const envFull = envRaw.trim().toLowerCase();
+  const eventLower = eventRaw.trim().toLowerCase();
+  const escapeCorpus = corpusMentionsEscapeRoom(envFull, eventLower);
+  const commercialEscape = isCommercialVenueEventContext(eventRaw);
+  const map = new Map<string, SuggestedPropOption>();
+
+  const applyRules = (env: string): void => {
+    if (!env) return;
+    if (/\bliving\b|lounge|\bden\b/.test(env)) {
+      mergePropOptions(map, [
+        {
+          label: "Sofa",
+          purpose:
+            "Conceal laminated clue cards, RFID discs, or ribbon-tagged tokens under zippered cushions or Velcro seat tabs—players lift cushions only where you mark ‘in play’. Do not use sofa weight or cushions to operate real door locks or egress hardware.",
+        },
+        {
+          label: "Coffee table",
+          purpose:
+            "Removable glass insert, shallow drawer, or riser tray for a single-layer matrix clue; photograph the neutral layout for resets. Use for codes and ordering—not as a wedge against a door.",
+        },
+        { label: "TV", purpose: "Ambient loop with timestamped frame, color bar, or caption typo as index; lock the remote to one input so teams cannot factory-reset the display mid-run." },
+        { label: "Side table", purpose: "Stacked coasters as a height code, lamp base rotation index, or drawer with one decoy envelope and one true clue sleeve." },
+        { label: "Floor lamp", purpose: "Three-way bulb sequence, pull-chain rhythm, or shade silhouette that projects a shape when aligned—keep cords taped and cool LED bulbs only." },
+        { label: "Bookshelf", purpose: "Color-block spine order, gap widths as Morse, or magnetic false spine that hides a flat token—weight shelves so nothing tips when players browse." },
+        { label: "Throw pillows",
+          purpose: "Numbered tags in seams, color order on the couch, or pocketed inserts that hold a single card each—no loose stuffing players could inhale; wash between groups if fabric touches faces.",
+        },
+        { label: "Area rug", purpose: "Printed border pattern as a compass rose, corner lift tab for a floor-safe envelope, or rug grid that maps to a wall chart—tape corners for trip safety." },
+        {
+          label: "Board games",
+          purpose: "Rulebook page callouts, meeple color counts, die sum targets, or ‘one component missing’ deduction—reseal boxes between groups and swap in foam dice if throws get energetic.",
+        },
+      ]);
+    }
+    if (/\brec\b|rumpus|game room|family room/.test(env)) {
+      mergePropOptions(map, [
+        { label: "Pool table", purpose: "Pocket labels as digits, rail bumper color order, or felt stencil only visible under your room’s angled light—keep cues tip-blunt and chalk off walkways." },
+        { label: "Dart board", purpose: "Numbered wedges as cipher ring inputs (dull tips, short throw line); never rely on sharp steel tips for progression." },
+        { label: "Console / games", purpose: "Achievement list with highlighted letters, controller button combo on a dummy profile, or cartridge label swap that points to a shelf coordinate." },
+        { label: "Mini fridge", purpose: "Stable mass on a balance puzzle, magnetic poetry on the door only if you also script magnet beats, or shelf-height thermo card—keep food sealed or empty for odor control." },
+        { label: "Sofa", purpose: "Same as living-room sofa: cushion hides and tagged pockets only—never door hardware." },
+        { label: "TV", purpose: "Same as living-room TV: diegetic broadcast clue channel with locked inputs." },
+        { label: "Trophy shelf", purpose: "Nameplate anagram, plaque years as a combo, or engraved motto that indexes another prop—secure heavy trophies so they cannot fall if bumped." },
+      ]);
+    }
+    if (/\bgarage\b/.test(env)) {
+      mergePropOptions(map, [
+        { label: "Workbench (cleared)", purpose: "Outline tape for a ‘missing tool’ silhouette puzzle or printed schematic that maps bolt sizes to a combo—keep real sharp tools off the bench during play." },
+        { label: "Toolbox (closed)", purpose: "Color-dot latches opened in order, foam insert cutouts that reveal a digit when filled, or combo lock on the case itself—not improvised prying." },
+        { label: "Pegboard", purpose: "Shadow outlines for which hooks stay empty, painted ring codes behind hung items, or magnet-backed tags players rearrange into a pattern." },
+        { label: "Storage totes", purpose: "Barcode stickers as fake SKUs, tote stack height as a digit, or one tote with a false lid hiding a flat clue stack." },
+        { label: "Extension cord (GFCI)", purpose: "Cable length as a measuring stick, color tape segments as a code, or ‘plug order’ puzzle with labeled outlets only you energize—tape runs flat to avoid trips." },
+        { label: "Step stool (rated, spotter)", purpose: "Height access to read a high decal or retrieve a carabiner-hung token—document weight limit; do not ask players to climb shelves or ladders unsupervised." },
+        { label: "Sports gear", purpose: "Jersey numbers, ball inflation order, or racket grip tape colors as a sequence—no thrown projectiles at players." },
+        { label: "Bike (stationary display)", purpose: "Spoke count modulo puzzle, frame sticker map, or basket liner with a clue envelope—chain stays on or bike is roped off as set dressing only." },
+      ]);
+    }
+    if (/\bbasement\b/.test(env)) {
+      mergePropOptions(map, [
+        { label: "Folding table", purpose: "Underside Velcro panel, clamp-on grid for a cipher, or numbered leg positions that must match a basement map." },
+        { label: "Plastic bins", purpose: "Dry goods count on labels, lid color stack order, or QR-free printed manifest that hides acrostic text." },
+        { label: "Utility sink", purpose: "Drain cover that lifts with a magnet tool you issue, water-level line marked only for a float puzzle (no splashing players)." },
+        { label: "Furnace / utility labels", purpose: "Read-only panel letters as an index, breaker facades with dummy switches, or tag colors that map to a pipe diagram poster." },
+        { label: "Holiday décor tubs", purpose: "Ornament count by color, nested box Russian-doll reveal, or lid checklist where one unchecked item is the keyword." },
+        { label: "Old trunk", purpose: "Hasp combo, false bottom depth, or scent-free sachet pockets with paper clues—pad edges; no spring-loaded surprises toward faces." },
+      ]);
+    }
+    if (/\bkitchen\b/.test(env)) {
+      mergePropOptions(map, [
+        { label: "Fridge magnets", purpose: "Sliding poetry cipher, polarity puzzle on a steel panel, or word formed only after players return found magnet tiles—no food spoilage puzzles." },
+        { label: "Drawer organizer", purpose: "Slot counts, utensil silhouette order (blunt tools only in play), or divider colors that index a pantry chart." },
+        { label: "Recipe box", purpose: "Index tabs spell a word, one card has corner notches aligning to an overlay, or serving count math feeding a combo lock elsewhere." },
+        { label: "Kitchen timer", purpose: "Start/stop windows that gate audio clues, digit sum at freeze-frame, or synchronized two-station countdown relay." },
+        { label: "Pantry jars (dry goods)", purpose: "Weight comparison on a kitchen scale you provide, label letter acrostic, or transparent jar grain height as a bar chart code—no tasting." },
+        { label: "Kitchen island", purpose: "Drawer sequence with felt-lined clue trays, butcher-block cartography etched into a mat, or power strip you label for a safe low-voltage LED gag only." },
+        { label: "Dish rack", purpose: "Slot order left-to-right, plate rim colors, or mug handle directions that encode a short string for a keypad." },
+        {
+          label: "Stock pot with lid",
+          purpose: "Lid knob rotation index, steam vent hole pattern as braille-like dots (cool pot only), or nested measuring cups inside for a volume riddle—no hot burners during the puzzle beat.",
+        },
+        {
+          label: "Non-stick skillet (cool, clean)",
+          purpose: "Printed paper liner with a skillet diagram players annotate, or magnet fishing over the pan surface—do not use hot metal or oil gags in home rooms.",
+        },
+        {
+          label: "Measuring cups / spoons",
+          purpose: "Fraction addition to a combo, nested order as a stack code, or hang tags that map to oven-timer digits (timer off while solving).",
+        },
+        {
+          label: "Cutting board (grid printed)",
+          purpose: "Dry-erase grid for deduction, corner coordinates for a map, or vinyl overlay with safe rounded corners—no live blades as props; knives stay stored off-stage.",
+        },
+      ]);
+    }
+    if (/\bdining\b/.test(env)) {
+      mergePropOptions(map, [
+        { label: "Buffet / sideboard", purpose: "Drawer pull order, felt-lined silverware tray with one missing slot spelling a letter, or mirrored panel parallax clue." },
+        { label: "China cabinet", purpose: "Plate rim pattern viewed through glass, hutch light switch sequence, or saucer stack height code—secure glass doors." },
+        {
+          label: "LED pillar candles",
+          purpose: "Flicker-safe color order remote you control, heights as a bar chart, or labeled ‘on/off’ states that map to binary—no open flame in player reach.",
+        },
+        { label: "Placemats", purpose: "Rotation or flip reveals second graphic, QR-free printed border math, or seat assignment colors tying to a role puzzle." },
+        { label: "Dining chairs", purpose: "Seat pad Velcro pockets, numbered tack dots on legs, or push-in distance from table measured with a paper ruler you supply." },
+        { label: "Hutch", purpose: "Glassware tint order, shelf height measurements, or magnetic latch demo that only opens after another station confirms." },
+      ]);
+    }
+    if (/\boffice\b|\bstudy\b|\bconference\b/.test(env)) {
+      mergePropOptions(map, [
+        { label: "Desk", purpose: "Center drawer false back, pencil cup hole pattern shadow, or cable grommet colors as a mini combo." },
+        { label: "Whiteboard", purpose: "Ghosted faint lines revealed by angled light, magnet columns, or ‘last erased’ photo you reset each group—markers capped." },
+        { label: "Filing cabinet", purpose: "Hanging folder tabs as acrostic, drawer stop depth that exposes a painted digit, or combo lock you own on one drawer only." },
+        { label: "Sticky notes", purpose: "Color columns on a glass wall, repositionable logic grid, or residue-safe ‘missing note’ silhouette puzzle." },
+        { label: "Router shelf", purpose: "Cable color order, labeled port map as fiction, or velcroed prop router with LED pattern you scripted—no real admin passwords." },
+        { label: "Desk phone", purpose: "Speed-dial sticker map, voicemail timestamps you authored, or handset hook switch rhythm—volume capped." },
+        { label: "Name plates", purpose: "Initials anagram, title hierarchy sorting, or magnetic swap tiles that spell a directive." },
+      ]);
+    }
+    if (/\bclassroom\b|\bschool\b/.test(env)) {
+      mergePropOptions(map, [
+        { label: "Chalkboard / whiteboard", purpose: "Deliberate smudge shapes, three-pass erase reveal, or magnet columns that only work after a desk station confirms." },
+        { label: "Cork board", purpose: "Pushpin color matrix, string-and-thumbtack constellation map, or one pinned card with corner notches." },
+        { label: "Desk cubbies", purpose: "Numbered slots with identical decoy bins, or cubby depth that fits only one prop envelope you seed." },
+        { label: "Textbooks", purpose: "ISBN last digits, glossary tab words, or chapter title acrostic—tape pages you want untouched." },
+        { label: "Globe", purpose: "Latitude/longitude clue you print, spin-stopping landmark, or meridian ring alignment—not geopolitical trivia unrelated to your story." },
+        { label: "Wall clock", purpose: "Hand angle math, ‘room time’ vs real time note, or removable face with a cipher ring behind it—battery door staff-only." },
+        { label: "Blunt art supplies",
+          purpose: "Stamp pads for pattern cards, crayon resist reveals, or color-by-number overlay—no scissors or craft knives in player hands; use safety scissors if cutting is required.",
+        },
+      ]);
+    }
+    const retailMerch =
+      /\bretail\b|\bmerchandising\b|\bboutique\b|\bpop-?up\b|\bstorefront\b|\bmall\b|\bshop\s+floor\b/.test(env) ||
+      (/\bstore\b/.test(env) && !/\brestore\b/.test(env));
+    if (retailMerch && !escapeCorpus && !commercialEscape) {
+      mergePropOptions(map, [
+        { label: "Shelf displays", purpose: "Facing counts, color blocks that mirror a window decal, or ‘missing SKU’ card that completes a matrix on a poster." },
+        { label: "POS tablet (kiosk mode)", purpose: "Dummy checkout flow with a four-digit ‘total’, barcode scanner reading printed codes you made, or locked browser to one slideshow." },
+        { label: "Gift wrap station", purpose: "Ribbon color order, paper roll length marks as ruler ticks, or bow count that indexes a dressing-room lock." },
+        { label: "Security tag demo", purpose: "Magnetic detacher you control, tag color binary, or ‘alarm’ light pattern scripted in software—not real EAS alarms." },
+        { label: "Shopping basket", purpose: "Slot dividers as a sorting puzzle, handle color combo, or weight check on a labeled scale you provide." },
+        { label: "Mannequin", purpose: "Pose angles that line up with wall shadows, outfit accessory count, or tag string that decodes when read backward—stable base bolted." },
+      ]);
+    }
+    if (/\bbackyard\b|\bpatio\b|\bdeck\b/.test(env)) {
+      mergePropOptions(map, [
+        { label: "Cooler (empty / sealed drinks)", purpose: "Ice pack color stack, drain plug thread count, or interior height marks that map to fence panel numbers—no loose ice that melts onto clues." },
+        { label: "String lights", purpose: "Bulb color sequence you set, one dead bulb position as index, or remote channel that flashes a timed Morse you authored." },
+        { label: "Patio umbrella", purpose: "Canopy panel numbers when opened, crank rotation clicks, or underside hooks holding lightweight tags only." },
+        { label: "Planters", purpose: "Soil depth to a capsule you planted, pot size order on the step, or drainage hole pattern read from below with a mirror on a stick you issue." },
+        { label: "Hose reel", purpose: "Click count at full extension, color dot you placed on the handle, or coiled shape that matches a stencil on the deck." },
+        { label: "Grill (cold, lid only)", purpose: "Lid dial letters, grate slot count, or side-burner knob pattern with propane off and tagged—never hot surfaces during play." },
+        { label: "Outdoor cushions", purpose: "Same as indoor pillows: tagged pockets, color order on bench, or zipper pulls aligned to a compass clue." },
+      ]);
+    }
+    if (
+      /\bballroom\b|\bfunction hall\b|\bwedding hall\b|\bparty room\b|\breception hall\b|\bbanquet\b/.test(env) ||
+      /\b(birthday|wedding)\s+party\b/.test(eventLower)
+    ) {
+      mergePropOptions(map, [
+        { label: "Folding tables", purpose: "Leg latch order, underside sticker map, or table number cards that permute a finale sequence." },
+        { label: "Stack chairs", purpose: "Ganging clip colors, count in each stack, or seat-pad hook pattern that mirrors a stage diagram." },
+        { label: "Bluetooth speaker", purpose: "Queued tracks with door knock sounds hiding digits, or volume steps that reveal a word—max volume capped." },
+        { label: "Coat rack", purpose: "Hook heights as a graph, hanger color order, or pocketed coat with a prop ticket stub." },
+        { label: "Sign-in table", purpose: "Guest book last initials, pen color caps as a code, or acrylic flyer holder with one swapped transparent sheet." },
+        { label: "Balloons / décor bin", purpose: "Count by color (air-filled only), ribbon knot tally, or printed mylar numbers you staged—dispose safely post-show." },
+      ]);
+    }
+    if (/\bwarehouse\b|\bstudio\b|\bindustrial\b/.test(env)) {
+      mergePropOptions(map, [
+        { label: "Rolling cart (brakes on)", purpose: "Shelf height measurements, brake lever positions that act as binary, or bungee color pattern tying to a rack map." },
+        { label: "Rolling rack", purpose: "Garment color sequence, hanger spacing, or zip-tie tail lengths you standardize for a count puzzle." },
+        { label: "Clip LED work lights", purpose: "Aim angles that reveal retroreflective text, color gels as a filter puzzle, or cord wrap counts—GFCI and grounded fixtures only." },
+        { label: "Conduit / cable trays (dressing)", purpose: "Labeled ‘circuits’ that are pure fiction, zip-tie color code, or magnet letters stuck inside a dead panel players open after another clue." },
+        { label: "Steel shelving", purpose: "Bay letters, shelf height as digits, or bolt head pattern that matches a wrench poster (poster only—no live torque on structure)." },
+        { label: "Fire extinguisher (real, inspection-tagged)", purpose: "PIN seal intact as a story beat, gauge needle position you photo for resets, or ‘break glass’ prop box beside it with the real clue—never repurpose the live extinguisher as a puzzle container.",
+        },
+      ]);
+    }
+  };
+
+  if (commercialEscape) {
+    mergePropOptions(map, [
+      {
+        label: "Wall-mounted clue pockets or acrylic rails (in-world)",
+        purpose: "Players retrieve ordered envelopes or acrylic cards from labeled rails—staff resets from behind a hinged panel; nothing lives loose on the floor.",
+      },
+      {
+        label: "Diegetic room countdown / mission timer display",
+        purpose: "Software-driven timer you control; failure states are scripted, not tied to real egress doors—pair audio stingers with visible safe warnings.",
+      },
+      {
+        label: "UV-reactive paint or ink on set dressing",
+        purpose: "Hidden text that appears only under your issued UV flashlight—document placement so UV never points at eyes; wash hands after handling inks you approve.",
+      },
+      {
+        label: "Velcro-faced false panel or bookshelf spine",
+        purpose: "Reversible tiles or spines that swap to show new words—Velcro rated for pulls you expect; no structural load on drywall alone.",
+      },
+      {
+        label: "Stacking wooden crates as set dressing",
+        purpose: "Crate stencil numbers, weight class stickers players sort, or interior foam cutouts hiding flat props—bolt to platform or strap so stacks cannot tip.",
+      },
+      {
+        label: "Cable raceway dressed as conduit or trim",
+        purpose: "Color segments as a code, removable end cap with a clue card, or printed ‘wire diagram’ that is pure fiction over a safe raceway.",
+      },
+      {
+        label: "In-scene dry-erase clue board and markers",
+        purpose: "Host-authored grid or suspect matrix; photograph clean template each reset—low-odor markers only.",
+      },
+      {
+        label: "Magnetic latch or strike plate puzzle props",
+        purpose: "Practice latches mounted on demo boards, polarity puzzles, or ‘align three tabs’ before a maglock releases a prop drawer—not a life-safety door.",
+      },
+      {
+        label: "Combination lock on a diegetic trunk or cabinet",
+        purpose: "Single purpose-built prop box with known combo flow; log combos per group; no shimming real venue furniture.",
+      },
+      {
+        label: "Hidden compartment in furniture on the game floor",
+        purpose: "Furniture you engineered with a service panel, gas strut limiter, and soft-close hinges—players never pry venue-built millwork.",
+      },
+    ]);
+  }
+
+  applyRules(envFull);
+  const fragments = envFull
+    .split(/[/,&]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && s !== envFull);
+  for (const frag of fragments) {
+    applyRules(frag);
+  }
+  return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** Basement / rec-room escape props that are usually safe when staged intentionally (no live utilities). */
+const BASEMENT_ESCAPE_ITEM_PRESETS = [
+  "Plastic tote bins (stackable)",
+  "Pegboard with spare hooks",
+  "Folding work table",
+  "Foam brick or doorstop (safe)",
+  "Lockable metal cash box",
+  "Magnet strips / word magnets",
+  "String lights (battery)",
+  "Labeled decoy shipping crate",
+  "Foam pipe insulation tubes",
+  "Peel-and-stick floor arrows",
+  "Small dry-erase board",
+  "Stepladder (reach-only, marked zone)",
+  "Extension cord (coiled, unplugged demo)",
+  "Velcro tape / removable mounts",
+  "Buzzer in a hollow prop box",
+  "Fake furnace façade panel (theater prop)",
+  "Fake hot water heater shell (decoy box only)",
+  "Shelf bracket puzzle (non–load-bearing)",
+  "Rigged breaker-face prop (non-live, labeled)",
+] as const;
+
+const UNSAFE_UTILITY_ITEM =
+  /\b(real\s+)?(furnace|furnaces|hot[-\s]?water\s*(heater|heaters|tank|tanks)|water\s*heater|water\s*heaters|boiler|boilers|gas\s*line|propane\s*tank)\b/i;
+
+function isAllowedAvailableItemLabel(raw: string): boolean {
+  const t = raw.trim();
+  if (!t) return false;
+  if (/^fake\s+/i.test(t)) return true;
+  if (PROP_LABEL_BLOCKLIST.test(t)) return false;
+  if (UNSAFE_UTILITY_ITEM.test(t) && !/^fake\s+/i.test(t)) return false;
+  return true;
+}
+
+function itemKey(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function AvailableItemsBasementField({
+  value,
+  onChange,
+  invalid,
+  historyOptions,
+  disabled,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  invalid: boolean;
+  historyOptions: string[];
+  /** When false, props stay empty until the host picks a physical environment. */
+  disabled?: boolean;
+}) {
+  const chips = useMemo(() => parseItemChips(value), [value]);
+  const presetKeys = useMemo(() => new Set(BASEMENT_ESCAPE_ITEM_PRESETS.map((p) => itemKey(p))), []);
+  const customOnlyChips = useMemo(() => chips.filter((c) => !presetKeys.has(itemKey(c))), [chips, presetKeys]);
+  const [customDraft, setCustomDraft] = useState("");
+  const [customHint, setCustomHint] = useState("");
+
+  const selectRef = useRef<HTMLSelectElement | null>(null);
+
+  const syncSelectDom = useCallback((): void => {
+    const el = selectRef.current;
+    if (!el) return;
+    const selectedKeys = new Set(chips.map((c) => itemKey(c)));
+    for (let i = 0; i < el.options.length; i += 1) {
+      const opt = el.options[i]!;
+      opt.selected = selectedKeys.has(itemKey(opt.value));
+    }
+  }, [chips]);
+
+  useLayoutEffect(() => {
+    syncSelectDom();
+  }, [syncSelectDom, value]);
+
+  const onMultiChange = (): void => {
+    if (disabled) return;
+    const el = selectRef.current;
+    if (!el) return;
+    const fromPresets = [...el.selectedOptions].map((o) => o.value);
+    onChange([...fromPresets, ...customOnlyChips].join(", "));
+  };
+
+  const addCustom = (): void => {
+    if (disabled) return;
+    const t = customDraft.trim();
+    if (!t) return;
+    if (!isAllowedAvailableItemLabel(t)) {
+      setCustomHint(
+        "Use only safe props. Real furnaces, hot water heaters, boilers, gas lines, and propane tanks are blocked—prefix with “Fake …” for a theater prop.",
+      );
+      return;
+    }
+    setCustomHint("");
+    const k = itemKey(t);
+    if (chips.some((c) => itemKey(c) === k)) {
+      setCustomDraft("");
+      return;
+    }
+    onChange([...chips, t].join(", "));
+    setCustomDraft("");
+  };
+
+  const removeChip = (index: number): void => {
+    if (disabled) return;
+    onChange(chips.filter((_, j) => j !== index).join(", "));
+  };
+
+  return (
+    <div
+      className={`basement-items-field ${invalid ? "basement-items-field--invalid" : ""}${
+        disabled ? " basement-items-field--disabled" : ""
+      }`}
+    >
+      {disabled ? (
+        <p className="muted basement-items-gate-hint">Choose <strong>Environment</strong> above first—then basement prop presets unlock.</p>
+      ) : null}
+      <label className="muted basement-items-dropdown-label" htmlFor="basement-items-multiselect">
+        Basement-style props (hold <kbd>Ctrl</kbd> / <kbd>⌘</kbd> to pick several)
+      </label>
+      <select
+        id="basement-items-multiselect"
+        ref={selectRef}
+        className={`basement-items-dropdown ${invalid ? "invalid-field" : ""}`}
+        multiple
+        size={8}
+        aria-label="Preset basement escape room props"
+        disabled={disabled}
+        onChange={onMultiChange}
+      >
+        {BASEMENT_ESCAPE_ITEM_PRESETS.map((label) => (
+          <option key={label} value={label}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <datalist id="items-history">
+        {historyOptions.map((entry) => (
+          <option key={entry} value={entry} />
+        ))}
+      </datalist>
+      <div className="basement-items-custom-row">
+        <input
+          className="blueprint-input basement-items-custom-input"
+          type="text"
+          list="items-history"
+          value={customDraft}
+          placeholder='Other safe prop (e.g. "Fake boiler gauge board")'
+          disabled={disabled}
+          onChange={(e) => {
+            setCustomDraft(e.target.value);
+            setCustomHint("");
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addCustom();
+            }
+          }}
+        />
+        <button type="button" className="secondary-btn" onClick={addCustom} disabled={disabled}>
+          Add custom
+        </button>
+      </div>
+      {customHint ? <p className="muted basement-items-hint">{customHint}</p> : null}
+      {chips.length > 0 ? (
+        <div className="chip-field basement-items-chip-wrap" role="group" aria-label="Selected props">
+          <p className="muted basement-items-selected-label">Selected</p>
+          <div className="chip-field-inner">
+            {chips.map((chip, i) => (
+              <span key={`${chip}-${i}`} className="item-chip">
+                <span className="item-chip-text">{chip}</span>
+                <button
+                  type="button"
+                  className="item-chip-remove"
+                  aria-label={`Remove ${chip}`}
+                  disabled={disabled}
+                  onClick={() => removeChip(i)}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Runbook preview: allow server-authored SVG diagrams (no scripts / event handlers). */
+function runbookSvgBlockFromFenceBody(raw: string): string {
+  const s = raw.trim();
+  if (!s.toLowerCase().startsWith("<svg")) {
+    return `<p class="runbook-p muted">Wiring diagram block was not valid SVG markup.</p>`;
+  }
+  if (/<script/i.test(s) || /\bon\w+\s*=/i.test(s)) {
+    return `<p class="runbook-p muted">Diagram omitted in preview (unsupported embedded script or handler).</p>`;
+  }
+  return `<div class="runbook-svg-host">${s}</div>`;
+}
+
+/** Read-only plain text view of an export (fenced blocks collapsed). */
+function exportMarkdownToPlainText(md: string): string {
+  let s = md.replace(/\r\n/g, "\n");
+  s = s.replace(/```(\w*)\n([\s\S]*?)```/gm, (_block, lang: string) => {
+    const l = String(lang ?? "").toLowerCase();
+    if (l === "svg" || l === "xml") return "\n[SVG wiring diagram — open Markdown or HTML view to see graphics]\n";
+    return "\n[Code block omitted in plain text]\n";
+  });
+  s = s.replace(/^#{1,6}\s+/gm, "");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "$1");
+  s = s.replace(/`([^`]+)`/g, "$1");
+  s = s.replace(/\[([^\]]+)]\([^)]+\)/g, "$1");
+  return s.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function wrapExportAsHtmlDocument(runbookInnerHtml: string): string {
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Escape Room Plan</title>
+<style>
+body{font-family:system-ui,Segoe UI,sans-serif;background:#0a0c12;color:#e8eeff;margin:1rem 1.25rem 2rem;line-height:1.45;max-width:52rem;}
+.runbook-h1{font-size:1.45rem;margin:0.5rem 0 0.35rem;}
+.runbook-h2{font-size:1.12rem;margin:1.1rem 0 0.35rem;}
+.runbook-h3{font-size:1rem;margin:0.85rem 0 0.25rem;}
+.runbook-p{margin:0.35rem 0;}
+.runbook-ul{margin:0.25rem 0 0.5rem;padding-left:1.2rem;}
+.runbook-pre{white-space:pre-wrap;background:#121826;padding:0.75rem;border-radius:8px;overflow:auto;font-size:0.82rem;}
+.runbook-svg-host{max-width:100%;margin:0.5rem 0;padding:0.5rem;border-radius:10px;border:1px solid rgba(140,180,255,0.25);background:rgba(8,12,22,0.6);}
+.runbook-svg-host svg{display:block;max-width:100%;height:auto;}
+a{color:#6ec4c8;}
+</style></head><body>${runbookInnerHtml}</body></html>`;
+}
+
+/** Lightweight markdown → HTML for export runbook preview (content escaped; links kept for preview). */
+function exportMarkdownToRunbookHtml(md: string): string {
+  const lines = md.split("\n");
+  const out: string[] = [];
+  let inFence = false;
+  let fenceLang = "";
+  const codeBuf: string[] = [];
+  let listOpen = false;
+  const closeList = (): void => {
+    if (listOpen) {
+      out.push("</ul>");
+      listOpen = false;
+    }
+  };
+  const inlineFmt = (t: string): string => {
+    let s = escapeHtml(t);
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/\[([^\]]+)]\(([^)]+)\)/g, (_, label: string, href: string) => {
+      const safe = escapeHtml(href).replace(/javascript:/gi, "");
+      return `<a href="${safe}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>`;
+    });
+    return s;
+  };
+  const flushFence = (): void => {
+    if (codeBuf.length === 0) {
+      inFence = false;
+      fenceLang = "";
+      return;
+    }
+    const body = codeBuf.join("\n");
+    const lang = fenceLang.toLowerCase();
+    if (lang === "svg" || lang === "xml") {
+      out.push(runbookSvgBlockFromFenceBody(body));
+    } else {
+      out.push(`<pre class="runbook-pre">${escapeHtml(body)}</pre>`);
+    }
+    codeBuf.length = 0;
+    inFence = false;
+    fenceLang = "";
+  };
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      if (!inFence) {
+        closeList();
+        inFence = true;
+        fenceLang = trimmed.slice(3).trim();
+        codeBuf.length = 0;
+      } else {
+        flushFence();
+      }
+      continue;
+    }
+    if (inFence) {
+      codeBuf.push(line);
+      continue;
+    }
+    const h3 = line.match(/^###\s+(.+)/);
+    if (h3) {
+      closeList();
+      out.push(`<h3 class="runbook-h3">${inlineFmt(h3[1] ?? "")}</h3>`);
+      continue;
+    }
+    const h2 = line.match(/^##\s+(.+)/);
+    if (h2) {
+      closeList();
+      out.push(`<h2 class="runbook-h2">${inlineFmt(h2[1] ?? "")}</h2>`);
+      continue;
+    }
+    const h1 = line.match(/^#\s+(.+)/);
+    if (h1) {
+      closeList();
+      out.push(`<h1 class="runbook-h1">${inlineFmt(h1[1] ?? "")}</h1>`);
+      continue;
+    }
+    const li = line.match(/^\s*-\s+(.+)/);
+    if (li) {
+      if (!listOpen) {
+        out.push('<ul class="runbook-ul">');
+        listOpen = true;
+      }
+      out.push(`<li>${inlineFmt(li[1] ?? "")}</li>`);
+      continue;
+    }
+    closeList();
+    if (line.trim() === "") {
+      out.push("<br />");
+    } else {
+      out.push(`<p class="runbook-p">${inlineFmt(line)}</p>`);
+    }
+  }
+  closeList();
+  if (inFence) flushFence();
+  return out.join("");
+}
+
+function normalizeImportedTheme(theme: Theme): Theme {
+  const existing = theme.tldr?.trim();
+  if (existing) return { ...theme, tldr: existing };
+  const c = collapseWs(theme.description);
+  return {
+    ...theme,
+    tldr: c ? (c.length <= 150 ? c : `${c.slice(0, 147)}…`) : `${theme.name}: imported plan (see full brief below).`,
+  };
+}
+
+function resolveThemeTldr(theme: Theme): string {
+  const t = theme.tldr?.trim();
+  if (t) return t;
+  return normalizeImportedTheme(theme).tldr ?? theme.name;
+}
+
+const formatPuzzleCategory = (category: string): string => {
+  if (category === "logic") return "Logic";
+  if (category === "physical") return "Physical";
+  if (category === "electronic") return "Electronic";
+  return category;
+};
+
+const formatDifficultyLabel = (difficulty: string): string => {
+  const d = difficulty.trim();
+  if (!d) return "";
+  return d.charAt(0).toUpperCase() + d.slice(1).toLowerCase();
+};
+
+function ThemeRecommendedPuzzles({
+  puzzles,
+  sectionTitle = "Suggested puzzles (matched to this theme)",
+}: {
+  puzzles: RecommendedPuzzleBrief[];
+  sectionTitle?: string;
+}) {
+  if (!puzzles.length) return null;
+  return (
+    <div className="theme-rec-wrap">
+      <h4 className="theme-rec-section-title">{sectionTitle}</h4>
+      <ul className="theme-rec-list">
+        {puzzles.map((puzzle) => (
+          <li key={puzzle.id} className="theme-rec-item theme-rec-item--open">
+            <div className="theme-rec-row">
+              <span className="theme-rec-summary">
+                <strong>{puzzle.title}</strong>
+                <span className="theme-rec-cat">
+                  {formatPuzzleCategory(puzzle.category)}
+                  {puzzle.difficulty ? (
+                    <>
+                      {" "}
+                      · <span className="theme-rec-diff">{formatDifficultyLabel(puzzle.difficulty)}</span>
+                    </>
+                  ) : null}
+                </span>
+              </span>
+            </div>
+            <div className="theme-rec-panel" role="region" aria-label={`Details for ${puzzle.title}`}>
+              <p className="theme-rec-pop-obj">
+                <strong>Objective:</strong> {puzzle.objective}
+              </p>
+              <p className="theme-rec-pop-how muted">
+                <strong>How it works:</strong> {puzzle.howItWorks}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Strip markdown heading markers accidentally left inside body text. */
+const stripMarkdownHeadingMarkers = (s: string): string =>
+  s
+    .split("\n")
+    .map((line) => line.replace(/^#{1,6}\s+/, ""))
+    .join("\n");
+
+/** Paragraphs + line breaks for story-plan blobs (may contain pasted markdown). */
+function OutputReviewProse({ text }: { text: string }): ReactNode {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return null;
+  const paras = normalized.split(/\n\n+/).filter((p) => p.trim());
+  return paras.map((para, i) => (
+    <p key={i} className="output-review-prose">
+      {para
+        .trim()
+        .split("\n")
+        .map((line, j, arr) => (
+          <Fragment key={j}>
+            {stripMarkdownHeadingMarkers(line).trim() || "\u00a0"}
+            {j < arr.length - 1 ? <br /> : null}
+          </Fragment>
+        ))}
+    </p>
+  ));
+}
+
+function OutputReviewNarrativeField({ label, text }: { label: string; text: string }): ReactNode {
+  const raw = text?.trim() ?? "";
+  if (!raw) return null;
+  const [expanded, setExpanded] = useState(false);
+  const collapseAt = 2000;
+  const previewAt = 900;
+  const long = raw.length > collapseAt;
+  const display = long && !expanded ? `${raw.slice(0, previewAt).trim()}…` : raw;
+  return (
+    <article className="output-review-field">
+      <h4 className="output-review-field-label">{label}</h4>
+      <div className="output-review-field-body">
+        <OutputReviewProse text={display} />
+      </div>
+      {long ? (
+        <button type="button" className="secondary-btn output-review-expand" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? "Show less" : "Show full text"}
+        </button>
+      ) : null}
+    </article>
+  );
+}
+
+function ThemeDescriptionBlocks({ text }: { text: string }) {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return null;
+
+  const lines = normalized.split("\n");
+  const blocks: ReactNode[] = [];
+  let buf: string[] = [];
+  let key = 0;
+
+  const flushBuf = (): void => {
+    const raw = buf.join("\n").trim();
+    buf = [];
+    if (!raw) return;
+    raw.split(/\n\n+/).forEach((para) => {
+      const t = stripMarkdownHeadingMarkers(para).trim();
+      if (!t) return;
+      blocks.push(
+        <p className="theme-desc-para theme-desc-prose" key={`p-${key++}`}>
+          {t}
+        </p>,
+      );
+    });
+  };
+
+  const headingLine = (line: string) => line.match(/^(#{1,6})\s+(.*)$/);
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const hm = headingLine(line);
+    if (hm) {
+      const title = (hm[2] ?? "").trim();
+      if (!title) {
+        buf.push(line);
+        i += 1;
+        continue;
+      }
+      flushBuf();
+      const level = hm[1].length;
+      i += 1;
+      const body: string[] = [];
+      while (i < lines.length && !headingLine(lines[i])) {
+        body.push(lines[i]);
+        i += 1;
+      }
+      const bodyText = body.join("\n").trim();
+      const tag = level <= 2 ? "h3" : level === 3 ? "h4" : "h5";
+      const cls =
+        level <= 2 ? "theme-desc-title theme-desc-title--major" : level === 3 ? "theme-desc-title theme-desc-title--sub" : "theme-desc-title theme-desc-title--minor";
+      const technicalAdvisory = /studio build policy/i.test(title) || /copy qa/i.test(title);
+      blocks.push(
+        <section
+          className={`theme-desc-section${technicalAdvisory ? " theme-desc-section--technical-advisory" : ""}`}
+          key={`sec-${key++}`}
+        >
+          {technicalAdvisory ? (
+            <p className="theme-desc-advisory-kicker" role="presentation">
+              <span className="theme-desc-advisory-icon" aria-hidden>
+                ◆
+              </span>{" "}
+              Technical advisory
+            </p>
+          ) : null}
+          {createElement(tag, { className: cls }, title)}
+          {bodyText
+            ? bodyText.split(/\n\n+/).map((para) => {
+                const t = stripMarkdownHeadingMarkers(para).trim();
+                if (!t) return null;
+                return (
+                  <p className="theme-desc-para theme-desc-prose" key={`bp-${key++}`}>
+                    {t}
+                  </p>
+                );
+              })
+            : null}
+        </section>,
+      );
+      continue;
+    }
+    buf.push(line);
+    i += 1;
+  }
+  flushBuf();
+
+  if (blocks.length === 0) return null;
+  return <div className="theme-desc-root">{blocks}</div>;
+}
+
+type ThemeCoachUiMessage = { id: string; role: "user" | "assistant"; content: string };
+
+function newCoachMessageId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `coach-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+const COACH_COVERAGE_CHECKS = [
+  { key: "audience", label: "Audience / ages", re: /\bage|ages|audience|kids?|adult|family|mixed\b/i },
+  { key: "tone", label: "Tone / vibe", re: /\btone|vibe|spooky|serious|comedic|horror|lighthearted|mood\b/i },
+  { key: "boundaries", label: "Safety boundaries", re: /\bboundar|no jump|jump scare|content warning|safe|limit\b/i },
+  { key: "centerpiece", label: "Centerpiece moment", re: /\bcenterpiece|wow moment|set piece|signature|hero prop\b/i },
+  { key: "tech", label: "Tech vs analog", re: /\belectronic|arduino|microcontroller|analog|tech\b/i },
+  { key: "ops", label: "Reset / ops constraints", re: /\breset|staff|facilitation|turnover|runtime|minutes|budget\b/i },
+] as const;
+
+const looksSensitiveForCoach = (text: string): string | null => {
+  const t = text.trim();
+  if (!t) return null;
+  if (/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i.test(t)) return "private key block";
+  if (/\b(?:api[_ -]?key|secret|password|passwd|token|bearer)\b\s*[:=]/i.test(t)) return "credential pattern";
+  if (/\b(?:ghp_|github_pat_|sk-[A-Za-z0-9]|AIza[0-9A-Za-z_-]{20,})\b/.test(t)) return "API token pattern";
+  if (/[A-Za-z0-9+/]{80,}={0,2}/.test(t)) return "high-entropy secret-like string";
+  return null;
+};
+
+const getCoachCoverageStatus = (messages: ThemeCoachUiMessage[]): { done: number; total: number; doneLabels: string[] } => {
+  const userText = messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join("\n\n");
+  const doneLabels = COACH_COVERAGE_CHECKS.filter((check) => check.re.test(userText)).map((check) => check.label);
+  return { done: doneLabels.length, total: COACH_COVERAGE_CHECKS.length, doneLabels };
+};
+
+function CustomThemeCoachPanel({
+  messages,
+  draft,
+  onDraftChange,
+  busy,
+  localError,
+  aiAvailable,
+  accountSyncAvailable,
+  coachPrereqsOk,
+  coverage,
+  onStart,
+  onSend,
+  onSynthesize,
+  onClear,
+}: {
+  messages: ThemeCoachUiMessage[];
+  draft: string;
+  onDraftChange: (value: string) => void;
+  busy: boolean;
+  localError: string;
+  aiAvailable: boolean;
+  accountSyncAvailable: boolean;
+  coachPrereqsOk: boolean;
+  coverage: { done: number; total: number; doneLabels: string[] };
+  onStart: () => void;
+  onSend: () => void;
+  onSynthesize: () => void;
+  onClear: () => void;
+}) {
+  const canApply = messages.some((m) => m.role === "user");
+  const hasAssistantMessage = messages.some((m) => m.role === "assistant");
+  const startDisabled = busy || !aiAvailable || hasAssistantMessage || !coachPrereqsOk;
+  const startTitle = !coachPrereqsOk
+    ? "Complete room details and a theme name first."
+    : !aiAvailable
+      ? "On-device Prompt API is not available in this session yet. Enable Chrome flags, wait for the model, then refresh—or try again in a moment."
+      : hasAssistantMessage
+        ? "The coach has already started. Use Clear chat if you want a fresh opening."
+        : busy
+          ? "Please wait…"
+          : undefined;
+  const composerLocked = busy || !coachPrereqsOk;
+  return (
+    <div className="theme-coach-card" role="region" aria-label="Theme coach chat">
+      <h3 className="theme-coach-heading">Theme coach · built-in AI</h3>
+      <p className="muted theme-coach-lead">
+        The coach asks short questions about tone, audience, and how your real room fits the story—so puzzle generation matches
+        what you want.
+      </p>
+      {!coachPrereqsOk ? (
+        <p className="theme-coach-locked-note" role="status">
+          Complete <strong>Room details</strong> on the previous step (environment, comma-separated items, timing, and headcounts),
+          then enter a <strong>theme name</strong> above. The coach unlocks once both are in place so it can use your real room
+          context.
+        </p>
+      ) : null}
+      <p className="muted theme-coach-security-note">
+        Security mode is on: do not paste passwords, API keys, tokens, private keys, or personal data into this chat. Messages
+        that look like secrets are blocked before send.
+      </p>
+      {!accountSyncAvailable ? (
+        <p className="muted theme-coach-account-note">
+          Sign in to store this conversation on your account for this planning session. Other accounts cannot read it; without
+          sign-in, chat stays only in this browser until you leave the page.
+        </p>
+      ) : (
+        <p className="muted theme-coach-account-note">
+          Chat is saved to your signed-in account for this planning session only.
+        </p>
+      )}
+      {!aiAvailable ? (
+        <div className="theme-coach-unavailable" role="note">
+          <p className="muted theme-coach-unavailable-lead">
+            On-device coach AI is not detected in this browser session. You can still write the theme description in the{" "}
+            <strong>field above</strong> and continue without the coach.
+          </p>
+          <p className="muted theme-coach-unavailable-flags">
+            In <strong>Chrome</strong> on desktop (recent stable or newer), enable built-in Gemini Nano, then relaunch: open{" "}
+            <code className="chrome-flag-chip">chrome://flags/#optimization-guide-on-device-model</code> → <strong>Enabled</strong>, and{" "}
+            <code className="chrome-flag-chip">chrome://flags/#prompt-api-for-gemini-nano</code> or{" "}
+            <code className="chrome-flag-chip">chrome://flags/#prompt-api-for-gemini-nano-multimodal-input</code> → <strong>Enabled</strong>.{" "}
+            On <code>localhost</code>, confirm with DevTools: <code className="chrome-flag-chip">await LanguageModel.availability()</code>{" "}
+            (expect <strong>available</strong> or <strong>downloadable</strong>). Hardware and disk requirements apply—see the{" "}
+            <a href="https://developer.chrome.com/docs/ai/get-started" target="_blank" rel="noreferrer">
+              Chrome built-in AI get-started guide
+            </a>
+            .
+          </p>
+          <p className="muted theme-coach-unavailable-foot">
+            <strong>Send</strong> and <strong>Apply answers</strong> stay off until the Prompt API is available here.
+          </p>
+        </div>
+      ) : null}
+      <p className="muted theme-coach-coverage">
+        Interview coverage: {coverage.done}/{coverage.total} core topics captured
+        {coverage.doneLabels.length > 0 ? ` (${coverage.doneLabels.join(", ")})` : ""}.
+      </p>
+      {localError ? <p className="error-banner theme-coach-error">{localError}</p> : null}
+      <div className="theme-coach-messages" tabIndex={0} aria-live="polite">
+        {messages.length === 0 ? (
+          <p className="muted theme-coach-empty">
+            {coachPrereqsOk
+              ? "When you start the coach, it will assess what is already clear from your room details and theme name, then ask focused questions here."
+              : "The coach stays closed until room details and a theme name are ready—see the note above."}
+          </p>
+        ) : (
+          messages.map((msg) => (
+            <div key={msg.id} className={`theme-coach-bubble theme-coach-bubble--${msg.role}`}>
+              <span className="theme-coach-bubble-label">{msg.role === "assistant" ? "Coach" : "You"}</span>
+              <div className="theme-coach-bubble-text">{msg.content}</div>
+            </div>
+          ))
+        )}
+        {busy ? <p className="muted theme-coach-thinking">Thinking…</p> : null}
+      </div>
+      <div className="theme-coach-composer">
+        <label className="theme-coach-composer-label">
+          Your reply
+          <textarea
+            className="theme-coach-textarea"
+            rows={2}
+            value={draft}
+            onChange={(event) => onDraftChange(event.target.value)}
+            placeholder={
+              coachPrereqsOk ? "Type your answer, then Send." : "Unlock the coach with room details + theme name first."
+            }
+            disabled={composerLocked}
+          />
+        </label>
+        <div className="theme-coach-actions">
+          <button type="button" className="secondary-btn" onClick={onStart} disabled={startDisabled} title={startTitle}>
+            Start conversation
+          </button>
+          <button
+            type="button"
+            className="primary-btn"
+            onClick={onSend}
+            disabled={
+              busy ||
+              !aiAvailable ||
+              !coachPrereqsOk ||
+              !draft.trim() ||
+              !messages.some((m) => m.role === "assistant")
+            }
+            title={!aiAvailable ? "Built-in browser AI is required to send messages to the coach." : undefined}
+          >
+            Send
+          </button>
+        </div>
+      </div>
+      <div className="theme-coach-footer-actions">
+        <button
+          type="button"
+          className="secondary-btn"
+          onClick={onSynthesize}
+          disabled={busy || !aiAvailable || !coachPrereqsOk || !canApply}
+        >
+          Apply answers to description
+        </button>
+        <button type="button" className="secondary-btn" onClick={onClear} disabled={busy || messages.length === 0}>
+          Clear chat
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const inputHistory = useMemo(() => loadHistory(), []);
+  const initialAuth = useMemo(() => {
+    try {
+      const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+      if (!raw) return { authToken: "", authUser: null as AuthUser | null };
+      const parsed = JSON.parse(raw) as { authToken?: string; authUser?: unknown };
+      const authUser = normalizeAuthUser(parsed.authUser);
+      return { authToken: parsed.authToken ?? "", authUser };
+    } catch {
+      return { authToken: "", authUser: null as AuthUser | null };
+    }
+  }, []);
+
+  const deviceId = useMemo(() => getOrCreateDeviceId(), []);
+
+  const [themes, setThemes] = useState<Theme[]>([]);
+  const [selectedThemeId, setSelectedThemeId] = useState<string>("");
+  const [error, setError] = useState<string>("");
+  const [sessionId, setSessionId] = useState<string>("");
+  const [playersConcurrent, setPlayersConcurrent] = useState<string>("2");
+  const [participantsTotal, setParticipantsTotal] = useState<string>("6");
+  const [sessionDurationMinutes, setSessionDurationMinutes] = useState<string>("45");
+  const [eventType, setEventType] = useState<string>("");
+  const [roomDifficulty, setRoomDifficulty] = useState<"easy" | "medium" | "hard">("medium");
+  const [youthAddOnEnabled, setYouthAddOnEnabled] = useState<boolean>(false);
+  const [youthAddOnGatesAdultFlow, setYouthAddOnGatesAdultFlow] = useState<boolean>(false);
+  const [youthAddOnAgeNote, setYouthAddOnAgeNote] = useState<string>("");
+  const [environmentType, setEnvironmentType] = useState<string>("");
+  const [themeMustMatchEnvironment, setThemeMustMatchEnvironment] = useState<boolean>(false);
+  const [availableItems, setAvailableItems] = useState<string>("");
+  const [useCustomMainPuzzleCount, setUseCustomMainPuzzleCount] = useState(false);
+  const [customMainPuzzleCountStr, setCustomMainPuzzleCountStr] = useState("");
+  const [useCustomMix, setUseCustomMix] = useState(false);
+  const [customMixLogic, setCustomMixLogic] = useState("");
+  const [customMixPhysical, setCustomMixPhysical] = useState("");
+  const [customMixElectronic, setCustomMixElectronic] = useState("");
+  /** Default on: fewer fields until the host opens “All options” or picks a theme (full tools stay on later steps). */
+  const [simpleRoomSetup, setSimpleRoomSetup] = useState<boolean>(true);
+  /** Theme step + puzzle step: hide long markdown brief and editor until “Full brief” (independent from room Simple / All options). */
+  const [simpleThemeView, setSimpleThemeView] = useState<boolean>(true);
+  const [existingPuzzles, setExistingPuzzles] = useState<Array<{ name: string; link: string; roomPart: string }>>([]);
+  const [existingPuzzleName, setExistingPuzzleName] = useState<string>("");
+  const [existingPuzzleLink, setExistingPuzzleLink] = useState<string>("");
+  const [existingPuzzleRoomPart, setExistingPuzzleRoomPart] = useState<string>("");
+  const [puzzles, setPuzzles] = useState<Puzzle[]>([]);
+  const [refusedPuzzleSlots, setRefusedPuzzleSlots] = useState<RefusedPuzzleSlot[]>([]);
+  const [puzzleWindowBusy, setPuzzleWindowBusy] = useState<PuzzleWindowBusy | null>(null);
+  const [suggestedAdditions, setSuggestedAdditions] = useState<string[]>([]);
+  const [suggestedAdditionsRequired, setSuggestedAdditionsRequired] = useState<string[]>([]);
+  const [storyPlan, setStoryPlan] = useState<StoryPlan | null>(null);
+  const [compatibilityPassed, setCompatibilityPassed] = useState<boolean | null>(null);
+  const [exportContent, setExportContent] = useState<string>("");
+  const [exportWasRedacted, setExportWasRedacted] = useState<boolean>(false);
+  type ExportReadFormat = "markdown" | "plaintext" | "html";
+  const [exportReadFormat, setExportReadFormat] = useState<ExportReadFormat>("markdown");
+  const [exportBusy, setExportBusy] = useState(false);
+  const [briefPolishBusy, setBriefPolishBusy] = useState<boolean>(false);
+  const [arduinoPreviewPuzzleId, setArduinoPreviewPuzzleId] = useState<string | null>(null);
+  const [inspirationOpen, setInspirationOpen] = useState<boolean>(false);
+  const [inspirationAiBrief, setInspirationAiBrief] = useState<ContextualInspirationResult | null>(null);
+  const [inspirationAiBusy, setInspirationAiBusy] = useState<boolean>(false);
+  const [inspirationAiError, setInspirationAiError] = useState<string>("");
+
+  useEffect(() => {
+    if (!inspirationOpen) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") setInspirationOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [inspirationOpen]);
+  const [customThemeName, setCustomThemeName] = useState<string>("");
+  const [customThemeDescription, setCustomThemeDescription] = useState<string>("");
+  const [customThemeCoachMessages, setCustomThemeCoachMessages] = useState<ThemeCoachUiMessage[]>([]);
+  const [customThemeCoachDraft, setCustomThemeCoachDraft] = useState<string>("");
+  const [customThemeCoachBusy, setCustomThemeCoachBusy] = useState<boolean>(false);
+  const [customThemeCoachError, setCustomThemeCoachError] = useState<string>("");
+  const [customThemeSaving, setCustomThemeSaving] = useState<boolean>(false);
+  const [coachBrowserAiReady, setCoachBrowserAiReady] = useState<boolean>(() => isBrowserAiAvailable());
+  const coachBrowserAiReadyRef = useRef(coachBrowserAiReady);
+  coachBrowserAiReadyRef.current = coachBrowserAiReady;
+  const [authToken, setAuthToken] = useState<string>(initialAuth.authToken);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(initialAuth.authUser);
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
+  const [authName, setAuthName] = useState<string>("");
+  const [authEmail, setAuthEmail] = useState<string>("");
+  const [authPassword, setAuthPassword] = useState<string>("");
+  const [activationKey, setActivationKey] = useState<string>("");
+  const [roomsToAddInput, setRoomsToAddInput] = useState<string>("10");
+  const [exportCreditsToAddInput, setExportCreditsToAddInput] = useState<string>("10");
+  const [orgPoolJson, setOrgPoolJson] = useState<string>("");
+  const [billingNotice, setBillingNotice] = useState<string>("");
+  const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
+  const [squarePaymentsReady, setSquarePaymentsReady] = useState<boolean>(false);
+  const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
+  const [upgradePromptOpen, setUpgradePromptOpen] = useState(false);
+  const [upgradePromptMessage, setUpgradePromptMessage] = useState("");
+  const [auditEntries, setAuditEntries] = useState<Array<{ ts?: string; action?: string; detail?: unknown }>>([]);
+  const [savedPlans, setSavedPlans] = useState<SavedPlanSummary[]>([]);
+  const [approvedForBuild, setApprovedForBuild] = useState<boolean>(false);
+  const [showPlanPicker, setShowPlanPicker] = useState<boolean>(Boolean(initialAuth.authUser?.canSaveRooms));
+  const [activePanel, setActivePanel] = useState<"plan" | "themes" | "saved" | "output">(
+    initialAuth.authUser?.canSaveRooms ? "saved" : "plan",
+  );
+  const [showExistingPuzzleForm, setShowExistingPuzzleForm] = useState<boolean>(false);
+  const [validationFlags, setValidationFlags] = useState<Record<string, boolean>>({});
+  const [appView, setAppView] = useState<"builder" | "account">("builder");
+  const lastPlanningAuthTokenRef = useRef(initialAuth.authToken);
+  const pendingAuthSessionBootstrap = useRef(false);
+  const themesAutoFetchInFlight = useRef(false);
+  const idleLastActivityRef = useRef(0);
+  const idleTimeoutSignOutStartedRef = useRef(false);
+  const [idlePromptOpen, setIdlePromptOpen] = useState(false);
+  const [idleDraftBusy, setIdleDraftBusy] = useState(false);
+  const [snapshotSyncHint, setSnapshotSyncHint] = useState<string | null>(null);
+  const [outputReviewBusy, setOutputReviewBusy] = useState(false);
+  const persistAuthRef = useRef<(token: string, user: AuthUser | null) => void>(() => {});
+  const themeCoachHydratedForSessionRef = useRef<string>("");
+  const prevCustomThemeCoachPrereqsOkRef = useRef(false);
+  const customThemeCoachMessagesRef = useRef<ThemeCoachUiMessage[]>([]);
+  const hasSavedPlans = savedPlans.length > 0;
+  const [themePath, setThemePath] = useState<"custom" | "generated" | null>(null);
+  type WizardStep =
+    | "saved"
+    | "themes"
+    | "themes-puzzles"
+    | "setup"
+    | "output-review"
+    | "output-export";
+  const [wizardStep, setWizardStep] = useState<WizardStep>(initialAuth.authUser ? "saved" : "setup");
+  const [hoverPreviewThemeId, setHoverPreviewThemeId] = useState<string | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  const selectedTheme = useMemo(
+    () => themes.find((theme) => theme.id === selectedThemeId),
+    [themes, selectedThemeId],
+  );
+  const commercialVenueContext = useMemo(() => isCommercialVenueEventContext(eventType), [eventType]);
+
+  const runContextualInspiration = useCallback(async (): Promise<void> => {
+    setInspirationAiError("");
+    if (!coachBrowserAiReady) {
+      setInspirationAiError(
+        "On-device AI is not available in this browser yet. Try Chrome with the Prompt API (e.g. Gemini Nano) enabled, then refresh.",
+      );
+      return;
+    }
+    setInspirationAiBusy(true);
+    try {
+      const themeName = selectedTheme?.name ?? (customThemeName.trim() || "Not selected yet");
+      const themeTldr = selectedTheme ? resolveThemeTldr(selectedTheme) : "";
+      const desc = selectedTheme?.description ?? customThemeDescription ?? "";
+      const excerpt = collapseWs(desc).slice(0, 900);
+      const result = await generateContextualInspirationInBrowser({
+        environmentType: environmentType.trim(),
+        availableItems: availableItems.trim(),
+        eventType: eventType.trim(),
+        themeName,
+        themeTldr,
+        themeDescriptionExcerpt: excerpt,
+        isCommercialVenue: commercialVenueContext,
+      });
+      if (!result || (!result.intro && result.propIdeas.length === 0 && !result.proTip)) {
+        setInspirationAiBrief(null);
+        setInspirationAiError(
+          "Could not produce tips. The model may be busy—try again, or confirm on-device AI is enabled in your browser.",
+        );
+        return;
+      }
+      setInspirationAiBrief(result);
+    } finally {
+      setInspirationAiBusy(false);
+    }
+  }, [
+    coachBrowserAiReady,
+    selectedTheme,
+    customThemeName,
+    customThemeDescription,
+    environmentType,
+    availableItems,
+    eventType,
+    commercialVenueContext,
+  ]);
+
+  customThemeCoachMessagesRef.current = customThemeCoachMessages;
+
+  const themesStepDockTheme = useMemo(() => {
+    if (wizardStep !== "themes" || themePath !== "generated") return null;
+    if (hoverPreviewThemeId) return themes.find((theme) => theme.id === hoverPreviewThemeId) ?? null;
+    if (selectedThemeId) return themes.find((theme) => theme.id === selectedThemeId) ?? null;
+    return null;
+  }, [wizardStep, themePath, hoverPreviewThemeId, selectedThemeId, themes]);
+
+  const themesStepPolishTheme = useMemo(() => {
+    if (wizardStep !== "themes" || themePath !== "generated" || !selectedThemeId) return null;
+    return themes.find((theme) => theme.id === selectedThemeId) ?? null;
+  }, [wizardStep, themePath, selectedThemeId, themes]);
+
+  const themesStepBriefPreviewMismatch = useMemo(
+    () =>
+      Boolean(
+        themesStepDockTheme && selectedThemeId && themesStepDockTheme.id !== selectedThemeId,
+      ),
+    [themesStepDockTheme, selectedThemeId],
+  );
+
+  useEffect(() => {
+    if (wizardStep !== "themes") setHoverPreviewThemeId(null);
+  }, [wizardStep]);
+
+  const rememberInput = (field: string, value: string): void => {
+    const normalized = value.trim();
+    if (!normalized) return;
+    const current = loadHistory();
+    const existing = current[field] ?? [];
+    const next = [normalized, ...existing.filter((entry) => entry.toLowerCase() !== normalized.toLowerCase())].slice(
+      0,
+      12,
+    );
+    current[field] = next;
+    saveHistory(current);
+  };
+
+  type PlanningApiBody = {
+    playersConcurrent: number;
+    participantsTotal: number;
+    sessionDurationMinutes: number;
+    environmentType: string;
+    availableItems: string[];
+    roomDifficulty: "easy" | "medium" | "hard";
+    youthAddOnEnabled: boolean;
+    youthAddOnGatesAdultFlow: boolean;
+    youthAddOnAgeNote: string;
+    eventType: string;
+    mainTrackPuzzleCountOverride: number | null;
+    puzzleMixLogic: number | null;
+    puzzleMixPhysical: number | null;
+    puzzleMixElectronic: number | null;
+    themeMustMatchEnvironment: boolean;
+  };
+
+  const buildPlanningBody = (mode: "draft" | "strict"): PlanningApiBody | null => {
+    const parsedItems = availableItems
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const pc = Number(playersConcurrent);
+    const pt = Number(participantsTotal);
+    const sd = Number(sessionDurationMinutes);
+    const env = environmentType.trim();
+    const mainOverride = ((): number | null => {
+      if (!useCustomMainPuzzleCount) return null;
+      const n = Number.parseInt(customMainPuzzleCountStr.trim(), 10);
+      if (!Number.isFinite(n)) return null;
+      return Math.min(24, Math.max(1, Math.trunc(n)));
+    })();
+    const mixTriple = ((): { logic: number; physical: number; electronic: number } | null => {
+      if (!useCustomMix) return null;
+      const L = Number.parseInt(customMixLogic.trim(), 10);
+      const P = Number.parseInt(customMixPhysical.trim(), 10);
+      const E = Number.parseInt(customMixElectronic.trim(), 10);
+      if (!Number.isFinite(L) || !Number.isFinite(P) || !Number.isFinite(E)) return null;
+      if (L < 0 || P < 0 || E < 0 || L > 20 || P > 20 || E > 20) return null;
+      if (L + P + E < 1) return null;
+      return { logic: Math.trunc(L), physical: Math.trunc(P), electronic: Math.trunc(E) };
+    })();
+    if (mode === "strict") {
+      if (!Number.isFinite(pc) || pc < 1 || pc > 99) return null;
+      if (!Number.isFinite(pt) || pt < 1 || pt > 99) return null;
+      if (!Number.isFinite(sd) || sd < 10 || sd > 180) return null;
+      if (!env) return null;
+      if (parsedItems.length === 0) return null;
+      if (useCustomMainPuzzleCount && mainOverride === null) return null;
+      if (useCustomMix && mixTriple === null) return null;
+      return {
+        playersConcurrent: pc,
+        participantsTotal: pt,
+        sessionDurationMinutes: sd,
+        environmentType: env,
+        availableItems: parsedItems,
+        roomDifficulty,
+        youthAddOnEnabled,
+        youthAddOnGatesAdultFlow,
+        youthAddOnAgeNote: youthAddOnAgeNote.trim().slice(0, 400),
+        eventType: eventType.trim().slice(0, 200),
+        mainTrackPuzzleCountOverride: mainOverride,
+        puzzleMixLogic: mixTriple?.logic ?? null,
+        puzzleMixPhysical: mixTriple?.physical ?? null,
+        puzzleMixElectronic: mixTriple?.electronic ?? null,
+        themeMustMatchEnvironment,
+      };
+    }
+    const players = Number.isFinite(pc) && pc > 0 ? Math.min(99, Math.max(1, Math.trunc(pc))) : 4;
+    const participants = Number.isFinite(pt) && pt > 0 ? Math.min(99, Math.max(1, Math.trunc(pt))) : 6;
+    const duration = Number.isFinite(sd) && sd >= 10 ? Math.min(180, Math.max(10, Math.trunc(sd))) : 45;
+    return {
+      playersConcurrent: players,
+      participantsTotal: participants,
+      sessionDurationMinutes: duration,
+      environmentType: env || "Not specified yet",
+      availableItems: parsedItems.length > 0 ? parsedItems : ["Not specified yet"],
+      roomDifficulty,
+      youthAddOnEnabled,
+      youthAddOnGatesAdultFlow,
+      youthAddOnAgeNote: youthAddOnAgeNote.trim().slice(0, 400),
+      eventType: eventType.trim().slice(0, 200),
+      mainTrackPuzzleCountOverride: mainOverride,
+      puzzleMixLogic: mixTriple?.logic ?? null,
+      puzzleMixPhysical: mixTriple?.physical ?? null,
+      puzzleMixElectronic: mixTriple?.electronic ?? null,
+      themeMustMatchEnvironment,
+    };
+  };
+
+  const selectedThemeName = selectedTheme?.name ?? "Selected Theme";
+  const selectedThemeDescription = selectedTheme?.description ?? "";
+  const coachCoverage = useMemo(() => getCoachCoverageStatus(customThemeCoachMessages), [customThemeCoachMessages]);
+  const customThemeCoachPrereqsOk = useMemo(() => {
+    if (!buildPlanningBody("strict")) return false;
+    return Boolean(customThemeName.trim());
+  }, [
+    playersConcurrent,
+    participantsTotal,
+    sessionDurationMinutes,
+    environmentType,
+    availableItems,
+    roomDifficulty,
+    youthAddOnEnabled,
+    youthAddOnGatesAdultFlow,
+    youthAddOnAgeNote,
+    eventType,
+    useCustomMainPuzzleCount,
+    customMainPuzzleCountStr,
+    useCustomMix,
+    customMixLogic,
+    customMixPhysical,
+    customMixElectronic,
+    customThemeName,
+  ]);
+  const wizardSteps = hasSavedPlans
+    ? (["saved", "setup", "themes", "themes-puzzles", "output-review", "output-export"] as WizardStep[])
+    : (["setup", "themes", "themes-puzzles", "output-review", "output-export"] as WizardStep[]);
+  const wizardIndex = Math.max(0, wizardSteps.indexOf(wizardStep));
+  const missionStepLabels = useMemo(() => wizardSteps.map(wizardStepLabel), [wizardSteps]);
+  const juniorForkSegmentIndex = useMemo(() => {
+    if (!youthAddOnEnabled) return null;
+    const i = wizardSteps.indexOf("themes-puzzles");
+    return i >= 0 && i < wizardSteps.length - 1 ? i : null;
+  }, [youthAddOnEnabled, wizardSteps]);
+  const livePuzzleEstimate = useMemo(() => {
+    const pc = Number(playersConcurrent);
+    const sd = Number(sessionDurationMinutes);
+    if (!Number.isFinite(pc) || pc < 1 || !Number.isFinite(sd) || sd < 1) return 4;
+    return estimateClientPuzzleCount(Math.floor(pc), Math.floor(sd));
+  }, [playersConcurrent, sessionDurationMinutes]);
+  const plannerMainPuzzleTarget = useMemo(() => {
+    if (useCustomMainPuzzleCount) {
+      const n = Number.parseInt(customMainPuzzleCountStr.trim(), 10);
+      if (Number.isFinite(n)) return Math.min(24, Math.max(1, Math.trunc(n)));
+    }
+    return livePuzzleEstimate;
+  }, [useCustomMainPuzzleCount, customMainPuzzleCountStr, livePuzzleEstimate]);
+  const juniorAddOnPuzzleSlots = useMemo(() => {
+    if (!youthAddOnEnabled) return 0;
+    const sd = Number(sessionDurationMinutes);
+    if (!Number.isFinite(sd) || sd < 1) return 2;
+    return sd >= 25 ? 3 : 2;
+  }, [youthAddOnEnabled, sessionDurationMinutes]);
+  const mainTrackPuzzles = useMemo(() => puzzles.filter((p) => p.audienceTrack !== "youth_addon"), [puzzles]);
+  const juniorTrackPuzzles = useMemo(() => puzzles.filter((p) => p.audienceTrack === "youth_addon"), [puzzles]);
+  const juniorGatingPuzzles = useMemo(
+    () => juniorTrackPuzzles.filter((p) => p.gatesAdultProgression),
+    [juniorTrackPuzzles],
+  );
+  const mainRefusedSlots = useMemo(
+    () => refusedPuzzleSlots.filter((slot) => slot.audienceTrack !== "youth_addon"),
+    [refusedPuzzleSlots],
+  );
+  const juniorRefusedSlots = useMemo(
+    () => refusedPuzzleSlots.filter((slot) => slot.audienceTrack === "youth_addon"),
+    [refusedPuzzleSlots],
+  );
+
+  const runPolishCurrentBrief = async (): Promise<void> => {
+    const env = environmentType.trim();
+    const items = availableItems.trim();
+    const run = async (themeName: string, description: string, apply: (next: string) => void): Promise<void> => {
+      setBriefPolishBusy(true);
+      setError("");
+      try {
+        const next = await polishThemeBriefInBrowser({
+          themeName,
+          description,
+          environmentType: env,
+          availableItems: items,
+        });
+        if (!next) {
+          setError(
+            "On-device AI is unavailable or the edit failed. Use a browser with the Prompt API (e.g. Chrome), or edit the brief manually.",
+          );
+          return;
+        }
+        apply(next);
+      } finally {
+        setBriefPolishBusy(false);
+      }
+    };
+
+    if (wizardStep === "themes" && themePath === "generated" && themesStepPolishTheme?.description.trim()) {
+      const t = themesStepPolishTheme;
+      await run(t.name, t.description, (next) => {
+        setThemes((prev) => prev.map((th) => (th.id === t.id ? { ...th, description: next } : th)));
+      });
+      return;
+    }
+    if (wizardStep === "themes" && themePath === "custom" && customThemeDescription.trim()) {
+      await run(customThemeName.trim() || "Custom theme", customThemeDescription, (next) => setCustomThemeDescription(next));
+      return;
+    }
+    if (wizardStep === "themes-puzzles" && selectedTheme && selectedTheme.description.trim()) {
+      const t = selectedTheme;
+      await run(t.name, t.description, (next) => {
+        setThemes((prev) => prev.map((th) => (th.id === t.id ? { ...th, description: next } : th)));
+      });
+    }
+  };
+
+  const wizardLabel = (() => {
+    if (wizardStep === "saved") return "Saved Plans";
+    if (wizardStep === "setup") return "Room details";
+    if (wizardStep === "themes") return "Choose a theme";
+    if (wizardStep === "themes-puzzles") return "Build puzzle set";
+    return "Output";
+  })();
+
+  const syncPlanningInputToServer = async (activeSessionId: string, mode: "draft" | "strict"): Promise<boolean> => {
+    const body = buildPlanningBody(mode);
+    if (!body) {
+      if (mode === "strict") {
+        setError(
+          "Room details are incomplete or invalid (environment, comma-separated items, session length 10–180 minutes, headcounts 1–99). Use ← Back to Room details and fix the highlighted fields.",
+        );
+      }
+      return false;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/api/planning/session/${activeSessionId}/planning-input`, {
+        method: "PATCH",
+        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        body: JSON.stringify(body),
+      });
+      const data = (await response.json()) as { ok?: boolean; error?: { message?: string } };
+      if (!response.ok) {
+        setError(data.error?.message ?? "Failed to update planning details.");
+        return false;
+      }
+      return true;
+    } catch (_err) {
+      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+      return false;
+    }
+  };
+
+  const pushSnapshotPlanningToSession = async (): Promise<void> => {
+    if (!sessionId) {
+      setSnapshotSyncHint(null);
+      setError("No planning session on the server yet—finish room details so the app can open one.");
+      return;
+    }
+    const mode = buildPlanningBody("strict") ? "strict" : "draft";
+    setSnapshotSyncHint(null);
+    const ok = await syncPlanningInputToServer(sessionId, mode);
+    if (ok) {
+      setError("");
+      setSnapshotSyncHint(
+        mode === "strict" ? "Planning saved to this session." : "Draft planning synced (some fields still optional).",
+      );
+      window.setTimeout(() => setSnapshotSyncHint(null), 5000);
+    }
+  };
+
+  const collectStrictPlanningMissing = (): string[] => {
+    const missing: string[] = [];
+    const pc = Number(playersConcurrent);
+    const pt = Number(participantsTotal);
+    const sd = Number(sessionDurationMinutes);
+    if (!Number.isFinite(pc) || pc < 1 || pc > 99) missing.push("playersConcurrent");
+    if (!Number.isFinite(pt) || pt < 1 || pt > 99) missing.push("participantsTotal");
+    if (!Number.isFinite(sd) || sd < 10 || sd > 180) missing.push("sessionDurationMinutes");
+    if (!environmentType.trim()) missing.push("environmentType");
+    if (
+      availableItems
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean).length === 0
+    ) {
+      missing.push("availableItems");
+    }
+    return missing;
+  };
+
+  const scrollFirstInvalidRoomFieldIntoView = (): void => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document
+          .querySelector(".form-grid--blueprint .invalid-field, .form-grid--blueprint .chip-field--invalid")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
+  };
+
+  const proceedFromSetupToThemes = async (): Promise<void> => {
+    setError("");
+    if (!buildPlanningBody("strict")) {
+      flagMissingFields(collectStrictPlanningMissing());
+      setError(
+        "Complete room details on this step (players, duration, environment, and at least one available item as a comma-separated tag) before continuing.",
+      );
+      scrollFirstInvalidRoomFieldIntoView();
+      return;
+    }
+    rememberInput("environmentType", environmentType);
+    rememberInput("availableItems", availableItems);
+    rememberInput("eventType", eventType);
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) return;
+    const synced = await syncPlanningInputToServer(activeSessionId, "strict");
+    if (!synced) return;
+    setWizardStep("themes");
+  };
+
+  const proceedFromThemesToPuzzles = async (): Promise<void> => {
+    setError("");
+    if (!buildPlanningBody("strict")) {
+      flagMissingFields(collectStrictPlanningMissing());
+      setError(
+        "Complete room details (players, duration, environment, and at least one available item) before continuing to the puzzle builder.",
+      );
+      setWizardStep("setup");
+      setActivePanel("plan");
+      scrollFirstInvalidRoomFieldIntoView();
+      return;
+    }
+    if (themePath === "custom") {
+      if (!selectedThemeId.trim()) {
+        setError('Use “Add and Select Custom Theme” to save your brief to this session, then continue.');
+        return;
+      }
+    } else if (!selectedThemeId.trim()) {
+      setValidationFlags((current) => ({ ...current, selectedThemeId: true }));
+      setError("Choose one theme from the list before continuing.");
+      return;
+    }
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) return;
+    const synced = await syncPlanningInputToServer(activeSessionId, "strict");
+    if (!synced) return;
+    setWizardStep("themes-puzzles");
+    setActivePanel("themes");
+  };
+
+  const proceedToOutputReview = async (): Promise<void> => {
+    setError("");
+    if (!buildPlanningBody("strict")) {
+      flagMissingFields(collectStrictPlanningMissing());
+      setError(
+        "Room details no longer pass validation (environment, comma-separated items, session length 10–180 minutes, headcounts 1–99). Fix the highlighted required fields below, then try Continue again.",
+      );
+      if (wizardStep !== "setup") {
+        setWizardStep("setup");
+        setActivePanel("plan");
+      }
+      scrollFirstInvalidRoomFieldIntoView();
+      return;
+    }
+    if (!selectedThemeId.trim()) {
+      setError("Choose a theme first: go back to the Theme step, pick one option, then return to Build puzzle set.");
+      return;
+    }
+    setOutputReviewBusy(true);
+    try {
+      rememberInput("environmentType", environmentType);
+      rememberInput("availableItems", availableItems);
+      rememberInput("eventType", eventType);
+      const activeSessionId = await ensureSession();
+      if (!activeSessionId) {
+        setError("Could not open a planning session. Check that the backend is running, then try again.");
+        return;
+      }
+      const synced = await syncPlanningInputToServer(activeSessionId, "strict");
+      if (!synced) return;
+
+      if (selectedThemeId && puzzles.length === 0) {
+        const draftSynced = await syncPlanningInputToServer(activeSessionId, "draft");
+        if (!draftSynced) return;
+        const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
+        const generated = await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
+        if (!generated) return;
+      }
+
+      flushSync(() => {
+        setWizardStep("output-review");
+        setActivePanel("output");
+      });
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          document.getElementById("builder-output-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+    } finally {
+      setOutputReviewBusy(false);
+    }
+  };
+
+  const goWizardBack = (): void => {
+    const idx = wizardSteps.indexOf(wizardStep);
+    if (idx <= 0) return;
+    setWizardStep(wizardSteps[idx - 1]);
+  };
+
+  const canGoWizardBack = wizardSteps.indexOf(wizardStep) > 0;
+  const flagMissingFields = (keys: string[]): void => {
+    const next: Record<string, boolean> = {};
+    keys.forEach((key) => {
+      next[key] = true;
+    });
+    setValidationFlags((current) => ({ ...current, ...next }));
+  };
+
+  const persistAuth = (token: string, user: AuthUser | null): void => {
+    setAuthToken(token);
+    setAuthUser(user ? normalizeAuthUser(user) : null);
+    setShowPlanPicker(Boolean(user));
+    setActivePanel(Boolean(user?.canSaveRooms) ? "saved" : "plan");
+    setWizardStep(Boolean(user) ? "saved" : "setup");
+    if (!user || !token) {
+      setAppView("builder");
+      setBillingNotice("");
+      themeCoachHydratedForSessionRef.current = "";
+      setCustomThemeCoachMessages([]);
+      setCustomThemeCoachDraft("");
+      setCustomThemeCoachError("");
+      setYouthAddOnEnabled(false);
+      setYouthAddOnGatesAdultFlow(false);
+      setYouthAddOnAgeNote("");
+      setEventType("");
+      setSessionId("");
+      setThemes([]);
+      setSelectedThemeId("");
+      setPuzzles([]);
+      setRefusedPuzzleSlots([]);
+      setSuggestedAdditions([]);
+      setSuggestedAdditionsRequired([]);
+      setStoryPlan(null);
+      setCompatibilityPassed(null);
+      setExportContent("");
+      setApprovedForBuild(false);
+    }
+    try {
+      if (!user || !token) {
+        window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        return;
+      }
+      const normalized = normalizeAuthUser(user);
+      if (normalized) {
+        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authToken: token, authUser: normalized }));
+      }
+    } catch {
+      // Ignore storage errors; in-memory auth state still works for this session.
+    }
+  };
+  persistAuthRef.current = persistAuth;
+  const signOut = (): void => {
+    setError("");
+    try {
+      window.localStorage.removeItem(IDLE_RESUME_PLAN_ID_KEY);
+    } catch {
+      // ignore
+    }
+    persistAuth("", null);
+  };
+  const withAuthHeaders = (): HeadersInit => ({
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${authToken}`,
+    "X-Device-Id": deviceId,
+  });
+  const withAuthGetHeaders = (): HeadersInit => ({
+    Authorization: `Bearer ${authToken}`,
+    "X-Device-Id": deviceId,
+  });
+  const anonJsonHeaders = (): HeadersInit => ({
+    "Content-Type": "application/json",
+    "X-Device-Id": deviceId,
+  });
+
+  const openUpgradePrompt = (message?: string): void => {
+    setUpgradePromptMessage(
+      message ??
+        "Your free trial is complete. Purchase a room pack to design more rooms, save plans, and export again.",
+    );
+    setUpgradePromptOpen(true);
+  };
+
+  const handleBillingGate = (code?: string, message?: string): boolean => {
+    if (code === "TRIAL_USED" || code === "TRIAL_NO_SAVE") {
+      openUpgradePrompt(message);
+      return true;
+    }
+    if (code === "SUBSCRIPTION_REQUIRED") {
+      openUpgradePrompt(message ?? "Purchase a room pack to continue.");
+      return true;
+    }
+    return false;
+  };
+
+  const refreshProfile = async (): Promise<void> => {
+    if (!authToken) return;
+    try {
+      const response = await fetch(`${API_BASE}/api/me`, { headers: withAuthGetHeaders() });
+      if (response.status === 401) {
+        handleAuthExpired();
+        return;
+      }
+      const data = (await response.json()) as { user?: AuthUser };
+      if (data.user) {
+        const normalized = normalizeAuthUser(data.user);
+        if (normalized) {
+          setAuthUser(normalized);
+          try {
+            window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authToken, authUser: normalized }));
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } catch {
+      // offline: keep cached user
+    }
+  };
+
+  const hasFullCatalogAccess = Boolean(authUser?.hasFullCatalog);
+  const canNavigateToOutputReview = Boolean(selectedThemeId.trim());
+
+  const showSlotUtilizationWarning = Boolean(
+    authUser &&
+      !authUser.isAdmin &&
+      authUser.roomAllowance > 0 &&
+      authUser.savedRoomCount / authUser.roomAllowance >= 0.8,
+  );
+
+  useEffect(() => {
+    if (!authToken || !authUser || appView !== "account") return;
+    void (async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/billing/audit-log`, { headers: withAuthGetHeaders() });
+        if (response.status === 401) {
+          handleAuthExpired();
+          return;
+        }
+        const data = (await response.json()) as { entries?: Array<{ ts?: string; action?: string; detail?: unknown }> };
+        setAuditEntries(Array.isArray(data.entries) ? data.entries : []);
+      } catch {
+        setAuditEntries([]);
+      }
+    })();
+  }, [authToken, authUser, appView]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const response = await fetch(`${API_BASE}/api/billing/plans`);
+        if (!response.ok) return;
+        const data = (await response.json()) as {
+          plans?: BillingPlan[];
+          square?: { configured?: boolean };
+        };
+        setBillingPlans(Array.isArray(data.plans) ? data.plans : []);
+        setSquarePaymentsReady(Boolean(data.square?.configured));
+      } catch {
+        setBillingPlans([]);
+        setSquarePaymentsReady(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!authToken) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("checkout") !== "success") return;
+    const ref = url.searchParams.get("ref")?.trim();
+    if (!ref) return;
+    void (async () => {
+      setAppView("account");
+      try {
+        const response = await fetch(`${API_BASE}/api/billing/checkout/confirm`, {
+          method: "POST",
+          headers: withAuthHeaders(),
+          body: JSON.stringify({ ref }),
+        });
+        const data = (await response.json()) as {
+          user?: AuthUser;
+          fulfilled?: boolean;
+          alreadyFulfilled?: boolean;
+          roomsAdded?: number;
+          exportCreditsAdded?: number;
+          error?: { message?: string };
+        };
+        url.searchParams.delete("checkout");
+        url.searchParams.delete("ref");
+        window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+        if (!response.ok) {
+          setError(data.error?.message ?? "Could not confirm your purchase yet. If you were charged, contact support.");
+          return;
+        }
+        const normalized = data.user ? normalizeAuthUser(data.user) : null;
+        if (normalized) {
+          setAuthUser(normalized);
+          try {
+            window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authToken, authUser: normalized }));
+          } catch {
+            // ignore
+          }
+        }
+        if (data.alreadyFulfilled) {
+          setBillingNotice("Your room pack is already active on this account.");
+        } else if (data.fulfilled) {
+          setBillingNotice(
+            `Purchase complete — added ${data.roomsAdded ?? 0} save slot(s) and ${data.exportCreditsAdded ?? 0} full export credit(s).`,
+          );
+        } else {
+          setBillingNotice("Payment received. Your account will update shortly once Square confirms the charge.");
+        }
+      } catch {
+        setError("Could not confirm checkout. Refresh Account in a moment or contact support if you were charged.");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per return URL
+  }, [authToken]);
+
+  useEffect(() => {
+    if (authUser?.trialUsed && !authUser.isAdmin && authUser.roomAllowance < 1) {
+      openUpgradePrompt();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- prompt when trial consumed
+  }, [authUser?.trialUsed, authUser?.roomAllowance, authUser?.isAdmin]);
+
+  const handlePurchasePlan = async (planId: string): Promise<void> => {
+    setError("");
+    setBillingNotice("");
+    setCheckoutPlanId(planId);
+    try {
+      const response = await fetch(`${API_BASE}/api/billing/checkout`, {
+        method: "POST",
+        headers: withAuthHeaders(),
+        body: JSON.stringify({ planId }),
+      });
+      const data = (await response.json()) as { checkoutUrl?: string; error?: { message?: string } };
+      if (!response.ok || !data.checkoutUrl) {
+        setError(data.error?.message ?? "Could not start Square checkout.");
+        return;
+      }
+      window.location.href = data.checkoutUrl;
+    } catch {
+      setError("Checkout request failed. Is the backend running?");
+    } finally {
+      setCheckoutPlanId(null);
+    }
+  };
+
+  const handleActivateSubscription = async (): Promise<void> => {
+    setError("");
+    setBillingNotice("");
+    try {
+      const parsedRooms = Number.parseInt(roomsToAddInput.trim(), 10);
+      const roomsToAdd = Number.isFinite(parsedRooms) && parsedRooms > 0 ? Math.min(parsedRooms, 5000) : 10;
+      const parsedExports = Number.parseInt(exportCreditsToAddInput.trim(), 10);
+      const exportCreditsToAdd = Number.isFinite(parsedExports) && parsedExports >= 0 ? Math.min(parsedExports, 50000) : roomsToAdd;
+      let organizationPool: unknown;
+      if (orgPoolJson.trim()) {
+        try {
+          organizationPool = JSON.parse(orgPoolJson) as unknown;
+        } catch {
+          setError("Organization pool JSON is invalid.");
+          return;
+        }
+      }
+      const response = await fetch(`${API_BASE}/api/billing/activate-test`, {
+        method: "POST",
+        headers: withAuthHeaders(),
+        body: JSON.stringify({
+          activationKey: activationKey.trim(),
+          roomsToAdd,
+          exportCreditsToAdd,
+          ...(organizationPool !== undefined ? { organizationPool } : {}),
+        }),
+      });
+      const data = (await response.json()) as {
+        user?: AuthUser;
+        roomsAdded?: number;
+        exportCreditsAdded?: number;
+        error?: { message?: string };
+      };
+      if (!response.ok || !data.user) {
+        setError(data.error?.message ?? "Activation failed.");
+        return;
+      }
+      const normalized = normalizeAuthUser(data.user);
+      if (normalized) {
+        setAuthUser(normalized);
+        try {
+          window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authToken, authUser: normalized }));
+        } catch {
+          // ignore
+        }
+        setBillingNotice(
+          `Added ${data.roomsAdded ?? roomsToAdd} save slot(s) and ${data.exportCreditsAdded ?? exportCreditsToAdd} full export credit(s). Effective save cap is now ${normalized.roomAllowance} (includes org pool bonus). Export credits: ${normalized.isAdmin ? "unlimited" : normalized.exportCreditsRemaining}.`,
+        );
+      } else {
+        setError("Could not read account after activation.");
+      }
+      setActivationKey("");
+    } catch {
+      setError("Activation request failed. Is the backend running?");
+    }
+  };
+  const handleAuthExpired = (): void => {
+    persistAuth("", null);
+    setError("Your session expired. Please log in again.");
+  };
+
+  useEffect(() => {
+    if (!authToken) return;
+    void refreshProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh on token only
+  }, [authToken]);
+
+  const handleSignup = async (): Promise<void> => {
+    try {
+      setError("");
+      if (!termsAccepted) {
+        setError("Please read and accept the Terms of Service to create an account.");
+        return;
+      }
+      const response = await fetch(`${API_BASE}/api/auth/signup`, {
+        method: "POST",
+        headers: anonJsonHeaders(),
+        body: JSON.stringify({
+          name: authName,
+          email: authEmail,
+          password: authPassword,
+          acceptedTerms: true,
+        }),
+      });
+      const data = (await response.json()) as { authToken?: string; user?: AuthUser; error?: { message?: string } };
+      if (!response.ok || !data.authToken || !data.user) {
+        setError(data.error?.message ?? "Sign up failed.");
+        return;
+      }
+      const signedUp = normalizeAuthUser(data.user);
+      if (!signedUp) {
+        setError("Sign up response was incomplete.");
+        return;
+      }
+      persistAuth(data.authToken, signedUp);
+    } catch {
+      setError("Sign up failed. Check backend and try again.");
+    }
+  };
+
+  const handleLogin = async (): Promise<void> => {
+    try {
+      setError("");
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
+        method: "POST",
+        headers: anonJsonHeaders(),
+        body: JSON.stringify({ email: authEmail, password: authPassword }),
+      });
+      const data = (await response.json()) as { authToken?: string; user?: AuthUser; error?: { message?: string } };
+      if (!response.ok || !data.authToken || !data.user) {
+        setError(data.error?.message ?? "Log in failed.");
+        return;
+      }
+      const loggedIn = normalizeAuthUser(data.user);
+      if (!loggedIn) {
+        setError("Log in response was incomplete.");
+        return;
+      }
+      persistAuth(data.authToken, loggedIn);
+    } catch {
+      setError("Log in failed. Check backend and try again.");
+    }
+  };
+
+  const handleSocialAuth = (provider: "google" | "facebook" | "github"): void => {
+    setError("");
+    const returnTo = `${window.location.origin}${window.location.pathname}`;
+    window.location.assign(
+      `${API_BASE}/api/auth/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`,
+    );
+  };
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const oauthErr = url.searchParams.get("oauth_error");
+    const oauthMsg = url.searchParams.get("oauth_message");
+    if (oauthErr) {
+      setError(oauthMsg?.trim() || `Sign-in could not complete (${oauthErr}).`);
+      url.searchParams.delete("oauth_error");
+      url.searchParams.delete("oauth_message");
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+    }
+    const callbackToken = url.searchParams.get("auth_token");
+    const callbackUserRaw = url.searchParams.get("auth_user");
+    if (!callbackToken || !callbackUserRaw) return;
+    try {
+      const callbackUser = normalizeAuthUser(JSON.parse(decodeURIComponent(callbackUserRaw)));
+      if (!callbackUser) throw new Error("invalid user");
+      persistAuth(callbackToken, callbackUser);
+      url.searchParams.delete("auth_token");
+      url.searchParams.delete("auth_user");
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+    } catch {
+      setError("Social sign in completed, but response could not be parsed.");
+    }
+  }, []);
+
+  const requestThemes = async (
+    activeSessionId: string,
+    endpoint: "/api/themes/generate" | "/api/themes/refresh",
+    currentThemes: Theme[],
+  ): Promise<Theme[] | undefined> => {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: "POST",
+      headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+      body:
+        endpoint === "/api/themes/refresh"
+          ? JSON.stringify({ sessionId: activeSessionId, excludeThemeIds: currentThemes.map((theme) => theme.id) })
+          : JSON.stringify({ sessionId: activeSessionId }),
+    });
+    const data = (await response.json()) as { themes?: Theme[]; error?: { message?: string; code?: string } };
+    if (!response.ok || !data.themes) {
+      if (handleBillingGate(data.error?.code, data.error?.message)) return undefined;
+      setError(data.error?.message ?? "Failed to load themes.");
+      return undefined;
+    }
+    const nextThemes = data.themes;
+    setThemes(nextThemes);
+    setSelectedThemeId((prev) => {
+      if (prev && nextThemes.some((theme) => theme.id === prev)) return prev;
+      return "";
+    });
+    return nextThemes;
+  };
+
+  const requestPuzzles = async (activeSessionId: string, themeId: string, themeForEnhance?: Theme | null): Promise<boolean> => {
+    try {
+      const response = await fetch(`${API_BASE}/api/puzzles/generate`, {
+        method: "POST",
+        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        body: JSON.stringify({ sessionId: activeSessionId, themeId }),
+      });
+      const data = (await response.json()) as {
+        puzzles?: Puzzle[];
+        compatibilityPassed?: boolean;
+        storyPlan?: StoryPlan;
+        suggestedAdditions?: string[];
+        suggestedAdditionsRequired?: string[];
+        error?: { message?: string; code?: string };
+      };
+      if (!response.ok || !data.puzzles) {
+        if (handleBillingGate(data.error?.code, data.error?.message)) return false;
+        setError(data.error?.message ?? "Failed to generate puzzles.");
+        return false;
+      }
+      const basePuzzles = data.puzzles;
+      const baseSuggestedAdditions = data.suggestedAdditions ?? [];
+      const baseSuggestedRequired = data.suggestedAdditionsRequired ?? [];
+      const activeTheme = themeForEnhance ?? themes.find((theme) => theme.id === themeId);
+      let aiEnhancement: Awaited<ReturnType<typeof enhancePlanInBrowser>> = null;
+      try {
+        aiEnhancement = await enhancePlanInBrowser({
+          theme: activeTheme,
+          environment: environmentType,
+          availableItems,
+          existingPuzzles,
+          puzzles: basePuzzles,
+          suggestedAdditions: baseSuggestedAdditions,
+        });
+      } catch {
+        aiEnhancement = null;
+      }
+
+      const enhancedPuzzles = aiEnhancement
+        ? basePuzzles.map((puzzle) => {
+            const match = aiEnhancement.puzzles.find((candidate) => candidate.id === puzzle.id);
+            return match
+              ? {
+                  ...puzzle,
+                  howItWorks: match.howItWorks || puzzle.howItWorks,
+                  themeFitReason: match.themeFitReason || puzzle.themeFitReason,
+                }
+              : puzzle;
+          })
+        : basePuzzles;
+
+      const enhancedStoryPlan =
+        aiEnhancement?.stages && data.storyPlan
+          ? {
+              ...data.storyPlan,
+              stages: data.storyPlan.stages.map((stage) => {
+                const match = aiEnhancement.stages?.find((candidate) => candidate.stage === stage.stage);
+                return match
+                  ? {
+                      ...stage,
+                      whyThisStageExists: match.whyThisStageExists || stage.whyThisStageExists,
+                    }
+                  : stage;
+              }),
+            }
+          : data.storyPlan ?? null;
+
+      setPuzzles(enhancedPuzzles);
+      setRefusedPuzzleSlots([]);
+      setCompatibilityPassed(Boolean(data.compatibilityPassed));
+      setStoryPlan(enhancedStoryPlan);
+      setSuggestedAdditionsRequired(baseSuggestedRequired);
+      setSuggestedAdditions(aiEnhancement?.suggestedAdditions?.length ? aiEnhancement.suggestedAdditions : baseSuggestedAdditions);
+      return true;
+    } catch {
+      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+      return false;
+    }
+  };
+
+  const syncExistingPuzzles = async (
+    activeSessionId: string,
+    nextExistingPuzzles: Array<{ name: string; link: string; roomPart: string }>,
+  ): Promise<void> => {
+    await fetch(`${API_BASE}/api/planning/session/${activeSessionId}/existing-puzzles`, {
+      method: "POST",
+      headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+      body: JSON.stringify({ existingPuzzles: nextExistingPuzzles }),
+    });
+  };
+
+  const createSession = async (
+    overrides?: { existingPuzzles?: Array<{ name: string; link: string; roomPart: string }> },
+    options?: { seedThemes?: boolean },
+  ): Promise<string | undefined> => {
+    // Start a new planning session. Uses draft defaults for missing room fields so theme work can start first.
+    const seedThemes = options?.seedThemes !== false;
+    setError("");
+    const draft = buildPlanningBody("draft");
+    if (!draft) return undefined;
+    const payload = {
+      ...draft,
+      existingPuzzles: overrides?.existingPuzzles ?? existingPuzzles,
+    };
+
+    try {
+      const response = await fetch(`${API_BASE}/api/planning/session`, {
+        method: "POST",
+        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        body: JSON.stringify(payload),
+      });
+      const data = (await response.json()) as { sessionId?: string; error?: { message?: string } };
+      if (!response.ok || !data.sessionId) {
+        setError(data.error?.message ?? "Failed to create session.");
+        return undefined;
+      }
+      setSessionId(data.sessionId);
+      themeCoachHydratedForSessionRef.current = "";
+      setCustomThemeCoachMessages([]);
+      setCustomThemeCoachDraft("");
+      setCustomThemeCoachError("");
+      setYouthAddOnEnabled(false);
+      setYouthAddOnGatesAdultFlow(false);
+      setYouthAddOnAgeNote("");
+      setUseCustomMainPuzzleCount(false);
+      setCustomMainPuzzleCountStr("");
+      setUseCustomMix(false);
+      setCustomMixLogic("");
+      setCustomMixPhysical("");
+      setCustomMixElectronic("");
+      rememberInput("environmentType", environmentType);
+      rememberInput("availableItems", availableItems);
+      rememberInput("eventType", eventType);
+      setThemes([]);
+      setSelectedThemeId("");
+      setPuzzles([]);
+      setRefusedPuzzleSlots([]);
+      setSuggestedAdditions([]);
+      setSuggestedAdditionsRequired([]);
+      setStoryPlan(null);
+      setCompatibilityPassed(null);
+      setExportContent("");
+      setApprovedForBuild(false);
+      if (seedThemes) {
+        await requestThemes(data.sessionId, "/api/themes/generate", []);
+      }
+      return data.sessionId;
+    } catch (_err) {
+      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+      return undefined;
+    }
+  };
+
+  const ensureSession = async (): Promise<string | undefined> => {
+    if (sessionId) return sessionId;
+    return createSession(undefined, { seedThemes: true });
+  };
+
+  /** New auth token → fresh planning session; same token with empty sessionId (e.g. reload) → create once. */
+  useEffect(() => {
+    if (!authUser || !authToken) {
+      lastPlanningAuthTokenRef.current = "";
+      pendingAuthSessionBootstrap.current = false;
+      return;
+    }
+    const isNewToken = lastPlanningAuthTokenRef.current !== authToken;
+    if (isNewToken) {
+      lastPlanningAuthTokenRef.current = authToken;
+      pendingAuthSessionBootstrap.current = true;
+      setSessionId("");
+      setThemes([]);
+      setSelectedThemeId("");
+      setPuzzles([]);
+      setRefusedPuzzleSlots([]);
+      setSuggestedAdditions([]);
+      setSuggestedAdditionsRequired([]);
+      setStoryPlan(null);
+      setCompatibilityPassed(null);
+      setExportContent("");
+      setApprovedForBuild(false);
+      setThemePath(null);
+      setExistingPuzzles([]);
+      void createSession({ existingPuzzles: [] }, { seedThemes: true }).finally(() => {
+        pendingAuthSessionBootstrap.current = false;
+      });
+      return;
+    }
+    if (!sessionId && !pendingAuthSessionBootstrap.current) {
+      void createSession(undefined, { seedThemes: true });
+    }
+  }, [authUser, authToken, sessionId]);
+
+  const addExistingPuzzle = async () => {
+    // Add user-provided puzzle metadata to the planning payload.
+    setError("");
+    const name = existingPuzzleName.trim();
+    const link = existingPuzzleLink.trim();
+    const roomPart = existingPuzzleRoomPart.trim();
+    if (!name || !link || !roomPart) {
+      setActivePanel("plan");
+      setWizardStep("themes-puzzles");
+      setShowExistingPuzzleForm(true);
+      const missing: string[] = [];
+      if (!name) missing.push("existingPuzzleName");
+      if (!link) missing.push("existingPuzzleLink");
+      if (!roomPart) missing.push("existingPuzzleRoomPart");
+      flagMissingFields(missing);
+      return;
+    }
+    const nextExistingPuzzles = [...existingPuzzles, { name, link, roomPart }];
+    setExistingPuzzles(nextExistingPuzzles);
+    rememberInput("existingPuzzleName", name);
+    rememberInput("existingPuzzleLink", link);
+    rememberInput("existingPuzzleRoomPart", roomPart);
+    setExistingPuzzleName("");
+    setExistingPuzzleLink("");
+    setExistingPuzzleRoomPart("");
+    // Any interaction should initialize a planning session.
+    let activeSessionId: string | undefined = sessionId;
+    if (!activeSessionId) {
+      activeSessionId = await createSession({ existingPuzzles: nextExistingPuzzles });
+    }
+    if (!activeSessionId) return;
+    await syncExistingPuzzles(activeSessionId, nextExistingPuzzles);
+    if (selectedThemeId) {
+      const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
+      await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
+    }
+  };
+
+  const removeExistingPuzzle = async (index: number) => {
+    const nextExistingPuzzles = existingPuzzles.filter((_, i) => i !== index);
+    setExistingPuzzles(nextExistingPuzzles);
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) return;
+    await syncExistingPuzzles(activeSessionId, nextExistingPuzzles);
+    if (selectedThemeId) {
+      const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
+      await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
+    }
+  };
+
+  const loadThemes = async (endpoint: "/api/themes/generate" | "/api/themes/refresh") => {
+    // Load initial or refreshed theme options for the active session.
+    setError("");
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) {
+      return;
+    }
+    try {
+      await requestThemes(activeSessionId, endpoint, themes);
+    } catch (_err) {
+      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    }
+  };
+
+  useEffect(() => {
+    if (wizardStep !== "themes" || !sessionId || themePath === "custom") {
+      themesAutoFetchInFlight.current = false;
+      return;
+    }
+    if (themes.length > 0) {
+      themesAutoFetchInFlight.current = false;
+      if (themePath === null) setThemePath("generated");
+      return;
+    }
+    if (themesAutoFetchInFlight.current) {
+      return;
+    }
+    themesAutoFetchInFlight.current = true;
+    if (themePath === null) {
+      setThemePath("generated");
+    }
+    let cancelled = false;
+    void (async () => {
+      setError("");
+      const activeSessionId = await ensureSession();
+      if (cancelled || !activeSessionId) {
+        themesAutoFetchInFlight.current = false;
+        return;
+      }
+      try {
+        await requestThemes(activeSessionId, "/api/themes/generate", []);
+      } catch {
+        if (!cancelled) {
+          setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+        }
+      } finally {
+        if (!cancelled) themesAutoFetchInFlight.current = false;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap theme list when step opens; avoid duplicate fetches when themePath flips null→generated
+  }, [wizardStep, sessionId, themes.length, themePath, hasFullCatalogAccess]);
+
+  /** Free tier: manual Generate is gated like theme refresh; run one automatic pass when entering Build with a theme. */
+  useEffect(() => {
+    if (wizardStep !== "themes-puzzles" || !selectedThemeId || hasFullCatalogAccess || puzzles.length > 0) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setError("");
+      try {
+        const activeSessionId = await ensureSession();
+        if (cancelled || !activeSessionId) return;
+        const synced = await syncPlanningInputToServer(activeSessionId, "draft");
+        if (!synced || cancelled) return;
+        const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
+        await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
+      } catch {
+        if (!cancelled) {
+          setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap when trial user lands on builder with empty puzzles (session may attach after mount)
+  }, [wizardStep, selectedThemeId, hasFullCatalogAccess, puzzles.length, sessionId]);
+
+  const generatePuzzles = async () => {
+    // Generate puzzle set for selected theme.
+    setError("");
+    if (!hasFullCatalogAccess) {
+      setError(
+        "Manual regenerate is part of the full catalog (paid pack). On the trial, a puzzle set generates automatically when you open Build puzzle set.",
+      );
+      return;
+    }
+    if (!selectedThemeId) {
+      setActivePanel("themes");
+      setWizardStep("themes");
+      setThemePath("generated");
+      flagMissingFields(["selectedThemeId"]);
+      return;
+    }
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) return;
+    const synced = await syncPlanningInputToServer(activeSessionId, "draft");
+    if (!synced) return;
+    const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
+    try {
+      await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
+    } catch (_err) {
+      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    }
+  };
+
+  const handleThemeSelect = (themeId: string): void => {
+    setSelectedThemeId(themeId);
+    setValidationFlags((current) => ({ ...current, selectedThemeId: false }));
+  };
+
+  const addCustomTheme = async () => {
+    // Persist a custom theme and auto-select it.
+    setError("");
+    if (!hasFullCatalogAccess) {
+      setError(
+        "Custom themes need a room pack (full catalog). On the trial, the same three curated themes load automatically when you open theme selection; purchase a pack under Account to unlock custom themes and the full catalog.",
+      );
+      return;
+    }
+    if (!customThemeName.trim()) {
+      setActivePanel("plan");
+      setWizardStep("themes");
+      setThemePath("custom");
+      flagMissingFields(["customThemeName"]);
+      return;
+    }
+    setCustomThemeSaving(true);
+    try {
+      const activeSessionId = await ensureSession();
+      if (!activeSessionId) {
+        setError("Could not start a planning session. Check that the backend is running and try again.");
+        return;
+      }
+      let response: Response;
+      try {
+        response = await fetch(`${API_BASE}/api/themes/custom`, {
+          method: "POST",
+          headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+          body: JSON.stringify({
+            sessionId: activeSessionId,
+            name: customThemeName,
+            description: customThemeDescription,
+          }),
+        });
+      } catch {
+        setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+        return;
+      }
+      let data: { theme?: Theme; error?: { message?: string } };
+      try {
+        data = (await response.json()) as { theme?: Theme; error?: { message?: string } };
+      } catch {
+        setError(`Server returned ${response.status} with a non-JSON body. Check backend logs.`);
+        return;
+      }
+      if (!response.ok || !data.theme) {
+        setError(data.error?.message ?? `Failed to add custom theme (${response.status}).`);
+        return;
+      }
+      if (!buildPlanningBody("strict")) {
+        flagMissingFields(collectStrictPlanningMissing());
+        setError("Room details are incomplete. Fix required fields under Room details before continuing.");
+        setWizardStep("setup");
+        setActivePanel("plan");
+        scrollFirstInvalidRoomFieldIntoView();
+        return;
+      }
+      const synced = await syncPlanningInputToServer(activeSessionId, "strict");
+      if (!synced) return;
+      setThemes((current) => [data.theme as Theme, ...current.filter((theme) => theme.id !== data.theme?.id)]);
+      setSelectedThemeId(data.theme.id);
+      rememberInput("customThemeName", customThemeName);
+      rememberInput("customThemeDescription", customThemeDescription);
+      setWizardStep("themes-puzzles");
+    } finally {
+      setCustomThemeSaving(false);
+    }
+  };
+
+  const getCustomThemeCoachContext = (): CustomThemeCoachContext => {
+    const strict = buildPlanningBody("strict");
+    if (strict) {
+      return {
+        themeName: customThemeName.trim() || "(untitled theme)",
+        themeDescriptionDraft: customThemeDescription.trim(),
+        environmentType: strict.environmentType,
+        availableItems: strict.availableItems.join(", "),
+        sessionDurationMinutes: String(strict.sessionDurationMinutes),
+        playersConcurrent: String(strict.playersConcurrent),
+        participantsTotal: String(strict.participantsTotal),
+        roomDifficulty: strict.roomDifficulty,
+        youthAddOnEnabled: strict.youthAddOnEnabled,
+        youthAddOnGatesAdultFlow: strict.youthAddOnGatesAdultFlow,
+        youthAddOnAgeNote: strict.youthAddOnAgeNote,
+        existingPuzzles: existingPuzzles.map((p) => ({ name: p.name, link: p.link, roomPart: p.roomPart })),
+      };
+    }
+    return {
+      themeName: customThemeName.trim() || "(untitled theme)",
+      themeDescriptionDraft: customThemeDescription.trim(),
+      environmentType: environmentType.trim() || "Not specified",
+      availableItems: availableItems.trim() || "Not specified",
+      sessionDurationMinutes,
+      playersConcurrent,
+      participantsTotal,
+      roomDifficulty,
+      youthAddOnEnabled,
+      youthAddOnGatesAdultFlow,
+      youthAddOnAgeNote: youthAddOnAgeNote.trim(),
+      existingPuzzles: existingPuzzles.map((p) => ({ name: p.name, link: p.link, roomPart: p.roomPart })),
+    };
+  };
+
+  const toCoachHistory = (list: ThemeCoachUiMessage[]): CustomThemeCoachMessage[] =>
+    list.map((m) => ({ role: m.role, content: m.content }));
+
+  const ensureCoachBrowserAi = useCallback(async (): Promise<boolean> => {
+    if (isBrowserAiAvailable() || coachBrowserAiReadyRef.current) {
+      setCoachBrowserAiReady(true);
+      return true;
+    }
+    const ready = await probeBrowserLanguageModel();
+    if (ready) setCoachBrowserAiReady(true);
+    return ready;
+  }, []);
+
+  const resetCustomThemeCoach = (): void => {
+    setCustomThemeCoachMessages([]);
+    setCustomThemeCoachDraft("");
+    setCustomThemeCoachError("");
+  };
+
+  const handleStartCustomThemeCoach = async (): Promise<void> => {
+    if (!customThemeCoachPrereqsOk) return;
+    if (!(await ensureCoachBrowserAi())) {
+      setCustomThemeCoachError(
+        "Built-in AI is not available in this browser session yet. In Chrome, enable the Prompt API flags, wait for the on-device model if needed, then refresh this page and try again.",
+      );
+      return;
+    }
+    setCustomThemeCoachError("");
+    setCustomThemeCoachBusy(true);
+    try {
+      const ctx = getCustomThemeCoachContext();
+      const reply = await customThemeCoachTurn(ctx, toCoachHistory(customThemeCoachMessages), null);
+      if (!reply) {
+        setCustomThemeCoachError("The coach did not return a reply. Try again or check browser AI settings.");
+        return;
+      }
+      setCustomThemeCoachMessages((prev) => [...prev, { id: newCoachMessageId(), role: "assistant", content: reply }]);
+    } finally {
+      setCustomThemeCoachBusy(false);
+    }
+  };
+
+  const handleSendCustomThemeCoach = async (): Promise<void> => {
+    if (!customThemeCoachPrereqsOk) return;
+    const text = customThemeCoachDraft.trim();
+    if (!text || customThemeCoachBusy) return;
+    if (!(await ensureCoachBrowserAi())) {
+      setCustomThemeCoachError("Built-in AI is not available—cannot send to the coach.");
+      return;
+    }
+    const sensitiveReason = looksSensitiveForCoach(text);
+    if (sensitiveReason) {
+      setCustomThemeCoachError(
+        `Blocked for safety: your message looks like ${sensitiveReason}. Remove secrets or personal credentials, then send again.`,
+      );
+      return;
+    }
+    if (!customThemeCoachMessages.some((m) => m.role === "assistant")) {
+      setCustomThemeCoachError("Start the conversation first.");
+      return;
+    }
+    setCustomThemeCoachError("");
+    const historyBefore = toCoachHistory(customThemeCoachMessages);
+    setCustomThemeCoachMessages((prev) => [...prev, { id: newCoachMessageId(), role: "user", content: text }]);
+    setCustomThemeCoachDraft("");
+    setCustomThemeCoachBusy(true);
+    try {
+      const ctx = getCustomThemeCoachContext();
+      const reply = await customThemeCoachTurn(ctx, historyBefore, text);
+      if (!reply) {
+        setCustomThemeCoachError("No reply from the coach. Try again.");
+        return;
+      }
+      setCustomThemeCoachMessages((prev) => [...prev, { id: newCoachMessageId(), role: "assistant", content: reply }]);
+    } finally {
+      setCustomThemeCoachBusy(false);
+    }
+  };
+
+  const handleSynthesizeCustomThemeCoach = async (): Promise<void> => {
+    if (!customThemeCoachPrereqsOk) {
+      setCustomThemeCoachError("Complete room details and a theme name before applying.");
+      return;
+    }
+    if (!customThemeCoachMessages.some((m) => m.role === "user")) {
+      setCustomThemeCoachError("Send at least one answer to the coach before applying.");
+      return;
+    }
+    if (!(await ensureCoachBrowserAi())) {
+      setCustomThemeCoachError("Built-in AI is not available—cannot apply answers.");
+      return;
+    }
+    setCustomThemeCoachError("");
+    setCustomThemeCoachBusy(true);
+    try {
+      const ctx = getCustomThemeCoachContext();
+      const desc = await customThemeCoachSynthesize(ctx, toCoachHistory(customThemeCoachMessages));
+      if (!desc) {
+        setCustomThemeCoachError("Could not build a description from the chat. Try again or edit manually.");
+        return;
+      }
+      setCustomThemeDescription(desc);
+    } finally {
+      setCustomThemeCoachBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    themeCoachHydratedForSessionRef.current = "";
+  }, [sessionId]);
+
+  useEffect(() => {
+    themeCoachHydratedForSessionRef.current = "";
+  }, [authToken]);
+
+  useEffect(() => {
+    if (!authToken || !sessionId || themePath !== "custom") return;
+    if (themeCoachHydratedForSessionRef.current === sessionId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/planning/session/${sessionId}/theme-coach`, {
+          headers: withAuthGetHeaders(),
+        });
+        if (cancelled) return;
+        if (!res.ok) {
+          themeCoachHydratedForSessionRef.current = sessionId;
+          return;
+        }
+        const data = (await res.json()) as { messages?: ThemeCoachUiMessage[] };
+        themeCoachHydratedForSessionRef.current = sessionId;
+        setCustomThemeCoachMessages((prev) => {
+          if (prev.length > 0) return prev;
+          if (Array.isArray(data.messages) && data.messages.length > 0) return data.messages;
+          return prev;
+        });
+      } catch {
+        if (!cancelled) themeCoachHydratedForSessionRef.current = sessionId;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, sessionId, themePath]);
+
+  useEffect(() => {
+    if (wizardStep !== "themes" || themePath !== "custom") return;
+    let cancelled = false;
+    void probeBrowserLanguageModel().then((ready) => {
+      if (cancelled) return;
+      setCoachBrowserAiReady((prev) => prev || ready || isBrowserAiAvailable());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [wizardStep, themePath]);
+
+  // When room details + theme name become ready on the custom path, open with an assessment + first questions (once per edge).
+  useEffect(() => {
+    if (wizardStep !== "themes" || themePath !== "custom") {
+      prevCustomThemeCoachPrereqsOkRef.current = false;
+      return;
+    }
+    const ok = customThemeCoachPrereqsOk;
+    const rose = ok && !prevCustomThemeCoachPrereqsOkRef.current;
+    prevCustomThemeCoachPrereqsOkRef.current = ok;
+    if (!rose) return;
+    if (customThemeCoachMessagesRef.current.length > 0) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      if (customThemeCoachMessagesRef.current.length > 0) return;
+      void (async () => {
+        const ready = await ensureCoachBrowserAi();
+        if (cancelled || !ready) return;
+        if (customThemeCoachMessagesRef.current.length > 0) return;
+        setCustomThemeCoachBusy(true);
+        setCustomThemeCoachError("");
+        try {
+          const ctx = getCustomThemeCoachContext();
+          const reply = await customThemeCoachTurn(ctx, [], null);
+          if (cancelled) return;
+          if (!reply) {
+            setCustomThemeCoachError("The coach did not return a reply. Try “Start conversation” or check browser AI settings.");
+            return;
+          }
+          setCustomThemeCoachMessages((prev) => {
+            if (prev.length > 0) return prev;
+            return [...prev, { id: newCoachMessageId(), role: "assistant", content: reply }];
+          });
+        } finally {
+          if (!cancelled) setCustomThemeCoachBusy(false);
+        }
+      })();
+    }, 450);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [wizardStep, themePath, customThemeCoachPrereqsOk, sessionId, ensureCoachBrowserAi]);
+
+  useEffect(() => {
+    if (!authToken || !sessionId || themePath !== "custom") return;
+    const handle = window.setTimeout(() => {
+      void fetch(`${API_BASE}/api/planning/session/${sessionId}/theme-coach`, {
+        method: "PUT",
+        headers: withAuthHeaders(),
+        body: JSON.stringify({
+          messages: customThemeCoachMessages.map((m) => ({ id: m.id, role: m.role, content: m.content })),
+        }),
+      }).catch(() => {
+        /* offline */
+      });
+    }, 700);
+    return () => window.clearTimeout(handle);
+  }, [authToken, sessionId, themePath, customThemeCoachMessages]);
+
+  const applyPuzzleSetFromServer = async (
+    nextPuzzles: Puzzle[],
+    data: {
+      compatibilityPassed?: boolean;
+      storyPlan?: StoryPlan | null;
+      suggestedAdditions?: string[];
+      suggestedAdditionsRequired?: string[];
+    },
+  ) => {
+    const activeTheme = themes.find((theme) => theme.id === selectedThemeId);
+    const baseSuggestedAdditions = data.suggestedAdditions ?? suggestedAdditions;
+    const baseSuggestedRequired = data.suggestedAdditionsRequired ?? suggestedAdditionsRequired;
+    let aiEnhancement: Awaited<ReturnType<typeof enhancePlanInBrowser>> = null;
+    try {
+      aiEnhancement = await enhancePlanInBrowser({
+        theme: activeTheme,
+        environment: environmentType,
+        availableItems,
+        existingPuzzles,
+        puzzles: nextPuzzles,
+        suggestedAdditions: baseSuggestedAdditions,
+      });
+    } catch {
+      aiEnhancement = null;
+    }
+    const enhancedPuzzles = aiEnhancement
+      ? nextPuzzles.map((puzzle) => {
+          const match = aiEnhancement.puzzles.find((candidate) => candidate.id === puzzle.id);
+          return match
+            ? {
+                ...puzzle,
+                howItWorks: match.howItWorks || puzzle.howItWorks,
+                themeFitReason: match.themeFitReason || puzzle.themeFitReason,
+              }
+            : puzzle;
+        })
+      : nextPuzzles;
+    const enhancedStoryPlan =
+      aiEnhancement?.stages && data.storyPlan
+        ? {
+            ...data.storyPlan,
+            stages: data.storyPlan.stages.map((stage) => {
+              const match = aiEnhancement.stages?.find((candidate) => candidate.stage === stage.stage);
+              return match
+                ? {
+                    ...stage,
+                    whyThisStageExists: match.whyThisStageExists || stage.whyThisStageExists,
+                  }
+                : stage;
+            }),
+          }
+        : data.storyPlan ?? null;
+    setPuzzles(enhancedPuzzles);
+    setCompatibilityPassed(Boolean(data.compatibilityPassed));
+    setStoryPlan(enhancedStoryPlan);
+    setSuggestedAdditionsRequired(baseSuggestedRequired);
+    setSuggestedAdditions(aiEnhancement?.suggestedAdditions?.length ? aiEnhancement.suggestedAdditions : baseSuggestedAdditions);
+  };
+
+  const replacePuzzle = async (puzzleId: string) => {
+    // Replace one puzzle while preserving the rest of the set.
+    setError("");
+    setPuzzleWindowBusy({ target: puzzleId, action: "replace" });
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) {
+      setPuzzleWindowBusy(null);
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/api/puzzles/${encodeURIComponent(puzzleId)}/replace`, {
+        method: "POST",
+        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        body: JSON.stringify({ sessionId: activeSessionId, themeId: selectedThemeId }),
+      });
+      const data = (await response.json()) as {
+        replacedPuzzleId?: string;
+        newPuzzle?: Puzzle;
+        compatibilityPassed?: boolean;
+        storyPlan?: StoryPlan;
+        suggestedAdditions?: string[];
+        suggestedAdditionsRequired?: string[];
+        error?: { message?: string; code?: string };
+      };
+      if (!response.ok) {
+        if (handleBillingGate(data.error?.code, data.error?.message)) return;
+        setError(data.error?.message ?? "No replacement available for that puzzle yet.");
+        return;
+      }
+      if (!data.replacedPuzzleId || !data.newPuzzle) {
+        setError("Replacement response was incomplete.");
+        return;
+      }
+      const replacementPuzzle: Puzzle = data.newPuzzle;
+      const nextPuzzles = puzzles.map((puzzle) =>
+        puzzle.id === data.replacedPuzzleId ? replacementPuzzle : puzzle,
+      );
+      await applyPuzzleSetFromServer(nextPuzzles, data);
+    } catch (_err) {
+      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } finally {
+      setPuzzleWindowBusy(null);
+    }
+  };
+
+  const rejectPuzzle = async (puzzleId: string) => {
+    setError("");
+    setPuzzleWindowBusy({ target: puzzleId, action: "reject" });
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) {
+      setPuzzleWindowBusy(null);
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/api/puzzles/${encodeURIComponent(puzzleId)}/reject`, {
+        method: "POST",
+        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        body: JSON.stringify({ sessionId: activeSessionId }),
+      });
+      const data = (await response.json()) as {
+        rejectedPuzzleId?: string;
+        refusedSlot?: {
+          category: Puzzle["category"];
+          audienceTrack?: Puzzle["audienceTrack"];
+          gatesAdultProgression?: boolean;
+        };
+        puzzles?: Puzzle[];
+        compatibilityPassed?: boolean;
+        storyPlan?: StoryPlan;
+        suggestedAdditions?: string[];
+        suggestedAdditionsRequired?: string[];
+        error?: { message?: string; code?: string };
+      };
+      if (!response.ok || !data.puzzles) {
+        if (handleBillingGate(data.error?.code, data.error?.message)) return;
+        setError(data.error?.message ?? "Could not remove that puzzle.");
+        return;
+      }
+      if (data.refusedSlot) {
+        setRefusedPuzzleSlots((prev) => [
+          ...prev,
+          {
+            slotId: `refused-${puzzleId}`,
+            category: data.refusedSlot!.category,
+            audienceTrack: data.refusedSlot!.audienceTrack,
+            gatesAdultProgression: data.refusedSlot!.gatesAdultProgression,
+          },
+        ]);
+      }
+      await applyPuzzleSetFromServer(data.puzzles, data);
+    } catch (_err) {
+      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } finally {
+      setPuzzleWindowBusy(null);
+    }
+  };
+
+  const fillPuzzleSlot = async (slotId: string) => {
+    const slot = refusedPuzzleSlots.find((candidate) => candidate.slotId === slotId);
+    if (!slot) return;
+    setError("");
+    setPuzzleWindowBusy({ target: slotId, action: "fill" });
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) {
+      setPuzzleWindowBusy(null);
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/api/puzzles/fill-slot`, {
+        method: "POST",
+        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        body: JSON.stringify({
+          sessionId: activeSessionId,
+          category: slot.category,
+          audienceTrack: slot.audienceTrack,
+          gatesAdultProgression: slot.gatesAdultProgression,
+        }),
+      });
+      const data = (await response.json()) as {
+        puzzles?: Puzzle[];
+        compatibilityPassed?: boolean;
+        storyPlan?: StoryPlan;
+        suggestedAdditions?: string[];
+        suggestedAdditionsRequired?: string[];
+        error?: { message?: string; code?: string };
+      };
+      if (!response.ok || !data.puzzles) {
+        if (handleBillingGate(data.error?.code, data.error?.message)) return;
+        setError(data.error?.message ?? "No replacement available for this slot yet.");
+        return;
+      }
+      setRefusedPuzzleSlots((prev) => prev.filter((candidate) => candidate.slotId !== slotId));
+      await applyPuzzleSetFromServer(data.puzzles, data);
+    } catch (_err) {
+      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } finally {
+      setPuzzleWindowBusy(null);
+    }
+  };
+
+  const exportPlan = async () => {
+    // Request full markdown export for runbook/host usage.
+    setError("");
+    setBillingNotice("");
+    setExportBusy(true);
+    try {
+      const activeSessionId = await ensureSession();
+      if (!activeSessionId) return;
+      void (await syncPlanningInputToServer(activeSessionId, "draft"));
+      const response = await fetch(`${API_BASE}/api/plans/${activeSessionId}/export`, {
+        method: "POST",
+        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        body: JSON.stringify({ format: "markdown" }),
+      });
+      const data = (await response.json()) as {
+        content?: string;
+        exportRedacted?: boolean;
+        exportCreditConsumed?: boolean;
+        trialConsumed?: boolean;
+        user?: AuthUser;
+        error?: { message?: string; code?: string };
+      };
+      if (!response.ok) {
+        if (handleBillingGate(data.error?.code, data.error?.message)) return;
+        setError(data.error?.message ?? "Export failed.");
+        return;
+      }
+      if (!data.content) {
+        setError("Export response was incomplete.");
+        return;
+      }
+      setExportContent(data.content);
+      setExportWasRedacted(Boolean(data.exportRedacted));
+      setExportReadFormat("markdown");
+      if (data.exportCreditConsumed || data.trialConsumed) {
+        if (data.user) {
+          const normalized = normalizeAuthUser(data.user);
+          if (normalized) {
+            setAuthUser(normalized);
+            try {
+              window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authToken, authUser: normalized }));
+            } catch {
+              // ignore
+            }
+          }
+        } else {
+          void refreshProfile();
+        }
+      }
+      if (data.trialConsumed) {
+        setBillingNotice(
+          "Trial complete — your export is ready. Purchase a room pack to start another room, save plans, and export again.",
+        );
+        openUpgradePrompt();
+      }
+      if (data.exportRedacted && authUser?.hasFullCatalog) {
+        setBillingNotice(
+          "This export omitted full electronic build packs because consumable export credits are at zero. Add credits via activation or webhook.",
+        );
+      }
+    } catch (_err) {
+      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const exportRunbookHtml = useMemo(
+    () => (exportContent ? exportMarkdownToRunbookHtml(exportContent) : ""),
+    [exportContent],
+  );
+  const exportPlainBody = useMemo(
+    () => (exportContent ? exportMarkdownToPlainText(exportContent) : ""),
+    [exportContent],
+  );
+  const exportHtmlDoc = useMemo(
+    () => (exportRunbookHtml ? wrapExportAsHtmlDocument(exportRunbookHtml) : ""),
+    [exportRunbookHtml],
+  );
+
+  const downloadExportFile = (ext: "md" | "txt" | "html"): void => {
+    if (!exportContent) return;
+    const idPart = (sessionId || "session").replace(/[^\w-]+/g, "").slice(-14) || "session";
+    const base = `escape-room-plan-${idPart}`;
+    const payloads: Record<typeof ext, { mime: string; body: string; name: string }> = {
+      md: { mime: "text/markdown;charset=utf-8", body: exportContent, name: `${base}.md` },
+      txt: { mime: "text/plain;charset=utf-8", body: exportPlainBody, name: `${base}.txt` },
+      html: { mime: "text/html;charset=utf-8", body: exportHtmlDoc, name: `${base}.html` },
+    };
+    const p = payloads[ext];
+    try {
+      const blob = new Blob([p.body], { type: p.mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = p.name;
+      a.rel = "noopener";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("Could not start download—the browser blocked the file prompt.");
+    }
+  };
+
+  const refreshSavedPlans = async (): Promise<void> => {
+    if (!authToken) return;
+    const response = await fetch(`${API_BASE}/api/plans/saved`, {
+      headers: withAuthGetHeaders(),
+    });
+    if (response.status === 401) {
+      handleAuthExpired();
+      return;
+    }
+    const data = (await response.json()) as { plans?: SavedPlanSummary[]; error?: { message?: string } };
+    if (!response.ok || !data.plans) {
+      setError(data.error?.message ?? "Could not load saved plans.");
+      return;
+    }
+    setSavedPlans(data.plans);
+  };
+
+  const saveCurrentPlan = async (): Promise<void> => {
+    setError("");
+    if (authUser && !authUser.canSaveRooms) {
+      openUpgradePrompt();
+      return;
+    }
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) return;
+    if (!approvedForBuild) {
+      setError("Approve this plan for build before saving it.");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/api/plans/${activeSessionId}/save`, {
+        method: "POST",
+        headers: withAuthHeaders(),
+        body: JSON.stringify({
+          name: `${selectedTheme?.name ?? "Untitled"} - ${new Date().toLocaleString()}`,
+          approvedForBuild: true,
+        }),
+      });
+      if (response.status === 401) {
+        handleAuthExpired();
+        return;
+      }
+      const data = (await response.json()) as {
+        savedPlan?: SavedPlanSummary;
+        error?: { message?: string; code?: string };
+      };
+      if (!response.ok || !data.savedPlan) {
+        const code = data.error?.code;
+        if (handleBillingGate(code, data.error?.message)) {
+          void refreshProfile();
+          return;
+        }
+        if (code === "TRIAL_DEVICE_LIMIT" || code === "TRIAL_NETWORK_LIMIT") {
+          setError(data.error?.message ?? "You need more room slots to save another plan.");
+          void refreshProfile();
+        } else {
+          setError(data.error?.message ?? "Failed to save plan.");
+        }
+        return;
+      }
+      await refreshSavedPlans();
+      void refreshProfile();
+      setActivePanel("saved");
+      setWizardStep("saved");
+    } catch {
+      setError("Could not save plan. Check backend and try again.");
+    }
+  };
+
+  const saveDraftPlan = async (opts?: { idleSignOut?: boolean }): Promise<string | null> => {
+    if (!opts?.idleSignOut) {
+      setError("");
+    }
+    if (authUser && !authUser.canSaveRooms) {
+      if (!opts?.idleSignOut) openUpgradePrompt();
+      return null;
+    }
+    if (!authToken || !authUser) {
+      if (!opts?.idleSignOut) {
+        setError("Sign in to save a draft to your account.");
+      }
+      return null;
+    }
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) {
+      if (!opts?.idleSignOut) {
+        setError("Could not open a planning session to save.");
+      }
+      return null;
+    }
+    try {
+      const response = await fetch(`${API_BASE}/api/plans/${activeSessionId}/save`, {
+        method: "POST",
+        headers: withAuthHeaders(),
+        body: JSON.stringify({
+          draft: true,
+          approvedForBuild: false,
+          name: `[Draft] ${selectedTheme?.name ?? (customThemeName.trim() || "Work in progress")} — ${new Date().toLocaleString()}`,
+        }),
+      });
+      if (response.status === 401) {
+        if (!opts?.idleSignOut) {
+          handleAuthExpired();
+        }
+        return null;
+      }
+      const data = (await response.json()) as {
+        savedPlan?: SavedPlanSummary;
+        error?: { message?: string; code?: string };
+      };
+      if (!response.ok || !data.savedPlan) {
+        if (!opts?.idleSignOut) {
+          const code = data.error?.code;
+          if (handleBillingGate(code, data.error?.message)) {
+            void refreshProfile();
+          } else if (code === "TRIAL_DEVICE_LIMIT" || code === "TRIAL_NETWORK_LIMIT") {
+            setError(data.error?.message ?? "You need more room slots to save another plan.");
+            void refreshProfile();
+          } else {
+            setError(data.error?.message ?? "Failed to save draft.");
+          }
+        }
+        return null;
+      }
+      await refreshSavedPlans();
+      void refreshProfile();
+      return data.savedPlan.planId;
+    } catch {
+      if (!opts?.idleSignOut) {
+        setError("Could not save draft. Check backend and try again.");
+      }
+      return null;
+    }
+  };
+
+  const loadSavedPlan = async (planId: string): Promise<boolean> => {
+    setError("");
+    try {
+      const response = await fetch(`${API_BASE}/api/plans/saved/${planId}`, {
+        headers: withAuthGetHeaders(),
+      });
+      if (response.status === 401) {
+        handleAuthExpired();
+        return false;
+      }
+      const data = (await response.json()) as {
+        savedPlan?: { sessionId: string; data: SavedPlanPayload; approvedForBuild?: boolean };
+        error?: { message?: string };
+      };
+      if (!response.ok || !data.savedPlan) {
+        setError(data.error?.message ?? "Failed to load saved plan.");
+        return false;
+      }
+      const payload = data.savedPlan.data;
+      setSessionId(data.savedPlan.sessionId);
+      setPlayersConcurrent(String(payload.planningInput.playersConcurrent));
+      setParticipantsTotal(String(payload.planningInput.participantsTotal));
+      setSessionDurationMinutes(String(payload.planningInput.sessionDurationMinutes));
+      setEventType(typeof payload.planningInput.eventType === "string" ? payload.planningInput.eventType : "");
+      const rd = payload.planningInput.roomDifficulty;
+      setRoomDifficulty(rd === "easy" || rd === "hard" ? rd : "medium");
+      setYouthAddOnEnabled(Boolean(payload.planningInput.youthAddOnEnabled));
+      setYouthAddOnGatesAdultFlow(Boolean(payload.planningInput.youthAddOnGatesAdultFlow));
+      setYouthAddOnAgeNote(
+        typeof payload.planningInput.youthAddOnAgeNote === "string" ? payload.planningInput.youthAddOnAgeNote : "",
+      );
+      setEnvironmentType(payload.planningInput.environmentType);
+      setThemeMustMatchEnvironment(Boolean(payload.planningInput.themeMustMatchEnvironment));
+      setAvailableItems(payload.planningInput.availableItems.join(", "));
+      const mo = payload.planningInput.mainTrackPuzzleCountOverride;
+      setUseCustomMainPuzzleCount(typeof mo === "number" && Number.isFinite(mo));
+      setCustomMainPuzzleCountStr(typeof mo === "number" && Number.isFinite(mo) ? String(mo) : "");
+      const ml = payload.planningInput.puzzleMixLogic;
+      const mp = payload.planningInput.puzzleMixPhysical;
+      const me = payload.planningInput.puzzleMixElectronic;
+      const hasMix =
+        typeof ml === "number" &&
+        Number.isFinite(ml) &&
+        typeof mp === "number" &&
+        Number.isFinite(mp) &&
+        typeof me === "number" &&
+        Number.isFinite(me);
+      setUseCustomMix(hasMix);
+      if (hasMix) {
+        setCustomMixLogic(String(ml));
+        setCustomMixPhysical(String(mp));
+        setCustomMixElectronic(String(me));
+      } else {
+        setCustomMixLogic("");
+        setCustomMixPhysical("");
+        setCustomMixElectronic("");
+      }
+      setExistingPuzzles(payload.planningInput.existingPuzzles);
+      const rawCoach = Array.isArray(payload.themeCoachChat) ? payload.themeCoachChat : [];
+      const restoredCoach = rawCoach.filter(
+        (m): m is ThemeCoachUiMessage =>
+          Boolean(m) &&
+          typeof m === "object" &&
+          (m.role === "user" || m.role === "assistant") &&
+          typeof m.content === "string" &&
+          typeof m.id === "string",
+      );
+      setCustomThemeCoachMessages(restoredCoach);
+      themeCoachHydratedForSessionRef.current = data.savedPlan.sessionId;
+      if (authToken && restoredCoach.length > 0) {
+        void fetch(`${API_BASE}/api/planning/session/${data.savedPlan.sessionId}/theme-coach`, {
+          method: "PUT",
+          headers: withAuthHeaders(),
+          body: JSON.stringify({ messages: restoredCoach }),
+        }).catch(() => {
+          /* session may not exist server-side; ignore */
+        });
+      }
+      setThemes(payload.themes.map(normalizeImportedTheme));
+      setSelectedThemeId(payload.selectedThemeId);
+      setPuzzles(payload.puzzles);
+      setRefusedPuzzleSlots([]);
+      setSuggestedAdditions(payload.suggestedAdditions);
+      setSuggestedAdditionsRequired(payload.suggestedAdditionsRequired ?? []);
+      setStoryPlan(payload.storyPlan);
+      setCompatibilityPassed(payload.compatibilityPassed);
+      setExportContent(payload.exportContent ?? "");
+      setApprovedForBuild(Boolean(data.savedPlan.approvedForBuild));
+      setShowPlanPicker(false);
+      setActivePanel("output");
+      setWizardStep("output-review");
+      setAppView("builder");
+      return true;
+    } catch {
+      setError("Could not load saved plan. Check backend and try again.");
+      return false;
+    }
+  };
+
+  const deleteSavedPlan = async (planId: string): Promise<void> => {
+    if (!window.confirm("Delete this saved plan? This action cannot be undone.")) {
+      return;
+    }
+    setError("");
+    try {
+      const response = await fetch(`${API_BASE}/api/plans/saved/${planId}`, {
+        method: "DELETE",
+        headers: withAuthGetHeaders(),
+      });
+      if (response.status === 401) {
+        handleAuthExpired();
+        return;
+      }
+      const data = (await response.json()) as { deletedPlanId?: string; error?: { message?: string } };
+      if (!response.ok || !data.deletedPlanId) {
+        setError(data.error?.message ?? "Failed to delete saved plan.");
+        return;
+      }
+      setSavedPlans((current) => current.filter((plan) => plan.planId !== planId));
+    } catch {
+      setError("Could not delete saved plan. Check backend and try again.");
+    }
+  };
+
+  useEffect(() => {
+    if (!authToken || !authUser) {
+      setSavedPlans([]);
+      return;
+    }
+    void refreshSavedPlans();
+  }, [authToken, authUser]);
+
+  useEffect(() => {
+    if (!authToken || !authUser) {
+      return;
+    }
+    let planId: string | null = null;
+    try {
+      planId = window.localStorage.getItem(IDLE_RESUME_PLAN_ID_KEY);
+      if (planId?.trim()) {
+        window.localStorage.removeItem(IDLE_RESUME_PLAN_ID_KEY);
+      }
+    } catch {
+      return;
+    }
+    const trimmed = planId?.trim();
+    if (!trimmed) return;
+    let cancelled = false;
+    void (async () => {
+      await loadSavedPlan(trimmed);
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, authUser]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    if (savedPlans.length > 0) {
+      setShowPlanPicker(true);
+      return;
+    }
+    setShowPlanPicker(false);
+    if (activePanel === "saved") {
+      setActivePanel("plan");
+      setWizardStep("setup");
+    }
+  }, [savedPlans, authUser, activePanel]);
+
+  useEffect(() => {
+    if (!authToken || !authUser) {
+      setIdlePromptOpen(false);
+      idleTimeoutSignOutStartedRef.current = false;
+      return;
+    }
+    idleLastActivityRef.current = Date.now();
+    const markActive = (): void => {
+      idleLastActivityRef.current = Date.now();
+      setIdlePromptOpen(false);
+    };
+    const scrollOpts: AddEventListenerOptions = { passive: true };
+    window.addEventListener("keydown", markActive);
+    window.addEventListener("pointerdown", markActive);
+    window.addEventListener("scroll", markActive, scrollOpts);
+    window.addEventListener("touchstart", markActive, scrollOpts);
+    const intervalMs = 15_000;
+    const tick = (): void => {
+      const inactiveMs = Date.now() - idleLastActivityRef.current;
+      if (inactiveMs >= AUTH_IDLE_SIGNOUT_MS) {
+        if (idleTimeoutSignOutStartedRef.current) return;
+        idleTimeoutSignOutStartedRef.current = true;
+        setIdlePromptOpen(false);
+        void (async () => {
+          let resumePlanId: string | null = null;
+          try {
+            resumePlanId = await saveDraftPlan({ idleSignOut: true });
+          } catch {
+            // ignore
+          }
+          if (resumePlanId) {
+            try {
+              window.localStorage.setItem(IDLE_RESUME_PLAN_ID_KEY, resumePlanId);
+            } catch {
+              // ignore
+            }
+          }
+          setError(
+            resumePlanId
+              ? "You were signed out after 30 minutes without activity. Your plan was saved as a draft and will reopen automatically when you sign back in."
+              : authUser?.canSaveRooms
+                ? "You were signed out after 30 minutes without activity. Sign in again to continue. If you saw the inactivity prompt, use Save draft there to keep work in Saved room plans."
+                : "You were signed out after 30 minutes without activity. Sign in again to continue. Trial accounts cannot save drafts—purchase a room pack to save plans to your account.",
+          );
+          persistAuthRef.current("", null);
+          idleTimeoutSignOutStartedRef.current = false;
+        })();
+        return;
+      }
+      if (inactiveMs >= AUTH_IDLE_SIGNOUT_MS - AUTH_IDLE_PROMPT_LEAD_MS) {
+        setIdlePromptOpen(true);
+      }
+    };
+    const id = window.setInterval(tick, intervalMs);
+    tick();
+    return () => {
+      window.removeEventListener("keydown", markActive);
+      window.removeEventListener("pointerdown", markActive);
+      window.removeEventListener("scroll", markActive, scrollOpts);
+      window.removeEventListener("touchstart", markActive, scrollOpts);
+      window.clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- idle watchdog only needs token/user identity
+  }, [authToken, authUser]);
+
+  useLayoutEffect(() => {
+    if (wizardStep !== "output-review" && wizardStep !== "output-export") return;
+    const id = window.setTimeout(() => {
+      const el =
+        wizardStep === "output-export"
+          ? document.getElementById("builder-export-anchor")
+          : document.getElementById("builder-output-anchor");
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [wizardStep]);
+
+  useEffect(() => {
+    if (!error.trim()) return;
+    if (wizardStep !== "themes-puzzles") return;
+    const id = window.requestAnimationFrame(() => {
+      document.getElementById("flow-shell-error-anchor")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [error, wizardStep]);
+
+  const flowMutedHelper =
+    wizardStep === "setup"
+      ? simpleRoomSetup
+        ? "Simple setup covers who’s playing, how long, where, props, and optional event type. Use **All options** for difficulty, junior track, and the live puzzle-count strip."
+        : "Set duration, headcount, room difficulty, and optional junior add-on—the app sizes puzzle count from session length and players, biases suggestions, and can append an easy–medium parallel track for kids. Add optional props, then pick a theme."
+      : wizardStep === "themes-puzzles"
+        ? selectedTheme
+          ? `Build or refresh puzzles for: ${selectedTheme.name}. Add any **premade** puzzles you already own on this step before generating; count follows room timing and difficulty from Room details. Treat generator output and web references as starting points—adapt into **original** venue-specific puzzles (including any Arduino builds) and **QA** electronics before opening.`
+          : "Choose a theme first, then add any premade puzzles you already own and generate when you are ready."
+        : wizardStep === "themes" && selectedTheme
+          ? simpleRoomSetup
+            ? `Theme selected: ${selectedTheme.name}. The full brief and loadout are above—continue when you’re ready.`
+            : `Theme selected: ${selectedTheme.name}`
+          : wizardStep === "themes"
+            ? simpleRoomSetup && !selectedThemeId
+              ? "Curated theme cards load automatically. Use **Use My Own Theme** at the top of this step if you want a custom brief—pick one radio, then continue."
+              : "Room timing is locked in from the previous step; pick or author a theme next."
+            : wizardStep === "output-review"
+              ? "Review the puzzle list and storyline below this header, then continue to export when you are ready."
+              : wizardStep === "output-export"
+                ? "Export markdown, mark approval if you want, and save the plan to your account."
+                : null;
+
+  const showBackInFlowHeader = !(wizardStep === "themes" && themePath === "generated");
+
+  const planningSnapshotPanel = (
+    <div className="planning-summary-body">
+      <div className="planning-summary-form planning-summary-editable">
+        <div className="planning-snap-grid3 planning-snap-grid3--rail">
+          <label className="planning-snap-field">
+            <span>Players at once</span>
+            <input
+              className={`short-input blueprint-input ${validationFlags.playersConcurrent ? "invalid-field" : ""}`}
+              type="number"
+              min={1}
+              max={99}
+              value={playersConcurrent}
+              onChange={(event) => {
+                setPlayersConcurrent(event.target.value);
+                setValidationFlags((current) => ({ ...current, playersConcurrent: false }));
+              }}
+            />
+          </label>
+          <label className="planning-snap-field">
+            <span>Total participants</span>
+            <input
+              className={`short-input blueprint-input ${validationFlags.participantsTotal ? "invalid-field" : ""}`}
+              type="number"
+              min={1}
+              max={99}
+              value={participantsTotal}
+              onChange={(event) => {
+                setParticipantsTotal(event.target.value);
+                setValidationFlags((current) => ({ ...current, participantsTotal: false }));
+              }}
+            />
+          </label>
+          <label className="planning-snap-field">
+            <span>Duration (min)</span>
+            <input
+              className={`short-input blueprint-input ${validationFlags.sessionDurationMinutes ? "invalid-field" : ""}`}
+              type="number"
+              min={10}
+              max={180}
+              step={5}
+              value={sessionDurationMinutes}
+              onChange={(event) => {
+                setSessionDurationMinutes(event.target.value);
+                setValidationFlags((current) => ({ ...current, sessionDurationMinutes: false }));
+              }}
+            />
+          </label>
+        </div>
+        <label className="planning-snap-field">
+          <span>Environment</span>
+          <input
+            id="planning-snap-environment"
+            className={`blueprint-input ${validationFlags.environmentType ? "invalid-field" : ""}`}
+            type="text"
+            value={environmentType}
+            onChange={(event) => {
+              const v = event.target.value;
+              setEnvironmentType(v);
+              if (!v.trim()) setAvailableItems("");
+              setValidationFlags((current) => ({ ...current, environmentType: false }));
+            }}
+            placeholder="Physical room or area"
+          />
+        </label>
+        <label className="planning-snap-field">
+          <span>Event context</span>
+          <input
+            id="planning-snap-event"
+            className="blueprint-input"
+            type="text"
+            value={eventType}
+            maxLength={200}
+            onChange={(event) => setEventType(event.target.value)}
+            placeholder="Optional: party type, venue policy, holiday"
+          />
+        </label>
+        <label className="planning-snap-field">
+          <span>Available items (comma-separated tags)</span>
+          <textarea
+            id="planning-snap-items"
+            className={`planning-snap-textarea ${validationFlags.availableItems ? "invalid-field" : ""}`}
+            rows={3}
+            value={availableItems}
+            disabled={!environmentType.trim()}
+            onChange={(event) => {
+              setAvailableItems(event.target.value);
+              setValidationFlags((current) => ({ ...current, availableItems: false }));
+            }}
+            placeholder={
+              environmentType.trim()
+                ? "e.g. combination lock, whiteboard, playing cards"
+                : "Set environment first, then list props"
+            }
+          />
+        </label>
+        <label className="planning-snap-field">
+          <span>Room puzzle difficulty</span>
+          <select
+            className="room-difficulty-select"
+            value={roomDifficulty}
+            onChange={(event) => {
+              setRoomDifficulty(event.target.value as "easy" | "medium" | "hard");
+            }}
+          >
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </label>
+        <label className="checkbox-field theme-env-fit-checkbox">
+          <input
+            type="checkbox"
+            checked={themeMustMatchEnvironment}
+            onChange={(event) => setThemeMustMatchEnvironment(event.target.checked)}
+          />
+          <span className="theme-env-fit-checkbox-label">
+            Theme ideas should <strong>fit this environment</strong> when generating catalog picks
+          </span>
+        </label>
+        <p className="muted planning-snap-env-fit-note">
+          Fiction can stretch; props and zones still have to work in the room you listed.
+        </p>
+        <div className="planning-snap-theme-row">
+          <span className="planning-snap-label">Theme</span>
+          {themePath === "custom" ? (
+            <label className="planning-snap-field planning-snap-field--grow">
+              <span>Custom theme name</span>
+              <input
+                type="text"
+                className="blueprint-input"
+                value={customThemeName}
+                onChange={(event) => setCustomThemeName(event.target.value)}
+                placeholder="Custom theme title"
+              />
+            </label>
+          ) : (
+            <div className="planning-snap-theme-readout">
+              <p className="planning-snap-theme-name">
+                {selectedTheme
+                  ? selectedTheme.name
+                  : themePath === "generated" && selectedThemeId
+                    ? themes.find((t) => t.id === selectedThemeId)?.name ?? "—"
+                    : "—"}
+              </p>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => {
+                  setWizardStep("themes");
+                  setActivePanel("themes");
+                }}
+              >
+                Change theme
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="planning-snap-readonly">
+          <span className="planning-snap-label">Main puzzles</span>
+          <p className="planning-snap-readonly-value">
+            <strong>{mainTrackPuzzles.length}</strong> generated (target from plan: ~{plannerMainPuzzleTarget})
+          </p>
+        </div>
+      </div>
+      {snapshotSyncHint ? <p className="success-inline planning-snapshot-sync-hint">{snapshotSyncHint}</p> : null}
+      <div className="planning-summary-sync-row">
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={!sessionId}
+          onClick={() => void pushSnapshotPlanningToSession()}
+        >
+          Save snapshot to server session
+        </button>
+        {!sessionId ? <span className="muted">Continue the flow to attach a server session before syncing.</span> : null}
+      </div>
+      <div className="planning-summary-actions" role="group" aria-label="Jump to planning sections">
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={wizardStep === "setup"}
+          onClick={() => {
+            setWizardStep("setup");
+            setActivePanel("plan");
+          }}
+        >
+          Room details
+        </button>
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={wizardStep === "themes"}
+          onClick={() => {
+            if (!buildPlanningBody("strict")) {
+              flagMissingFields(collectStrictPlanningMissing());
+              setError("Complete required room details before opening theme selection.");
+              setWizardStep("setup");
+              setActivePanel("plan");
+              scrollFirstInvalidRoomFieldIntoView();
+              return;
+            }
+            setWizardStep("themes");
+            setActivePanel("themes");
+          }}
+        >
+          Choose theme
+        </button>
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={wizardStep === "themes-puzzles"}
+          onClick={() => {
+            void proceedFromThemesToPuzzles();
+          }}
+        >
+          Build puzzles
+        </button>
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={wizardStep === "output-review" || !canNavigateToOutputReview || outputReviewBusy}
+          title={
+            outputReviewBusy
+              ? "Working…"
+              : wizardStep === "output-review"
+                ? "You are already on Output: Review."
+                : !canNavigateToOutputReview
+                  ? "Choose a theme on the Theme step first."
+                  : puzzles.length === 0
+                    ? "Syncs planning, generates a puzzle set if the list is empty, then opens Output: Review."
+                    : "Opens Output: Review with your current puzzles."
+          }
+          aria-busy={outputReviewBusy}
+          data-testid="review-output-summary"
+          onClick={() => void proceedToOutputReview()}
+        >
+          {outputReviewBusy ? "Opening…" : "Review output"}
+        </button>
+      </div>
+    </div>
+  );
+
+  const savedPlansManageList: ReactNode =
+    authUser && !authUser.canSaveRooms ? (
+      <p className="muted">
+        Saving plans is not included in the free trial. Purchase a room pack below to save rooms to your account.
+      </p>
+    ) : savedPlans.length === 0 ? (
+      <p className="muted">No saved plans yet. Approve and save a plan from the builder export step.</p>
+    ) : (
+      <ul className="list-compact">
+        {savedPlans.map((plan) => (
+          <li key={`acct-${plan.planId}`}>
+            <strong>{plan.name}</strong> — {plan.themeName} ({plan.puzzleCount} puzzles){" "}
+            {!plan.approvedForBuild ? <span className="muted">Draft</span> : null}{" "}
+            {plan.approvedForBuild ? <span className="status-pass">Approved</span> : <span className="muted">Not approved</span>}{" "}
+            <button type="button" className="secondary-btn" onClick={() => void loadSavedPlan(plan.planId)}>
+              Load in builder
+            </button>
+            <button type="button" className="secondary-btn" onClick={() => void deleteSavedPlan(plan.planId)}>
+              Delete
+            </button>
+          </li>
+        ))}
+      </ul>
+    );
+
+  if (!authUser) {
+    return (
+      <>
+        <AppAtmosphere />
+        <main className="page-shell page-shell--layered">
+        <div className="live-build-banner">
+          LIVE BUILD CHECK: If you can read this, you are on the updated app.
+          <span className="live-build-date">Build: {APP_BUILD_STAMP}</span>
+        </div>
+        {error ? <p className="error-banner auth-page-error">{error}</p> : null}
+        <div className="auth-layout">
+          <section id="auth-hero-panel" className="hero auth-hero auth-hero--planning glass-panel">
+            <div className="hero-grid">
+              <div>
+                <p className="hero-chip hero-chip--planning-studio">Escape Planning Studio</p>
+                <h1>Escape Room Builder</h1>
+                <p className="auth-hero-para">
+                  Sign up to try the builder: one <strong>free trial</strong> with the same three curated themes every time, a full
+                  export, and no saved rooms until you purchase a <strong>room pack</strong>.
+                </p>
+                <ul className="auth-bullets auth-hero-para">
+                  <li>Generate cinematic room concepts quickly</li>
+                  <li>One full trial export; room packs add save slots for future builds</li>
+                  <li>Export complete host-ready run sheets</li>
+                  <li>Room packs unlock the full theme library plus “bring your own theme”</li>
+                </ul>
+                <p className="muted promo-footnote auth-hero-para">
+                  We combine account limits with device and network signals to reduce trial farming—pair with card-backed checkout
+                  in production for best results.
+                </p>
+              </div>
+            </div>
+          </section>
+        <section id="auth-card-panel" className="card auth-card auth-panel glass-panel">
+          <div className="auth-panel-head">
+            <h2 className="auth-panel-title">{authMode === "signup" ? "Create account" : "Log in"}</h2>
+            <p className="muted auth-mode-switch">
+              {authMode === "signup" ? (
+                <>
+                  Already have an account?{" "}
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => {
+                      setTermsAccepted(false);
+                      setAuthMode("login");
+                    }}
+                  >
+                    Log in
+                  </button>
+                </>
+              ) : (
+                <>
+                  New here?{" "}
+                  <button type="button" className="link-btn" onClick={() => setAuthMode("signup")}>
+                    Create account
+                  </button>
+                </>
+              )}
+            </p>
+          </div>
+          <div className="form-grid">
+            {authMode === "signup" ? (
+              <label className="field-row">
+                Name
+                <input type="text" value={authName} onChange={(event) => setAuthName(event.target.value)} />
+              </label>
+            ) : null}
+            <label className="field-row">
+              Email
+              <input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} />
+            </label>
+            <label className="field-row">
+              Password
+              <input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} />
+            </label>
+            {authMode === "signup" ? (
+              <div className="auth-terms-block">
+                <label className="field-row field-row--checkbox auth-terms-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                  />
+                  <span>
+                    I agree to the{" "}
+                    <a href="/terms-of-service.html" target="_blank" rel="noreferrer">
+                      Terms of Service
+                    </a>{" "}
+                    (including the intellectual property section).
+                  </span>
+                </label>
+                <p className="muted auth-terms-note">
+                  The Terms describe how you may use generated plans, how we protect our software and curated content, and how your
+                  submissions are licensed so we can run the service.
+                </p>
+              </div>
+            ) : null}
+            <button type="button" className="primary-btn" onClick={authMode === "signup" ? handleSignup : handleLogin}>
+              {authMode === "signup" ? "Create Account" : "Log In"}
+            </button>
+          </div>
+          <p className="muted">
+            Or continue with social sign-in:
+          </p>
+          <div className="social-auth-grid">
+            <button type="button" className="social-btn social-google" onClick={() => handleSocialAuth("google")}>
+              Continue with Google
+            </button>
+            <button type="button" className="social-btn social-facebook" onClick={() => handleSocialAuth("facebook")}>
+              Continue with Facebook
+            </button>
+            <button type="button" className="social-btn social-github" onClick={() => handleSocialAuth("github")}>
+              Continue with GitHub
+            </button>
+          </div>
+        </section>
+        </div>
+        {billingPlans.length > 0 ? (
+          <section className="card subscription-card pricing-section pricing-section--login glass-panel" aria-label="Pricing plans">
+            <h2 className="subscription-title">Pricing plans</h2>
+            <p className="muted pricing-lead">
+              Pay per room or save with a pack — slots and export credits do not expire on a monthly clock. Sign in, then
+              open <strong>Account</strong> to checkout with Square.
+            </p>
+            <div className="pricing-grid">
+              {billingPlans.map((plan) => (
+                <article
+                  key={plan.id}
+                  className={`pricing-card${plan.highlight ? " pricing-card--highlight" : ""}`}
+                >
+                  <header className="pricing-card-head">
+                    <h3>{plan.name}</h3>
+                    <p className="pricing-tagline muted">{plan.tagline}</p>
+                    <p className="pricing-price">{plan.priceLabel}</p>
+                    {plan.priceCents > 0 ? (
+                      <p className="muted pricing-pack-detail">
+                        +{plan.roomsToAdd} slot{plan.roomsToAdd === 1 ? "" : "s"} · +{plan.exportCreditsToAdd} export credit
+                        {plan.exportCreditsToAdd === 1 ? "" : "s"}
+                        {plan.perRoomPriceLabel ? ` · ${plan.perRoomPriceLabel}` : ""}
+                      </p>
+                    ) : null}
+                  </header>
+                  <ul className="pricing-features">
+                    {plan.features.map((feature) => (
+                      <li key={feature}>{feature}</li>
+                    ))}
+                  </ul>
+                  <PricingComparedTo text={plan.comparedTo ?? ""} />
+                  <p className="muted pricing-included">
+                    {plan.purchasable ? "Available after sign-in" : "Free to start"}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        <div className="page-footer-block">
+          <footer className="site-footer">
+            <a href="/faq.html" target="_blank" rel="noreferrer">FAQ</a>
+            <a href="/terms-of-service.html" target="_blank" rel="noreferrer">Terms of Service</a>
+            <a href="/how-to.html" target="_blank" rel="noreferrer">How To Use</a>
+            <a href="/contact.html" target="_blank" rel="noreferrer">Contact Us</a>
+            <a href="/privacy.html" target="_blank" rel="noreferrer">Privacy</a>
+            <a href="/disclaimer.html" target="_blank" rel="noreferrer">Disclaimer</a>
+          </footer>
+          <p className="footer-build-stamp">Build: {APP_BUILD_STAMP}</p>
+          <div className="footer-logo-wrap">
+            <img src="/tipsy-fox-logo.JPEG" alt="The Tipsy Fox logo" className="footer-logo" />
+          </div>
+        </div>
+      </main>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <AppAtmosphere />
+      {/* Main application layout and interactive sections. */}
+      <main className={`page-shell page-shell--layered${appView === "builder" ? " page-shell--builder-protect" : ""}`}>
+      <div className="live-build-banner">
+        LIVE BUILD CHECK: If you can read this, you are on the updated app.
+        <span className="live-build-date">Build: {APP_BUILD_STAMP}</span>
+      </div>
+      {authUser.billingTier === "trial" && appView === "builder" ? (
+        <div className="slot-utilization-warning trial-active-banner" role="status">
+          <strong>Free trial:</strong> the same three curated themes load every time. You get one full export; saving to your account
+          requires a paid pack.
+        </div>
+      ) : null}
+      {authUser.trialUsed && !authUser.canSaveRooms && appView === "builder" ? (
+        <div className="slot-utilization-warning" role="status">
+          Your trial is complete. Open <strong>Account</strong> to purchase a room pack and start your next room.
+        </div>
+      ) : null}
+      {showSlotUtilizationWarning && appView === "builder" ? (
+        <div className="slot-utilization-warning" role="status">
+          You are near your saved-room limit ({Math.round((authUser.savedRoomCount / Math.max(1, authUser.roomAllowance)) * 100)}%
+          used). Open <strong>Account</strong> to add slots or free space.
+        </div>
+      ) : null}
+      <section
+        id="control-deck-studio"
+        className="hero command-header glass-panel glass-panel--hero glass-panel--window"
+      >
+        <div className="hero-grid command-header-grid">
+          <div>
+            <p className="hero-chip">Control Deck</p>
+            <h1>Escape Room Builder</h1>
+            <p className="hero-tagline">Build your mission from plan to output in one cinematic workspace.</p>
+            <p className="promo-lead">
+              Turn a Saturday brainstorm into a host-ready runbook: themed beats, puzzle mix, wiring notes, and exportable
+              markdown—built for indie venues and home haunt seasons.
+            </p>
+          </div>
+          <div className="hero-right">
+            <div className="mission-stats">
+              <div className="mission-stat">
+                <span className="muted">Theme</span>
+                <strong>{selectedTheme ? selectedTheme.name : "Not Selected"}</strong>
+              </div>
+              <div className="mission-stat">
+                <span className="muted">Puzzles</span>
+                <strong>{puzzles.length}</strong>
+              </div>
+              <p className="muted hero-signed-in">Signed in as {authUser.name} ({authUser.email})</p>
+              <button type="button" className="secondary-btn" onClick={signOut}>
+                Sign out
+              </button>
+            </div>
+            <div className="app-view-toggle" role="tablist" aria-label="Main views">
+              <button
+                type="button"
+                className={appView === "builder" ? "primary-btn" : "secondary-btn"}
+                onClick={() => setAppView("builder")}
+              >
+                Room builder
+              </button>
+              <button
+                type="button"
+                className={appView === "account" ? "primary-btn" : "secondary-btn"}
+                onClick={() => setAppView("account")}
+              >
+                Account
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+      {appView === "account" ? (
+        <div className="account-view-wrap">
+          <section className="card mission-panel">
+            <h2 className="subscription-title">Account</h2>
+            <p className="muted">
+              Review your room-slot subscription, consumable full-export credits, team pool bonus (if configured), billing
+              audit trail, and saved plans.
+            </p>
+            <p className="muted account-session-note">
+              For your security, you are signed out automatically after 30 minutes without keyboard, mouse, scroll, or touch
+              activity. About 90 seconds before that, you can save a draft to your account and keep working, or sign out manually. If you
+              reach the hard timeout, the app attempts to save your plan as a draft and reopen it automatically the next time you sign in
+              on this browser.
+            </p>
+            <div className="account-session-actions">
+              <button type="button" className="secondary-btn" onClick={signOut}>
+                Sign out
+              </button>
+            </div>
+          </section>
+          {showSlotUtilizationWarning ? (
+            <div className="slot-utilization-warning" role="status">
+              You are using about{" "}
+              <strong>{Math.round((authUser.savedRoomCount / Math.max(1, authUser.roomAllowance)) * 100)}%</strong> of your
+              saved-room capacity. Consider adding slots or deleting drafts you no longer need.
+            </div>
+          ) : null}
+          {!authUser.isAdmin ? (
+            <section className="card subscription-card pricing-section" aria-label="Pricing plans">
+              <h2 className="subscription-title">Pricing plans</h2>
+              <p className="muted pricing-lead">
+                Buy a <strong>single room</strong> when you need one design, or choose a <strong>home host pack</strong> for
+                personal parties. Slots and export credits do not expire monthly. Checkout is powered by{" "}
+                <strong>Square</strong>.
+              </p>
+              {!squarePaymentsReady ? (
+                <p className="muted pricing-square-hint" role="status">
+                  Square checkout is not configured on this server yet. Set <code>SQUARE_ACCESS_TOKEN</code> and{" "}
+                  <code>SQUARE_LOCATION_ID</code> in the backend <code>.env</code> to enable purchases.
+                </p>
+              ) : null}
+              <div className="pricing-grid">
+                {billingPlans.map((plan) => {
+                  const isCurrent = plan.id === "free" ? authUser.billingTier === "trial" : false;
+                  return (
+                    <article
+                      key={plan.id}
+                      className={`pricing-card${plan.highlight ? " pricing-card--highlight" : ""}${isCurrent ? " pricing-card--current" : ""}`}
+                    >
+                      <header className="pricing-card-head">
+                        <h3>{plan.name}</h3>
+                        <p className="pricing-tagline muted">{plan.tagline}</p>
+                        <p className="pricing-price">{plan.priceLabel}</p>
+                        {plan.priceCents > 0 ? (
+                          <p className="muted pricing-pack-detail">
+                            +{plan.roomsToAdd} slot{plan.roomsToAdd === 1 ? "" : "s"} · +{plan.exportCreditsToAdd} export
+                            credit{plan.exportCreditsToAdd === 1 ? "" : "s"}
+                            {plan.perRoomPriceLabel ? ` · ${plan.perRoomPriceLabel}` : ""}
+                          </p>
+                        ) : null}
+                      </header>
+                      <ul className="pricing-features">
+                        {plan.features.map((feature) => (
+                          <li key={feature}>{feature}</li>
+                        ))}
+                      </ul>
+                      <PricingComparedTo text={plan.comparedTo ?? ""} />
+                      {plan.purchasable ? (
+                        <button
+                          type="button"
+                          className={plan.highlight ? "primary-btn" : "secondary-btn"}
+                          disabled={!squarePaymentsReady || checkoutPlanId === plan.id}
+                          onClick={() => void handlePurchasePlan(plan.id)}
+                        >
+                          {checkoutPlanId === plan.id
+                            ? "Opening Square…"
+                            : plan.id === "single"
+                              ? `Buy one room — ${plan.priceLabel}`
+                              : authUser.billingTier === "pack"
+                                ? `Add ${plan.name}`
+                                : `Upgrade — ${plan.priceLabel}`}
+                        </button>
+                      ) : (
+                        <p className="muted pricing-included">
+                          {authUser.billingTier === "trial" ? "Your current plan" : "Included baseline"}
+                        </p>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+              {billingNotice ? <p className="success-inline pricing-notice">{billingNotice}</p> : null}
+            </section>
+          ) : null}
+          {authUser.isAdmin ? (
+            <section className="card mission-panel" aria-label="Admin tier">
+              <h2 className="subscription-title">Admin tier</h2>
+              <p className="muted">
+                Unlimited saved rooms, full catalog, custom themes, and full electronic exports without consumable credits.
+                Device-limited first-free-save rules do not apply. Default admin list includes{" "}
+                <strong>bradmulders@gmail.com</strong>; merge more via <code>ADMIN_EMAILS</code> on the server.
+              </p>
+            </section>
+          ) : null}
+          <section className="card subscription-card" aria-label="Room plan billing">
+            <div className={authUser.isAdmin ? "subscription-card-grid" : "subscription-card-grid subscription-card-grid--single"}>
+              <div>
+                <h2 className="subscription-title">Room slots (not time-based)</h2>
+                <p className="muted">
+                  You have <strong>{authUser.savedRoomCount}</strong> saved room{authUser.savedRoomCount === 1 ? "" : "s"} and{" "}
+                  <strong>{authUser.roomsRemaining}</strong> slot{authUser.roomsRemaining === 1 ? "" : "s"} remaining out of{" "}
+                  <strong>{authUser.roomAllowance}</strong> effective capacity (personal purchases plus any org pool bonus).
+                </p>
+                {authUser.orgPoolBonusSlots > 0 ? (
+                  <p className="muted">
+                    Team / org pool bonus on your account: <strong>+{authUser.orgPoolBonusSlots}</strong> save slots.
+                  </p>
+                ) : null}
+                {authUser.hasFullCatalog ? (
+                  <p className="muted">
+                    Full-detail exports for <strong>additional</strong> saved rooms (electronics section):{" "}
+                    <strong>{authUser.exportCreditsRemaining}</strong> consumable credit
+                    {authUser.exportCreditsRemaining === 1 ? "" : "s"} remaining. Each full export uses one credit; at zero,
+                    those exports omit wiring diagrams and code until you top up.
+                  </p>
+                ) : (
+                  <p className="muted">
+                    Trial: one full export with electronics; plans are not saved to your account. A room pack adds save slots, the
+                    full theme catalog, custom themes, and export credits for additional rooms.
+                  </p>
+                )}
+                <p className="muted">
+                  Status:{" "}
+                  <strong>
+                    {authUser.billingTier === "pack"
+                      ? "Paid room pack — full theme catalog + custom themes"
+                      : authUser.isAdmin
+                        ? "Admin — unlimited catalog and exports"
+                        : authUser.trialUsed
+                          ? "Trial used — purchase a room pack to continue"
+                          : "Trial — same 3 curated themes, one export, no saved rooms"}
+                  </strong>
+                </p>
+                <p className="muted anti-abuse-note">
+                  <strong>Anti-abuse:</strong> device and network signals help limit trial farming; paid access is applied through your
+                  account on the server.
+                </p>
+              </div>
+              {authUser.isAdmin ? (
+                <div className="subscription-activate">
+                  <h3 className="subscription-tools-heading">Billing tools (admin only)</h3>
+                  <p className="muted subscription-tools-lead">
+                    Test top-up and org-pool edits for development. Production: configure <code>BILLING_WEBHOOK_SECRET</code> and
+                    POST <code>/api/billing/webhook</code> with header <code>X-Billing-Webhook-Secret</code> and JSON{" "}
+                    <code>{"{ email, roomsToAdd, exportCreditsToAdd, organizationPool? }"}</code>.
+                  </p>
+                  <label className="field-row">
+                    Activation key (dev / invoice fulfillment)
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={activationKey}
+                      onChange={(event) => setActivationKey(event.target.value)}
+                      placeholder="Set SUBSCRIPTION_ACTIVATION_KEY on the server"
+                    />
+                  </label>
+                  <label className="field-row">
+                    Rooms to add (test)
+                    <input
+                      type="number"
+                      min={1}
+                      max={5000}
+                      value={roomsToAddInput}
+                      onChange={(event) => setRoomsToAddInput(event.target.value)}
+                    />
+                  </label>
+                  <label className="field-row">
+                    Export credits to add (full electronic exports; defaults to rooms added if blank)
+                    <input
+                      type="number"
+                      min={0}
+                      max={50000}
+                      value={exportCreditsToAddInput}
+                      onChange={(event) => setExportCreditsToAddInput(event.target.value)}
+                    />
+                  </label>
+                  <label className="field-row">
+                    Organization pool (optional JSON)
+                    <textarea
+                      className="org-pool-json-input"
+                      rows={4}
+                      value={orgPoolJson}
+                      onChange={(event) => setOrgPoolJson(event.target.value)}
+                      placeholder='{"id":"studio","name":"Studio","bonusSlots":25,"memberEmails":["you@example.com"]}'
+                    />
+                  </label>
+                  <button type="button" className="primary-btn" onClick={() => void handleActivateSubscription()}>
+                    Apply activation (slots + credits + optional pool)
+                  </button>
+                  {billingNotice ? <p className="success-inline">{billingNotice}</p> : null}
+                </div>
+              ) : null}
+            </div>
+          </section>
+          <section className="card mission-panel" aria-label="Saved room plans">
+            <h2>Saved room plans</h2>
+            {savedPlansManageList}
+          </section>
+          <section className="card mission-panel" aria-label="Billing audit log">
+            <h2>Billing audit</h2>
+            <p className="muted">
+              {authUser.isAdmin ? "Recent entries across all accounts (latest first, capped)." : "Entries for your account only."}
+            </p>
+            {auditEntries.length === 0 ? (
+              <p className="muted">No audit entries yet.</p>
+            ) : (
+              <ul className="list-compact audit-log-list">
+                {auditEntries.map((row, i) => (
+                  <li key={`${row.ts ?? i}-${row.action ?? ""}`}>
+                    <strong>{row.action ?? "event"}</strong> <span className="muted">{row.ts}</span>
+                    {row.detail !== undefined ? (
+                      <pre className="audit-detail-snippet">{JSON.stringify(row.detail, null, 2)}</pre>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <div className="button-row">
+            <button type="button" className="primary-btn" onClick={() => setAppView("builder")}>
+              Open room builder
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {appView === "builder" ? (
+      <>
+      <div className="stage-layout stage-layout--hud">
+        <aside className="stage-sidebar planning-snapshot-rail glass-panel" aria-label="Plan snapshot">
+          <h2 className="planning-snapshot-rail-title">Your plan snapshot</h2>
+          <p className="muted planning-snapshot-rail-lead">Stays visible as you move through each step—edit here anytime.</p>
+          {planningSnapshotPanel}
+        </aside>
+        <section className="stage-main">
+          <section className="card mission-panel flow-shell glass-panel">
+            {error ? (
+              <p
+                id="flow-shell-error-anchor"
+                className="error-banner flow-shell-error"
+                role="alert"
+                aria-live="assertive"
+                data-testid="flow-error-banner"
+              >
+                {error}
+              </p>
+            ) : null}
+            <div className="flow-shell-map-bar">
+              <p className="muted flow-map-label">Mission map</p>
+              <MissionFlowMap
+                stepLabels={missionStepLabels}
+                activeIndex={wizardIndex}
+                youthAddOnEnabled={youthAddOnEnabled}
+                forkSegmentIndex={juniorForkSegmentIndex}
+              />
+            </div>
+            <div className="flow-controls">
+              <div className="flow-controls-top">
+                <div>
+                  <p className="muted">Step {wizardIndex + 1} of {wizardSteps.length}</p>
+                  {wizardStep === "setup" ? null : <p><strong>{wizardLabel}</strong></p>}
+                  {flowMutedHelper ? <p className="muted">{flowMutedHelper}</p> : null}
+                </div>
+                {showBackInFlowHeader && canGoWizardBack ? (
+                  <button type="button" className="secondary-btn flow-back-btn" onClick={goWizardBack}>
+                    ← Back
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            {wizardStep === "setup" ? (
+              <div className="flow-content flow-content--blueprint">
+                <div className="setup-blueprint-header">
+                  <h2 className="room-details-title" title="Theme is the fictional layer you choose in the next step.">
+                    Room details
+                  </h2>
+                  <div className="setup-header-actions">
+                    <div className="setup-mode-toggle" role="group" aria-label="Room form detail level">
+                      <button
+                        type="button"
+                        className={simpleRoomSetup ? "primary-btn setup-mode-btn" : "secondary-btn setup-mode-btn"}
+                        onClick={() => setSimpleRoomSetup(true)}
+                        title="Minimal fields: headcount, duration, environment, and items. Advanced tuning stays available on later steps."
+                      >
+                        Simple
+                      </button>
+                      <button
+                        type="button"
+                        className={!simpleRoomSetup ? "primary-btn setup-mode-btn" : "secondary-btn setup-mode-btn"}
+                        onClick={() => setSimpleRoomSetup(false)}
+                        title="Full room form: event context, difficulty, junior add-on, existing puzzles, and the live puzzle-count HUD."
+                      >
+                        All options
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary-btn inspiration-drawer-trigger"
+                      onClick={() => setInspirationOpen(true)}
+                      title="Curated links and optional on-device AI tips tailored to your plan (environment, items, theme)."
+                    >
+                      Inspiration
+                    </button>
+                  </div>
+                </div>
+                <p className="muted room-details-lead">
+                  {simpleRoomSetup ? (
+                    <>
+                      Short checklist: <strong>who plays</strong>, <strong>how long</strong>, <strong>where</strong>, and{" "}
+                      <strong>props</strong> you can use. Event type is optional—if you run a <strong>commercial / ticketed room</strong>,
+                      say so; we’ll note that guests usually expect a <strong>unique</strong> experience.
+                    </>
+                  ) : (
+                    <>
+                      Enter the real room, timing, headcount, and <strong>target puzzle difficulty</strong> before themes or puzzles.
+                      Duration and concurrent players update the live puzzle-count estimate below (same formula as the server).
+                    </>
+                  )}
+                </p>
+                {simpleRoomSetup ? (
+                  <p className="muted puzzle-estimate-simple" role="status">
+                    Rough guide: about <RollingPuzzleEstimate target={plannerMainPuzzleTarget} /> main puzzles (open{" "}
+                    <strong>All options</strong> for the full estimate strip and junior add-on).
+                  </p>
+                ) : (
+                  <p className="puzzle-estimate-hud glass-hud-strip" role="status">
+                    Estimated main-track puzzle count:{" "}
+                    <strong>
+                      <RollingPuzzleEstimate target={plannerMainPuzzleTarget} />
+                    </strong>{" "}
+                    {useCustomMainPuzzleCount ? (
+                      <span className="muted">
+                        (custom; auto from time × players would be ~{livePuzzleEstimate})
+                      </span>
+                    ) : (
+                      <span className="muted">(scales with players × minutes)</span>
+                    )}
+                    {youthAddOnEnabled && juniorAddOnPuzzleSlots > 0 ? (
+                      <>
+                        {" "}
+                        · Junior add-on (parallel easy–medium):{" "}
+                        <strong>+{juniorAddOnPuzzleSlots}</strong> puzzles
+                      </>
+                    ) : null}
+                  </p>
+                )}
+                <div className="form-grid form-grid--blueprint" id="room-details-blueprint-form">
+                  <label
+                    className={
+                      validationFlags.playersConcurrent ? "blueprint-field-label blueprint-field-label--invalid" : "blueprint-field-label"
+                    }
+                  >
+                    <span className="blueprint-field-label-heading">
+                      Players at one time
+                      <RequiredFieldMark />
+                    </span>
+                    <input
+                      className={`short-input blueprint-input ${validationFlags.playersConcurrent ? "invalid-field" : ""}`}
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={playersConcurrent}
+                      onChange={(event) => {
+                        setPlayersConcurrent(event.target.value);
+                        setValidationFlags((current) => ({ ...current, playersConcurrent: false }));
+                      }}
+                    />
+                  </label>
+                  <label
+                    className={
+                      validationFlags.participantsTotal ? "blueprint-field-label blueprint-field-label--invalid" : "blueprint-field-label"
+                    }
+                  >
+                    <span className="blueprint-field-label-heading">
+                      Total participants
+                      <RequiredFieldMark />
+                    </span>
+                    <input
+                      className={`short-input blueprint-input ${validationFlags.participantsTotal ? "invalid-field" : ""}`}
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={participantsTotal}
+                      onChange={(event) => {
+                        setParticipantsTotal(event.target.value);
+                        setValidationFlags((current) => ({ ...current, participantsTotal: false }));
+                      }}
+                    />
+                  </label>
+                  <label
+                    className={
+                      validationFlags.sessionDurationMinutes
+                        ? "blueprint-field-label blueprint-field-label--invalid"
+                        : "blueprint-field-label"
+                    }
+                  >
+                    <span className="blueprint-field-label-heading">
+                      Session duration (minutes)
+                      <RequiredFieldMark />
+                    </span>
+                    <input
+                      className={`short-input blueprint-input ${validationFlags.sessionDurationMinutes ? "invalid-field" : ""}`}
+                      type="number"
+                      min={10}
+                      max={180}
+                      step={5}
+                      value={sessionDurationMinutes}
+                      onChange={(event) => {
+                        setSessionDurationMinutes(event.target.value);
+                        setValidationFlags((current) => ({ ...current, sessionDurationMinutes: false }));
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Event context (optional)
+                    <input
+                      id="event-context-input"
+                      className="blueprint-input"
+                      type="text"
+                      list="event-type-suggestions"
+                      value={eventType}
+                      maxLength={200}
+                      onChange={(event) => setEventType(event.target.value)}
+                      placeholder="e.g. commercial venue, Halloween party, corporate team building, school fundraiser"
+                      aria-describedby={
+                        commercialVenueContext ? "commercial-venue-below-event event-context-hint" : "event-context-hint"
+                      }
+                    />
+                  </label>
+                  <datalist id="event-type-suggestions">
+                    {dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])]).map((entry) => (
+                      <option key={entry} value={entry} />
+                    ))}
+                  </datalist>
+                  {commercialVenueContext ? (
+                    <p id="commercial-venue-below-event" className="commercial-venue-callout commercial-venue-callout--below-event" role="note">
+                      <strong>Commercial / ticketed venue:</strong> Guests typically expect this room to feel <strong>clearly different</strong>{" "}
+                      from other games they have paid for. Use generated ideas as raw material—design <strong>original</strong> puzzles, flow,
+                      and reveals so the run is unmistakably yours.
+                    </p>
+                  ) : null}
+                  <div id="event-context-hint">
+                    {simpleRoomSetup ? (
+                      <p className="muted">
+                        Home parties, schools, and most informal events can <strong>remix and adapt</strong> ideas more freely—still follow
+                        safety and any venue rules.
+                      </p>
+                    ) : (
+                      <p className="muted">
+                        Themes and puzzles bias toward this context when it matches a holiday, team event, or commercial run (for example,
+                        spook-season wording for Halloween). Informal events can stay more flexible unless you want a specific tone.
+                      </p>
+                    )}
+                  </div>
+                  <label
+                    className={
+                      validationFlags.environmentType ? "blueprint-field-label blueprint-field-label--invalid" : "blueprint-field-label"
+                    }
+                    title="Environment is the actual space and objects players can touch."
+                  >
+                    <span className="blueprint-field-label-heading">
+                      Environment
+                      <RequiredFieldMark />
+                    </span>
+                    <input
+                      className={`blueprint-input ${validationFlags.environmentType ? "invalid-field" : ""}`}
+                      type="text"
+                      list="environment-type-suggestions"
+                      value={environmentType}
+                      onChange={(event) => {
+                        const v = event.target.value;
+                        setEnvironmentType(v);
+                        if (!v.trim()) setAvailableItems("");
+                        setValidationFlags((current) => ({ ...current, environmentType: false }));
+                      }}
+                      placeholder="Type or pick a suggestion (list stays available after you choose)"
+                    />
+                  </label>
+                  <datalist id="environment-type-suggestions">
+                    {dedupeStringsPreserveOrder([...ENVIRONMENT_PRESETS, ...(inputHistory.environmentType ?? [])]).map((entry) => (
+                      <option key={entry} value={entry} />
+                    ))}
+                  </datalist>
+                  <label className="checkbox-field theme-env-fit-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={themeMustMatchEnvironment}
+                      onChange={(event) => setThemeMustMatchEnvironment(event.target.checked)}
+                    />
+                    <span className="theme-env-fit-checkbox-label">
+                      Theme ideas should <strong>fit this environment</strong> — staging must match logistics, not just the story
+                    </span>
+                  </label>
+                  <details className="theme-env-fit-examples">
+                    <summary>Staging examples (library in a gym, vault in a backyard)</summary>
+                    <p className="muted">
+                      A <em>“library”</em> mystery in a <strong>school gym</strong> means a defined corner with shelves, rugs, and lamps that
+                      reads as stacks—not pretending the whole gym is a different building. An <em>“indoor vault”</em> beat in a{" "}
+                      <strong>backyard</strong> means a weatherproof lockbox, shed, or trailer that <em>plays</em> as a vault; you are not
+                      pouring a concrete bank vault outdoors.
+                    </p>
+                  </details>
+                  <p className="muted theme-env-fit-hint">
+                    When on, the server ranks themes toward your <strong>environment</strong> wording (indoor vs outdoor, school, garage,
+                    etc.) so suggestions stay buildable where you actually host. Turn off if you want pure fantasy and will translate every
+                    beat yourself.
+                  </p>
+                  <label
+                    className={
+                      validationFlags.availableItems ? "blueprint-field-label blueprint-field-label--invalid" : "blueprint-field-label"
+                    }
+                  >
+                    <span className="blueprint-field-label-heading">
+                      Available items
+                      <RequiredFieldMark />
+                    </span>
+                    <AvailableItemsBasementField
+                      value={availableItems}
+                      onChange={(next) => {
+                        setAvailableItems(next);
+                        setValidationFlags((current) => ({ ...current, availableItems: false }));
+                      }}
+                      invalid={validationFlags.availableItems}
+                      historyOptions={inputHistory.availableItems ?? []}
+                      disabled={!environmentType.trim()}
+                    />
+                  </label>
+                  {simpleRoomSetup ? (
+                    <p className="muted">
+                      Pick basement-friendly props from the list (multi-select) or add safe custom lines. Real furnaces, hot water heaters,
+                      boilers, gas lines, and propane tanks are blocked—use <strong>Fake …</strong> props only. <strong>All options</strong>{" "}
+                      adds difficulty and junior add-on controls.
+                    </p>
+                  ) : (
+                    <p className="muted">
+                      The server uses these anchors for theme appendices, puzzle tie-ins, suggested additions, and export placement notes.
+                      High-risk utilities are blocked unless clearly labeled as non-functional theater props.
+                    </p>
+                  )}
+                  {!simpleRoomSetup ? (
+                    <>
+                      <label title="Room difficulty nudges suggested theme puzzles and generated sets toward easier or harder picks.">
+                        Room difficulty (overall puzzle challenge)
+                        <select
+                          className="room-difficulty-select"
+                          value={roomDifficulty}
+                          onChange={(event) => {
+                            setRoomDifficulty(event.target.value as "easy" | "medium" | "hard");
+                          }}
+                        >
+                          <option value="easy">Easy — lighter deductions, shorter chains, family-friendly bias</option>
+                          <option value="medium">Medium — balanced logic, physical, and light electronics</option>
+                          <option value="hard">Hard — denser reasoning, more steps, expert-friendly bias</option>
+                        </select>
+                      </label>
+                      <div className="youth-addon-block">
+                        <label
+                          className="checkbox-field checkbox-field--stack"
+                          title="The junior add-on (if enabled) appends a parallel easy–medium mini-track in the same fiction; optional gating lets adults depend on kids’ outcomes."
+                        >
+                          <input
+                            type="checkbox"
+                            checked={youthAddOnEnabled}
+                            onChange={(event) => {
+                              const on = event.target.checked;
+                              setYouthAddOnEnabled(on);
+                              if (!on) {
+                                setYouthAddOnGatesAdultFlow(false);
+                                setYouthAddOnAgeNote("");
+                              }
+                            }}
+                          />
+                          <span>
+                            Include a <strong>junior add-on</strong> escape (parallel track for younger players, same theme; generator
+                            adds easy–medium puzzles only)
+                          </span>
+                        </label>
+                        {youthAddOnEnabled ? (
+                          <div className="youth-addon-options">
+                            <label className="checkbox-field checkbox-field--stack">
+                              <input
+                                type="checkbox"
+                                checked={youthAddOnGatesAdultFlow}
+                                onChange={(event) => setYouthAddOnGatesAdultFlow(event.target.checked)}
+                              />
+                              <span>
+                                Junior puzzles may <strong>gate adult progression</strong> (relay code, shared token, or verify kids’
+                                outcome before the main crew advances)
+                              </span>
+                            </label>
+                            <label>
+                              Junior track notes (ages, space, staffing)
+                              <input
+                                type="text"
+                                className="youth-addon-age-input"
+                                value={youthAddOnAgeNote}
+                                maxLength={400}
+                                onChange={(event) => setYouthAddOnAgeNote(event.target.value)}
+                                placeholder="e.g. ages ~6–11, nook off main room, helper resets props"
+                              />
+                            </label>
+                          </div>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+                <div className="setup-options">
+                  <button type="button" className="primary-btn" onClick={() => void proceedFromSetupToThemes()}>
+                    Continue to theme selection
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {wizardStep === "themes" ? (
+              <div className="flow-content flow-content--themes-step">
+                <div className="theme-view-toggle-row theme-view-toggle-row--themes-step">
+                  <span className="theme-view-toggle-legend" id="theme-view-toggle-label">
+                    Theme view
+                  </span>
+                  <div className="theme-view-toggle" role="group" aria-labelledby="theme-view-toggle-label">
+                    <button
+                      type="button"
+                      className={simpleThemeView ? "primary-btn theme-view-toggle-btn" : "secondary-btn theme-view-toggle-btn"}
+                      onClick={() => setSimpleThemeView(true)}
+                    >
+                      Simple
+                    </button>
+                    <button
+                      type="button"
+                      className={!simpleThemeView ? "primary-btn theme-view-toggle-btn" : "secondary-btn theme-view-toggle-btn"}
+                      onClick={() => setSimpleThemeView(false)}
+                    >
+                      Full brief
+                    </button>
+                  </div>
+                  <p className="muted theme-view-toggle-hint">
+                    {simpleThemeView ? (
+                      <>
+                        Showing name, TL;DR, and puzzle loadout only. Use <strong>Full brief</strong> for the long write-up and editor
+                        tools.
+                      </>
+                    ) : (
+                      <>
+                        Full markdown brief and editor pass appear in the <strong>theme details</strong> panel below once you pick or
+                        hover a generated card (or draft a custom theme).
+                      </>
+                    )}
+                  </p>
+                </div>
+                {hasFullCatalogAccess ? (
+                  <div className="button-row theme-step-path-row theme-step-path-row--top">
+                    <button
+                      type="button"
+                      className={themePath === "custom" ? "primary-btn" : "secondary-btn"}
+                      disabled={!hasFullCatalogAccess}
+                      title={hasFullCatalogAccess ? undefined : "Features unlocked with subscription"}
+                      onClick={() => {
+                        setThemePath("custom");
+                        setThemes([]);
+                        setSelectedThemeId("");
+                        resetCustomThemeCoach();
+                      }}
+                    >
+                      Use your own theme
+                    </button>
+                    {themePath === "custom" ? (
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        onClick={() => {
+                          setThemePath("generated");
+                          resetCustomThemeCoach();
+                          void loadThemes("/api/themes/generate");
+                        }}
+                      >
+                        Browse generated themes
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="muted trial-themes-note">
+                    {simpleRoomSetup && !selectedThemeId ? (
+                      <>
+                        <strong>Trial:</strong> the same three curated themes load automatically when you open this step. Paid packs unlock
+                        the full catalog, refresh, and bringing your own custom theme.
+                      </>
+                    ) : (
+                      <>
+                        On the trial, the <strong>same three curated themes</strong> load every time. A paid room pack unlocks the full
+                        rotating catalog, refresh, and custom-theme authoring with coach tools.
+                      </>
+                    )}
+                  </p>
+                )}
+                {themePath === "custom" ? (
+                  <div className="subcard compact-block theme-selection-card">
+                    <div className="form-grid">
+                      <label>
+                        Theme name
+                        <input className={validationFlags.customThemeName ? "invalid-field" : ""} type="text" list="custom-theme-name-history" value={customThemeName} onChange={(event) => { setCustomThemeName(event.target.value); setValidationFlags((current) => ({ ...current, customThemeName: false })); }} placeholder="Example: Ancient Temple Lockdown" />
+                      </label>
+                      <datalist id="custom-theme-name-history">
+                        {dedupeStringsPreserveOrder(inputHistory.customThemeName ?? []).map((entry) => (
+                          <option key={entry} value={entry} />
+                        ))}
+                      </datalist>
+                    </div>
+                    <div className="form-grid theme-custom-description-block">
+                      <label>
+                        {simpleRoomSetup ? (
+                          <>Theme description (optional — a few sentences is enough to start)</>
+                        ) : (
+                          <>
+                            Theme description (optional — write your brief here, or use the theme coach below and{" "}
+                            <strong>Apply answers to description</strong> when on-device AI is available)
+                          </>
+                        )}
+                        <textarea
+                          className="theme-description-textarea"
+                          rows={simpleRoomSetup ? 4 : 8}
+                          value={customThemeDescription}
+                          onChange={(event) => setCustomThemeDescription(event.target.value)}
+                          placeholder="Storyline, tone, key props (markdown ok). You can expand this later."
+                        />
+                      </label>
+                    </div>
+                    {simpleRoomSetup ? (
+                      <details className="theme-coach-details">
+                        <summary>Optional: guided theme coach (questions and on-device AI)</summary>
+                        <CustomThemeCoachPanel
+                          messages={customThemeCoachMessages}
+                          draft={customThemeCoachDraft}
+                          onDraftChange={setCustomThemeCoachDraft}
+                          busy={customThemeCoachBusy}
+                          localError={customThemeCoachError}
+                          aiAvailable={coachBrowserAiReady}
+                          accountSyncAvailable={Boolean(authToken)}
+                          coachPrereqsOk={customThemeCoachPrereqsOk}
+                          coverage={coachCoverage}
+                          onStart={() => void handleStartCustomThemeCoach()}
+                          onSend={() => void handleSendCustomThemeCoach()}
+                          onSynthesize={() => void handleSynthesizeCustomThemeCoach()}
+                          onClear={resetCustomThemeCoach}
+                        />
+                      </details>
+                    ) : (
+                      <CustomThemeCoachPanel
+                        messages={customThemeCoachMessages}
+                        draft={customThemeCoachDraft}
+                        onDraftChange={setCustomThemeCoachDraft}
+                        busy={customThemeCoachBusy}
+                        localError={customThemeCoachError}
+                        aiAvailable={coachBrowserAiReady}
+                        accountSyncAvailable={Boolean(authToken)}
+                        coachPrereqsOk={customThemeCoachPrereqsOk}
+                        coverage={coachCoverage}
+                        onStart={() => void handleStartCustomThemeCoach()}
+                        onSend={() => void handleSendCustomThemeCoach()}
+                        onSynthesize={() => void handleSynthesizeCustomThemeCoach()}
+                        onClear={resetCustomThemeCoach}
+                      />
+                    )}
+                    {themePath === "custom" && (customThemeName.trim() || customThemeDescription.trim()) ? (
+                      <div className="theme-step-description-dock theme-custom-dock-below" role="region" aria-label="Custom theme preview">
+                        <div className="theme-dock-header">
+                          <h3 className="theme-dock-name">{customThemeName.trim() || "Untitled theme"}</h3>
+                          {customThemeDescription.trim() ? (
+                            <div className="theme-dock-tldr-row muted">
+                              <span className="theme-idea-tldr-label">Draft</span>
+                              <span className="theme-idea-tldr-text">
+                                {(() => {
+                                  const c = collapseWs(customThemeDescription);
+                                  return c.length > 220 ? `${c.slice(0, 217)}…` : c;
+                                })()}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="theme-dock-tldr-row muted">
+                              <span className="theme-idea-tldr-text theme-dock-tldr-text-only">
+                                No description yet—use the coach or the text area.
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {customThemeDescription.trim() && !simpleThemeView ? (
+                          <>
+                            <div className="theme-dock-toolbar">
+                              <button
+                                type="button"
+                                className="secondary-btn theme-editor-pass-btn"
+                                disabled={briefPolishBusy}
+                                aria-busy={briefPolishBusy}
+                                title={
+                                  coachBrowserAiReady
+                                    ? "Run an on-device editorial pass on your draft brief."
+                                    : "Requires on-device AI (e.g. Chrome Prompt API)."
+                                }
+                                onClick={() => void runPolishCurrentBrief()}
+                              >
+                                {briefPolishBusy ? "Editing…" : "Editor pass (on-device AI)"}
+                              </button>
+                            </div>
+                            <div className="theme-dock-body">
+                              <ThemeDescriptionBlocks text={customThemeDescription} />
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div className="theme-custom-submit-row">
+                      <button
+                        type="button"
+                        className="primary-btn"
+                        onClick={() => void addCustomTheme()}
+                        disabled={customThemeSaving || !customThemeName.trim()}
+                        aria-busy={customThemeSaving}
+                      >
+                        {customThemeSaving ? "Saving…" : "Add and Select Custom Theme"}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {themePath === "generated" ? (
+                  <>
+                    <div className="subcard compact-block theme-selection-card">
+                      {themes.length === 0 ? <p className="muted">Generating theme ideas...</p> : null}
+                      {themes.length > 0 ? (
+                        <ul className={`theme-ideas-list list-compact ${validationFlags.selectedThemeId ? "invalid-list" : ""}`}>
+                          {themes.map((theme) => (
+                            <li
+                              key={theme.id}
+                              onMouseEnter={() => setHoverPreviewThemeId(theme.id)}
+                              onMouseLeave={() => setHoverPreviewThemeId(null)}
+                            >
+                              <div
+                                className={`theme-idea-card${selectedThemeId === theme.id ? " theme-idea-card--selected" : ""}`}
+                              >
+                                <div className="theme-idea-card-head">
+                                  <label className="theme-idea-pick">
+                                    <input
+                                      type="radio"
+                                      name="escape-theme-choice"
+                                      className="theme-idea-radio"
+                                      checked={selectedThemeId === theme.id}
+                                      onChange={() => {
+                                        handleThemeSelect(theme.id);
+                                      }}
+                                    />
+                                    <span className="theme-idea-pick-text">
+                                      <strong className="theme-idea-name">{theme.name}</strong>
+                                    </span>
+                                  </label>
+                                </div>
+                                <p className="theme-idea-tldr theme-idea-tldr--peek muted">
+                                  <span className="theme-idea-tldr-label">TL;DR</span>
+                                  <span className="theme-idea-tldr-text">{resolveThemeTldr(theme)}</span>
+                                </p>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                    {themePath === "generated" && themesStepDockTheme ? (
+                      <div className="theme-step-description-dock" role="region" aria-label="Theme brief">
+                        <div className="theme-dock-header">
+                          <h3 className="theme-dock-name">{themesStepDockTheme.name}</h3>
+                          <div className="theme-dock-tldr-row">
+                            <span className="theme-idea-tldr-label">TL;DR</span>
+                            <span className="theme-idea-tldr-text">{resolveThemeTldr(themesStepDockTheme)}</span>
+                          </div>
+                        </div>
+                        {themesStepBriefPreviewMismatch ? (
+                          <p className="muted theme-dock-preview-note" role="note">
+                            Previewing a different card than your radio selection—select this theme or move your pointer off the list to
+                            edit the selected brief.
+                          </p>
+                        ) : null}
+                        {themesStepDockTheme.recommendedPuzzles?.length ? (
+                          <div className="theme-dock-loadout">
+                            <ThemeRecommendedPuzzles
+                              puzzles={themesStepDockTheme.recommendedPuzzles}
+                              sectionTitle="Puzzle loadout"
+                            />
+                          </div>
+                        ) : null}
+                        {!simpleThemeView ? (
+                          <>
+                            <div className="theme-dock-toolbar">
+                              <button
+                                type="button"
+                                className="secondary-btn theme-editor-pass-btn"
+                                disabled={
+                                  briefPolishBusy ||
+                                  !themesStepPolishTheme?.description.trim() ||
+                                  themesStepBriefPreviewMismatch
+                                }
+                                aria-busy={briefPolishBusy}
+                                title={
+                                  themesStepBriefPreviewMismatch
+                                    ? "Editor pass updates the radio-selected theme only. Select this card or stop hovering others."
+                                    : coachBrowserAiReady
+                                      ? "Run an on-device editorial pass on the selected theme brief (clarity, sentence case, venue truth)."
+                                      : "Requires on-device AI (e.g. Chrome Prompt API)."
+                                }
+                                onClick={() => void runPolishCurrentBrief()}
+                              >
+                                {briefPolishBusy ? "Editing…" : "Editor pass (on-device AI)"}
+                              </button>
+                            </div>
+                            <p className="muted theme-dock-lead">
+                              Full brief below—pick the theme with the <strong>radio</strong> in the <strong>list above</strong>, then use{" "}
+                              <strong>Continue to puzzle builder</strong> at the bottom of the step.
+                            </p>
+                            <div className="theme-dock-body">
+                              <ThemeDescriptionBlocks text={themesStepDockTheme.description} />
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div className="theme-generated-after-selection">
+                      <p className="muted theme-pick-hint">
+                        {simpleRoomSetup && !selectedThemeId ? (
+                          <>
+                            Choose <strong>one</strong> theme with the radios in the list. The backdrop and details preview update as you
+                            hover or change selection; then use <strong>Continue to puzzle builder</strong> at the bottom of this step.
+                          </>
+                        ) : (
+                          <>
+                            Each card shows a short <strong>TL;DR</strong>; the <strong>full brief</strong> and <strong>puzzle loadout</strong> are in the{" "}
+                            <strong>panel below</strong> the list. Select a theme with the <strong>radio</strong>, then click{" "}
+                            <strong>Continue to puzzle builder</strong> below.
+                          </>
+                        )}
+                      </p>
+                      <div className={`theme-ideas-actions${canGoWizardBack ? "" : " theme-ideas-actions--no-back"}`}>
+                        {canGoWizardBack ? (
+                          <button type="button" className="secondary-btn flow-back-btn" onClick={goWizardBack}>
+                            ← Back
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          disabled={!hasFullCatalogAccess}
+                          title={hasFullCatalogAccess ? undefined : "Features unlocked with subscription"}
+                          onClick={() => loadThemes("/api/themes/refresh")}
+                        >
+                          Refresh Ideas
+                        </button>
+                        {selectedThemeId ? (
+                          <button type="button" className="primary-btn" onClick={() => void proceedFromThemesToPuzzles()}>
+                            Continue to puzzle builder →
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+            {wizardStep === "themes-puzzles" ? (
+              <div className="flow-content">
+                {!hasFullCatalogAccess ? (
+                  <p className="muted puzzle-builder-freegen-note puzzle-builder-freegen-note--top">
+                    <strong>Trial:</strong> a puzzle set usually loads when you open this step. If the list is still empty, use{" "}
+                    <strong>Continue to output review</strong>—it will request a set once, then open review. A paid room pack
+                    unlocks manual <strong>Generate puzzles</strong> (same as theme refresh).
+                  </p>
+                ) : null}
+                <div className="theme-view-toggle-row theme-view-toggle-row--themes-step">
+                  <span className="theme-view-toggle-legend" id="theme-view-toggle-label-puzzles">
+                    Theme view
+                  </span>
+                  <div className="theme-view-toggle" role="group" aria-labelledby="theme-view-toggle-label-puzzles">
+                    <button
+                      type="button"
+                      className={simpleThemeView ? "primary-btn theme-view-toggle-btn" : "secondary-btn theme-view-toggle-btn"}
+                      onClick={() => setSimpleThemeView(true)}
+                    >
+                      Simple
+                    </button>
+                    <button
+                      type="button"
+                      className={!simpleThemeView ? "primary-btn theme-view-toggle-btn" : "secondary-btn theme-view-toggle-btn"}
+                      onClick={() => setSimpleThemeView(false)}
+                    >
+                      Full brief
+                    </button>
+                  </div>
+                  <p className="muted theme-view-toggle-hint">
+                    {simpleThemeView ? (
+                      <>Name, TL;DR, and loadout only—open <strong>Full brief</strong> for markdown and editor tools.</>
+                    ) : (
+                      <>Full brief for your selected theme is in the panel below.</>
+                    )}
+                  </p>
+                </div>
+                <h2>Build puzzle set</h2>
+                {commercialVenueContext ? (
+                  <p className="commercial-venue-callout commercial-venue-callout--inline" role="note">
+                    <strong>Commercial context:</strong> treat generated puzzles as drafts—change beats, props, and wiring so the room feels{" "}
+                    <strong>original</strong> for paying guests.
+                  </p>
+                ) : null}
+                <p className="muted puzzle-count-note">
+                  How many puzzles you get is driven by the <strong>session duration</strong> and{" "}
+                  <strong>players at one time</strong> you saved under Room details; <strong>room difficulty</strong> (
+                  {formatDifficultyLabel(roomDifficulty)}) steers how hard each pick tends to be. The server scales the set when you
+                  generate.
+                  {youthAddOnEnabled ? (
+                    <>
+                      {" "}
+                      You enabled a <strong>junior add-on</strong> in Room details—expect extra easy–medium puzzles in the same
+                      theme, optionally gating the adults.
+                    </>
+                  ) : null}
+                </p>
+                <div className="puzzle-budget-panel glass-panel">
+                  <h3 className="puzzle-budget-heading">Main-track puzzle budget</h3>
+                  <p className="muted puzzle-budget-lead">
+                    Override the <strong>main</strong> puzzle target (junior add-on stays separate). Optionally set counts for{" "}
+                    <strong>generated</strong> logic, physical, and electronic beats—the server scales them to fit after any premade
+                    puzzles you add on this step.
+                  </p>
+                  <label className="field-row field-row--checkbox">
+                    <input
+                      type="checkbox"
+                      checked={useCustomMainPuzzleCount}
+                      onChange={(e) => {
+                        setUseCustomMainPuzzleCount(e.target.checked);
+                        if (!e.target.checked) setCustomMainPuzzleCountStr("");
+                      }}
+                    />
+                    <span>Override main-track count (1–24)</span>
+                  </label>
+                  {useCustomMainPuzzleCount ? (
+                    <label className="field-row">
+                      Target main-track puzzles
+                      <input
+                        className="short-input blueprint-input"
+                        type="number"
+                        min={1}
+                        max={24}
+                        value={customMainPuzzleCountStr}
+                        onChange={(e) => setCustomMainPuzzleCountStr(e.target.value)}
+                        placeholder="e.g. 8"
+                      />
+                    </label>
+                  ) : null}
+                  <label className="field-row field-row--checkbox">
+                    <input
+                      type="checkbox"
+                      checked={useCustomMix}
+                      onChange={(e) => {
+                        setUseCustomMix(e.target.checked);
+                        if (!e.target.checked) {
+                          setCustomMixLogic("");
+                          setCustomMixPhysical("");
+                          setCustomMixElectronic("");
+                        }
+                      }}
+                    />
+                    <span>Set logic / physical / electronic mix for generated slots (0–20 each)</span>
+                  </label>
+                  {useCustomMix ? (
+                    <div className="puzzle-mix-grid">
+                      <label>
+                        Logic
+                        <input
+                          className="short-input blueprint-input"
+                          type="number"
+                          min={0}
+                          max={20}
+                          value={customMixLogic}
+                          onChange={(e) => setCustomMixLogic(e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Physical
+                        <input
+                          className="short-input blueprint-input"
+                          type="number"
+                          min={0}
+                          max={20}
+                          value={customMixPhysical}
+                          onChange={(e) => setCustomMixPhysical(e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Electronic
+                        <input
+                          className="short-input blueprint-input"
+                          type="number"
+                          min={0}
+                          max={20}
+                          value={customMixElectronic}
+                          onChange={(e) => setCustomMixElectronic(e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                </div>
+                {selectedTheme ? (
+                  <div className="theme-selected-brief">
+                    <p className="muted theme-selected-brief-label">Selected theme</p>
+                    <div className="theme-dock-header">
+                      <h3 className="theme-dock-name">{selectedTheme.name}</h3>
+                      <div className="theme-dock-tldr-row">
+                        <span className="theme-idea-tldr-label">TL;DR</span>
+                        <span className="theme-idea-tldr-text">{resolveThemeTldr(selectedTheme)}</span>
+                      </div>
+                    </div>
+                    {selectedTheme.recommendedPuzzles?.length ? (
+                      <div className="theme-dock-loadout">
+                        <ThemeRecommendedPuzzles puzzles={selectedTheme.recommendedPuzzles} sectionTitle="Puzzle loadout" />
+                      </div>
+                    ) : null}
+                    {!simpleThemeView ? (
+                      <>
+                        <div className="theme-dock-toolbar">
+                          <button
+                            type="button"
+                            className="secondary-btn theme-editor-pass-btn"
+                            disabled={briefPolishBusy || !selectedTheme.description.trim()}
+                            aria-busy={briefPolishBusy}
+                            title={
+                              coachBrowserAiReady
+                                ? "Polish this brief with an on-device editor pass."
+                                : "Requires on-device AI (e.g. Chrome Prompt API)."
+                            }
+                            onClick={() => void runPolishCurrentBrief()}
+                          >
+                            {briefPolishBusy ? "Editing…" : "Editor pass (on-device AI)"}
+                          </button>
+                        </div>
+                        <div className="theme-dock-body theme-selected-brief-desc">
+                          <ThemeDescriptionBlocks text={selectedTheme.description} />
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="inline-space muted">
+                    <strong>Selected theme:</strong> Not selected
+                  </p>
+                )}
+                <div className="puzzle-premade-block">
+                  <div className="setup-options">
+                    <button type="button" className="secondary-btn" onClick={() => setShowExistingPuzzleForm((current) => !current)}>
+                      {showExistingPuzzleForm ? "Hide premade puzzle" : "Add premade puzzle"}
+                    </button>
+                  </div>
+                  {showExistingPuzzleForm ? (
+                    <div className="subcard compact-block">
+                      <h3>Add premade puzzle</h3>
+                      <p className="muted help-note">
+                        List kits or props you already own. They are saved to this planning session and folded into the next{" "}
+                        <strong>Generate puzzles</strong> run (with your selected theme).
+                      </p>
+                      <div className="form-grid">
+                        <label className="field-row">
+                          Puzzle name
+                          <input className={validationFlags.existingPuzzleName ? "invalid-field" : ""} type="text" list="existing-puzzle-name-history" value={existingPuzzleName} onChange={(event) => { setExistingPuzzleName(event.target.value); setValidationFlags((current) => ({ ...current, existingPuzzleName: false })); }} placeholder="Example: Telegraph Morse Box" />
+                        </label>
+                        <datalist id="existing-puzzle-name-history">
+                          {(inputHistory.existingPuzzleName ?? []).map((entry) => (
+                            <option key={entry} value={entry} />
+                          ))}
+                        </datalist>
+                        <label className="field-row">
+                          Details link
+                          <input className={validationFlags.existingPuzzleLink ? "invalid-field" : ""} type="url" list="existing-puzzle-link-history" value={existingPuzzleLink} onChange={(event) => { setExistingPuzzleLink(event.target.value); setValidationFlags((current) => ({ ...current, existingPuzzleLink: false })); }} placeholder="https://..." />
+                        </label>
+                        <datalist id="existing-puzzle-link-history">
+                          {(inputHistory.existingPuzzleLink ?? []).map((entry) => (
+                            <option key={entry} value={entry} />
+                          ))}
+                        </datalist>
+                        <label className="field-row">
+                          Room part / stage
+                          <input className={validationFlags.existingPuzzleRoomPart ? "invalid-field" : ""} type="text" list="existing-puzzle-roompart-history" value={existingPuzzleRoomPart} onChange={(event) => { setExistingPuzzleRoomPart(event.target.value); setValidationFlags((current) => ({ ...current, existingPuzzleRoomPart: false })); }} placeholder="Example: Intro, mid-game, finale" />
+                        </label>
+                        <datalist id="existing-puzzle-roompart-history">
+                          {(inputHistory.existingPuzzleRoomPart ?? []).map((entry) => (
+                            <option key={entry} value={entry} />
+                          ))}
+                        </datalist>
+                        <button type="button" className="primary-btn" onClick={() => void addExistingPuzzle()}>
+                          Add premade puzzle
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  {existingPuzzles.length > 0 ? (
+                    <div className="subcard compact-block">
+                      <h3>Premade puzzles in this plan</h3>
+                      <ul className="list-compact">
+                        {existingPuzzles.map((puzzle, index) => (
+                          <li key={`${puzzle.name}-${index}`}>
+                            {puzzle.name} [{puzzle.roomPart}] -{" "}
+                            <a href={puzzle.link} target="_blank" rel="noreferrer">
+                              {puzzle.link}
+                            </a>{" "}
+                            <button type="button" onClick={() => void removeExistingPuzzle(index)}>
+                              Remove
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="button-row puzzle-builder-actions">
+                  {canGoWizardBack ? (
+                    <button type="button" className="secondary-btn" onClick={goWizardBack}>
+                      ← Back
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void generatePuzzles()}
+                    disabled={!selectedThemeId || !hasFullCatalogAccess || outputReviewBusy}
+                    title={
+                      !selectedThemeId
+                        ? "Select a theme first."
+                        : !hasFullCatalogAccess
+                          ? "Features unlocked with subscription"
+                          : "Regenerate puzzle set from Room details and theme."
+                    }
+                  >
+                    Generate puzzles
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    disabled={!canNavigateToOutputReview || outputReviewBusy}
+                    title={
+                      outputReviewBusy
+                        ? "Working…"
+                        : !canNavigateToOutputReview
+                          ? "Choose a theme first (Theme step)."
+                          : puzzles.length === 0
+                            ? "Syncs planning, generates a puzzle set if the list is empty, then opens Output: Review."
+                            : "Opens Output: Review with your current puzzle list."
+                    }
+                    aria-busy={outputReviewBusy}
+                    data-testid="continue-output-review"
+                    onClick={() => void proceedToOutputReview()}
+                  >
+                    {outputReviewBusy ? "Opening review…" : "Continue to output review"}
+                  </button>
+                </div>
+                {wizardStep === "themes-puzzles" && !canNavigateToOutputReview ? (
+                  <p className="muted puzzle-builder-blocked-hint" role="status" data-testid="continue-output-review-blocked-hint">
+                    <strong>Continue to output review</strong> needs a selected theme. Use <strong>← Back</strong> to the Theme step, pick
+                    one idea (or your custom theme), then return here—the button stays disabled until a theme is selected.
+                  </p>
+                ) : null}
+                <div className="puzzle-builder-secondary">
+                  {puzzles.length > 0 || refusedPuzzleSlots.length > 0 ? (
+                    <div className="subcard compact-block generated-puzzles-panel" id="builder-generated-puzzles">
+                      <h3>Generated puzzles</h3>
+                      <p className="muted">
+                        Each puzzle opens in its own panel. Close a panel to refuse that idea, or use <strong>Generate another</strong> to
+                        swap in a different puzzle without regenerating the full set.
+                      </p>
+                      <p className={compatibilityPassed ? "status-pass" : "status-fail"}>
+                        Theme compatibility checks passed: {compatibilityPassed ? "Yes" : "No"}
+                      </p>
+                      <JuniorGateIntegrationCallout
+                        youthAddOnEnabled={youthAddOnEnabled}
+                        youthAddOnGatesAdultFlow={youthAddOnGatesAdultFlow}
+                        juniorGatingPuzzles={juniorGatingPuzzles}
+                        juniorTrackPuzzles={juniorTrackPuzzles}
+                      />
+                      {youthAddOnEnabled && (juniorTrackPuzzles.length > 0 || juniorRefusedSlots.length > 0) ? (
+                        <>
+                          <h4 className="puzzle-track-heading">Main crew</h4>
+                          <PuzzleWindowsTrack
+                            puzzles={mainTrackPuzzles}
+                            refusedSlots={mainRefusedSlots}
+                            numberOffset={0}
+                            selectedThemeName={selectedThemeName}
+                            selectedThemeDescription={selectedThemeDescription}
+                            authUser={authUser}
+                            arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
+                            puzzleWindowBusy={puzzleWindowBusy}
+                            onToggleArduinoPreview={(id) =>
+                              setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))
+                            }
+                            onReplace={(id) => void replacePuzzle(id)}
+                            onReject={(id) => void rejectPuzzle(id)}
+                            onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+                          />
+                          <h4 className="puzzle-track-heading puzzle-track-heading--junior">Junior add-on track</h4>
+                          <p className="muted puzzle-track-lead">
+                            Easy–medium beats in the same fiction as your theme.
+                            {youthAddOnGatesAdultFlow ? (
+                              <>
+                                {" "}
+                                Cards marked <span className="puzzle-gate-pill junior-gate-pill-inline">Gates adult flow</span> may be
+                                required before the main crew advances a linked beat.
+                              </>
+                            ) : (
+                              <>
+                                {" "}
+                                These run in parallel without a mandatory hard gate on adults—still recap together so the story stays
+                                coherent.
+                              </>
+                            )}
+                          </p>
+                          <PuzzleWindowsTrack
+                            puzzles={juniorTrackPuzzles}
+                            refusedSlots={juniorRefusedSlots}
+                            numberOffset={mainTrackPuzzles.length + mainRefusedSlots.length}
+                            selectedThemeName={selectedThemeName}
+                            selectedThemeDescription={selectedThemeDescription}
+                            authUser={authUser}
+                            arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
+                            puzzleWindowBusy={puzzleWindowBusy}
+                            onToggleArduinoPreview={(id) =>
+                              setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))
+                            }
+                            onReplace={(id) => void replacePuzzle(id)}
+                            onReject={(id) => void rejectPuzzle(id)}
+                            onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+                          />
+                          <JuniorTrackEnvironmentIdeas />
+                        </>
+                      ) : (
+                        <PuzzleWindowsTrack
+                          puzzles={puzzles}
+                          refusedSlots={refusedPuzzleSlots}
+                          numberOffset={0}
+                          selectedThemeName={selectedThemeName}
+                          selectedThemeDescription={selectedThemeDescription}
+                          authUser={authUser}
+                          arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
+                          puzzleWindowBusy={puzzleWindowBusy}
+                          onToggleArduinoPreview={(id) =>
+                            setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))
+                          }
+                          onReplace={(id) => void replacePuzzle(id)}
+                          onReject={(id) => void rejectPuzzle(id)}
+                          onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+                        />
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </section>
+          {wizardStep === "saved" && hasSavedPlans && showPlanPicker ? (
+        <section className="card mission-panel">
+          <h2>Welcome back</h2>
+          <p className="muted">Load a saved plan to continue where you left off, or start a new plan.</p>
+          {savedPlans.length === 0 ? <p className="muted">No saved plans found for this account yet.</p> : null}
+          {savedPlans.length > 0 ? (
+            <ul className="list-compact">
+              {savedPlans.map((plan) => (
+                <li key={`picker-${plan.planId}`}>
+                  <strong>{plan.name}</strong> - {plan.themeName} ({plan.puzzleCount} puzzles){" "}
+                  {!plan.approvedForBuild ? <span className="muted">Draft</span> : null}{" "}
+                  {plan.approvedForBuild ? <span className="status-pass">Approved</span> : <span className="muted">Not approved</span>}{" "}
+                  <button type="button" className="secondary-btn" onClick={() => loadSavedPlan(plan.planId)}>
+                    Load This Plan
+                  </button>
+                  <button type="button" className="secondary-btn" onClick={() => deleteSavedPlan(plan.planId)}>
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="button-row">
+            <button
+              type="button"
+              onClick={() => {
+                setShowPlanPicker(false);
+                setActivePanel("plan");
+                setWizardStep("setup");
+              }}
+            >
+              Start New Plan
+            </button>
+          </div>
+        </section>
+          ) : null}
+
+          {wizardStep === "output-review" ? (
+            <section className="card mission-panel glass-panel output-review-panel" id="builder-output-anchor">
+              <h2>Output: Review</h2>
+              {storyPlan ? (
+                <div className="output-review-story">
+                  <h3 className="output-review-section-title">Storyline and progression</h3>
+                  <div className="output-review-narrative-grid">
+                    <OutputReviewNarrativeField label="Situation" text={storyPlan.situation} />
+                    <OutputReviewNarrativeField label="Premise" text={storyPlan.premise} />
+                    <OutputReviewNarrativeField label="Mission objective" text={storyPlan.missionObjective} />
+                    <OutputReviewNarrativeField label="Progression rule" text={storyPlan.progressionRule} />
+                  </div>
+                  {storyPlan.stages && storyPlan.stages.length > 0 ? (
+                    <>
+                      <h3 className="output-review-section-title">Stage flow</h3>
+                      <ol className="output-review-stage-list">
+                        {storyPlan.stages.map((st) => (
+                          <li key={st.stage} className="output-review-stage-card">
+                            <div className="output-review-stage-head">
+                              <span className="output-review-stage-badge">Stage {st.stage}</span>
+                              <strong className="output-review-stage-title">{st.title}</strong>
+                            </div>
+                            <dl className="output-review-stage-dl">
+                              <div>
+                                <dt>Story beat</dt>
+                                <dd>{st.storyBeat}</dd>
+                              </div>
+                              <div>
+                                <dt>Why this stage exists</dt>
+                                <dd>{st.whyThisStageExists}</dd>
+                              </div>
+                              <div>
+                                <dt>Objective</dt>
+                                <dd>
+                                  <OutputReviewProse text={st.objective} />
+                                </dd>
+                              </div>
+                              {st.whatPlayersMustDo?.length ? (
+                                <div>
+                                  <dt>What players must do</dt>
+                                  <dd>
+                                    <ul className="output-review-stage-ul">
+                                      {st.whatPlayersMustDo.map((line, idx) => (
+                                        <li key={idx}>{line}</li>
+                                      ))}
+                                    </ul>
+                                  </dd>
+                                </div>
+                              ) : null}
+                              {st.requiredPuzzleTitles?.length ? (
+                                <div>
+                                  <dt>Required puzzles</dt>
+                                  <dd>{st.requiredPuzzleTitles.join(", ")}</dd>
+                                </div>
+                              ) : null}
+                              {st.reveals ? (
+                                <div>
+                                  <dt>Reveal</dt>
+                                  <dd>
+                                    <OutputReviewProse text={st.reveals} />
+                                  </dd>
+                                </div>
+                              ) : null}
+                            </dl>
+                          </li>
+                        ))}
+                      </ol>
+                    </>
+                  ) : null}
+                  {storyPlan.puzzleLinks && storyPlan.puzzleLinks.length > 0 ? (
+                    <>
+                      <h3 className="output-review-section-title">Puzzle–story links</h3>
+                      <ul className="output-review-puzzle-links">
+                        {storyPlan.puzzleLinks.map((link) => (
+                          <li key={link.puzzleId} className="output-review-puzzle-link-item">
+                            <strong>{link.puzzleTitle}</strong>
+                            <span className="output-review-puzzle-link-role">{link.storyRole}</span>
+                            <span className="output-review-puzzle-link-unlocks">{link.unlocks}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : null}
+                  {storyPlan.stagingDiagram ? (
+                    <>
+                      <h3 className="output-review-section-title">Room layout sketch</h3>
+                      <pre className="staging-diagram-block">{storyPlan.stagingDiagram}</pre>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+              {puzzles.length > 0 || refusedPuzzleSlots.length > 0 ? (
+                <>
+                  <h3 className="output-review-section-title">Puzzle set</h3>
+                  <p className={compatibilityPassed ? "status-pass" : "status-fail"}>
+                    Theme compatibility checks passed: {compatibilityPassed ? "Yes" : "No"}
+                  </p>
+                  <JuniorGateIntegrationCallout
+                    youthAddOnEnabled={youthAddOnEnabled}
+                    youthAddOnGatesAdultFlow={youthAddOnGatesAdultFlow}
+                    juniorGatingPuzzles={juniorGatingPuzzles}
+                    juniorTrackPuzzles={juniorTrackPuzzles}
+                  />
+                  {youthAddOnEnabled && (juniorTrackPuzzles.length > 0 || juniorRefusedSlots.length > 0) ? (
+                    <>
+                      <h4 className="puzzle-track-heading">Main crew</h4>
+                      <PuzzleWindowsTrack
+                        puzzles={mainTrackPuzzles}
+                        refusedSlots={mainRefusedSlots}
+                        numberOffset={0}
+                        selectedThemeName={selectedThemeName}
+                        selectedThemeDescription={selectedThemeDescription}
+                        authUser={authUser}
+                        arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
+                        puzzleWindowBusy={puzzleWindowBusy}
+                        onToggleArduinoPreview={(id) =>
+                          setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))
+                        }
+                        onReplace={(id) => void replacePuzzle(id)}
+                        onReject={(id) => void rejectPuzzle(id)}
+                        onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+                      />
+                      <h4 className="puzzle-track-heading puzzle-track-heading--junior">Junior add-on track</h4>
+                      <p className="muted puzzle-track-lead">
+                        Easy–medium beats in the same fiction as your theme.
+                        {youthAddOnGatesAdultFlow ? (
+                          <>
+                            {" "}
+                            Cards marked <span className="puzzle-gate-pill junior-gate-pill-inline">Gates adult flow</span> may be
+                            required before the main crew advances a linked beat.
+                          </>
+                        ) : (
+                          <>
+                            {" "}
+                            Parallel play without a mandatory hard gate on adults—still debrief together so the story stays coherent.
+                          </>
+                        )}
+                      </p>
+                      <PuzzleWindowsTrack
+                        puzzles={juniorTrackPuzzles}
+                        refusedSlots={juniorRefusedSlots}
+                        numberOffset={mainTrackPuzzles.length + mainRefusedSlots.length}
+                        selectedThemeName={selectedThemeName}
+                        selectedThemeDescription={selectedThemeDescription}
+                        authUser={authUser}
+                        arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
+                        puzzleWindowBusy={puzzleWindowBusy}
+                        onToggleArduinoPreview={(id) =>
+                          setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))
+                        }
+                        onReplace={(id) => void replacePuzzle(id)}
+                        onReject={(id) => void rejectPuzzle(id)}
+                        onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+                      />
+                      <JuniorTrackEnvironmentIdeas />
+                    </>
+                  ) : (
+                    <PuzzleWindowsTrack
+                      puzzles={puzzles}
+                      refusedSlots={refusedPuzzleSlots}
+                      numberOffset={0}
+                      selectedThemeName={selectedThemeName}
+                      selectedThemeDescription={selectedThemeDescription}
+                      authUser={authUser}
+                      arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
+                      puzzleWindowBusy={puzzleWindowBusy}
+                      onToggleArduinoPreview={(id) =>
+                        setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))
+                      }
+                      onReplace={(id) => void replacePuzzle(id)}
+                      onReject={(id) => void rejectPuzzle(id)}
+                      onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+                    />
+                  )}
+                </>
+              ) : (
+                <p className="muted">
+                  No puzzle output yet. Finish room details and theme selection, then in <strong>Build puzzle set</strong> add any
+                  premade puzzles you already own if needed and use <strong>Generate puzzles</strong> (or wait for the automatic set on the
+                  trial).
+                </p>
+              )}
+              {suggestedAdditionsRequired.length > 0 || suggestedAdditions.length > 0 ? (
+                <div className="suggested-additions-panel">
+                  {suggestedAdditionsRequired.length > 0 ? (
+                    <div className="suggested-additions-block suggested-additions-block--required">
+                      <h3>Required staging / props</h3>
+                      <p className="muted suggested-additions-lead">
+                        Address these gaps before you treat the room as ready to rehearse—usually missing lock surfaces, clue boards, or
+                        electronics bench items called out from your inventory and puzzle mix.
+                      </p>
+                      <ul className="suggested-additions-list">
+                        {suggestedAdditionsRequired.map((item) => (
+                          <li key={`req-${item}`}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {suggestedAdditions.length > 0 ? (
+                    <div className="suggested-additions-block suggested-additions-block--optional">
+                      <h3>Suggested elements to add</h3>
+                      <ul className="suggested-additions-list">
+                        {suggestedAdditions.map((item) => (
+                          <li key={`opt-${item}`}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="button-row">
+                {canGoWizardBack ? (
+                  <button type="button" className="secondary-btn" onClick={goWizardBack}>
+                    ← Back
+                  </button>
+                ) : null}
+                <button type="button" className="primary-btn" onClick={() => setWizardStep("output-export")}>
+                  Continue to Export
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {wizardStep === "output-export" ? (
+            <section className="card mission-panel glass-panel" id="builder-export-anchor">
+              <h2>Output: Export and Save</h2>
+              <div className="export-action-flow" role="group" aria-label="Approve, save, then export">
+                <div className="export-action-flow__row">
+                  <div className={`export-action-flow__node${approvedForBuild ? " export-action-flow__node--done" : ""}`}>
+                    <span className="export-action-flow__step-num" aria-hidden>
+                      1
+                    </span>
+                    <button
+                      type="button"
+                      className={approvedForBuild ? "primary-btn export-action-flow__btn" : "secondary-btn export-action-flow__btn"}
+                      onClick={() => setApprovedForBuild((current) => !current)}
+                    >
+                      {approvedForBuild ? "Approved for build" : "Mark approved for build"}
+                    </button>
+                  </div>
+                  <div className="export-action-flow__rail" aria-hidden />
+                  <div className="export-action-flow__node">
+                    <span className="export-action-flow__step-num" aria-hidden>
+                      2
+                    </span>
+                    <button
+                      type="button"
+                      className="secondary-btn export-action-flow__btn"
+                      disabled={!authUser?.canSaveRooms}
+                      title={authUser?.canSaveRooms ? undefined : "Purchase a room pack to save plans"}
+                      onClick={() => (authUser?.canSaveRooms ? void saveCurrentPlan() : openUpgradePrompt())}
+                    >
+                      {authUser?.canSaveRooms ? "Save plan" : "Save plan (paid)"}
+                    </button>
+                  </div>
+                  <div className="export-action-flow__rail export-action-flow__rail--accent" aria-hidden />
+                  <div className="export-action-flow__node">
+                    <span className="export-action-flow__step-num" aria-hidden>
+                      3
+                    </span>
+                    <button
+                      type="button"
+                      className="primary-btn export-action-flow__btn"
+                      disabled={exportBusy}
+                      aria-busy={exportBusy}
+                      onClick={() => void exportPlan()}
+                    >
+                      {exportBusy ? "Exporting…" : "Export plan"}
+                    </button>
+                  </div>
+                </div>
+                <p className="muted export-action-flow__hint">
+                  Saving still requires approval first. Export pulls the latest draft from the server (planning is synced when you run
+                  export).
+                </p>
+              </div>
+              <div className="button-row export-back-row">
+                {canGoWizardBack ? (
+                  <button type="button" className="secondary-btn" onClick={goWizardBack}>
+                    ← Back
+                  </button>
+                ) : null}
+              </div>
+              {exportContent && exportWasRedacted ? (
+                <p className="muted export-trial-note">
+                  This export omitted electronic wiring lists, diagrams, build steps, and Arduino sketches (use a paid room pack with export
+                  credits for full build packs on additional rooms).
+                </p>
+              ) : null}
+              {exportContent ? (
+                <>
+                  <div className="export-format-toolbar" role="tablist" aria-label="Read-only export format">
+                    <button
+                      type="button"
+                      role="tab"
+                      className={exportReadFormat === "markdown" ? "primary-btn" : "secondary-btn"}
+                      aria-selected={exportReadFormat === "markdown"}
+                      onClick={() => setExportReadFormat("markdown")}
+                    >
+                      Markdown
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      className={exportReadFormat === "plaintext" ? "primary-btn" : "secondary-btn"}
+                      aria-selected={exportReadFormat === "plaintext"}
+                      onClick={() => setExportReadFormat("plaintext")}
+                    >
+                      Plain text
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      className={exportReadFormat === "html" ? "primary-btn" : "secondary-btn"}
+                      aria-selected={exportReadFormat === "html"}
+                      onClick={() => setExportReadFormat("html")}
+                    >
+                      HTML snapshot
+                    </button>
+                  </div>
+                  <div className="export-download-row">
+                    <span className="muted export-download-label">Download</span>
+                    <button type="button" className="secondary-btn" onClick={() => downloadExportFile("md")}>
+                      .md
+                    </button>
+                    <button type="button" className="secondary-btn" onClick={() => downloadExportFile("txt")}>
+                      .txt
+                    </button>
+                    <button type="button" className="secondary-btn" onClick={() => downloadExportFile("html")}>
+                      .html
+                    </button>
+                  </div>
+                  <div className="export-split">
+                    <div className="export-split-pane export-split-raw">
+                      <h3 className="export-split-title">
+                        {exportReadFormat === "markdown"
+                          ? "Markdown source"
+                          : exportReadFormat === "plaintext"
+                            ? "Plain text"
+                            : "HTML (read-only preview)"}
+                      </h3>
+                      {exportReadFormat === "markdown" ? (
+                        <pre className="code-block export-split-pre export-markdown-pre allow-select">{exportContent}</pre>
+                      ) : exportReadFormat === "plaintext" ? (
+                        <pre className="code-block export-split-pre export-markdown-pre allow-select">{exportPlainBody}</pre>
+                      ) : (
+                        <iframe
+                          className="export-html-frame"
+                          title="HTML export preview"
+                          sandbox="allow-same-origin"
+                          srcDoc={exportHtmlDoc}
+                        />
+                      )}
+                    </div>
+                    <div className="export-split-pane export-split-runbook">
+                      <h3 className="export-split-title">Host runbook preview</h3>
+                      <div
+                        className="runbook-dossier"
+                        // eslint-disable-next-line react/no-danger -- markdown + trusted svg fences from server export
+                        dangerouslySetInnerHTML={{ __html: exportRunbookHtml }}
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="muted">Use <strong>Export plan</strong> to fetch markdown from the server, then pick a read-only format or download.</p>
+              )}
+            </section>
+          ) : null}
+
+        </section>
+        {wizardStep === "setup" ? (
+          <button type="button" className="mobile-continue-fab" onClick={() => void proceedFromSetupToThemes()}>
+            Continue → Themes
+          </button>
+        ) : wizardStep === "themes" && selectedThemeId ? (
+          <button type="button" className="mobile-continue-fab" onClick={() => void proceedFromThemesToPuzzles()}>
+            Continue → Build puzzles
+          </button>
+        ) : wizardStep === "themes-puzzles" ? (
+          <button
+            type="button"
+            className="mobile-continue-fab"
+            disabled={!canNavigateToOutputReview || outputReviewBusy}
+            aria-busy={outputReviewBusy}
+            data-testid="continue-output-review-mobile"
+            title={
+              outputReviewBusy
+                ? "Working…"
+                : !canNavigateToOutputReview
+                  ? "Choose a theme first (Theme step)."
+                  : puzzles.length === 0
+                    ? "Syncs planning, generates a puzzle set if the list is empty, then opens Output: Review."
+                    : "Opens Output: Review with your current puzzle list."
+            }
+            onClick={() => void proceedToOutputReview()}
+          >
+            {outputReviewBusy ? "Opening…" : "Continue → Output review"}
+          </button>
+        ) : null}
+        {inspirationOpen ? (
+          <>
+            <div
+              className="inspiration-drawer-backdrop"
+              role="presentation"
+              aria-hidden="true"
+              onClick={() => setInspirationOpen(false)}
+            />
+            <aside
+              className="inspiration-drawer"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="inspiration-drawer-title"
+            >
+              <div className="inspiration-drawer-head">
+                <h2 id="inspiration-drawer-title">Inspiration drawer</h2>
+                <button type="button" className="secondary-btn" onClick={() => setInspirationOpen(false)}>
+                  Close
+                </button>
+              </div>
+              <p className="muted inspiration-drawer-lead">
+                Curated libraries below. <strong>On-device AI</strong> can tie <strong>your environment, props, and theme</strong> to
+                these links—same privacy model as the theme coach (nothing leaves your machine).
+              </p>
+              <div className="inspiration-ai-panel">
+                <button
+                  type="button"
+                  className="primary-btn inspiration-ai-generate-btn"
+                  disabled={inspirationAiBusy}
+                  aria-busy={inspirationAiBusy}
+                  onClick={() => void runContextualInspiration()}
+                >
+                  {inspirationAiBusy ? "Generating tips…" : "Generate tips for my plan (on-device AI)"}
+                </button>
+                {!coachBrowserAiReady ? (
+                  <p className="muted inspiration-ai-unavailable">
+                    Prompt API not detected—enable on-device models in Chrome (or a compatible build), then refresh. You can still use
+                    the static links.
+                  </p>
+                ) : null}
+                {inspirationAiError ? <p className="error-banner inspiration-ai-error">{inspirationAiError}</p> : null}
+                {inspirationAiBrief ? (
+                  <div className="inspiration-ai-result" role="region" aria-label="Personalized inspiration">
+                    {inspirationAiBrief.intro ? <p className="inspiration-ai-intro">{inspirationAiBrief.intro}</p> : null}
+                    {inspirationAiBrief.propIdeas.length > 0 ? (
+                      <>
+                        <h3 className="inspiration-ai-subhead">Props → puzzle angles</h3>
+                        <ul className="inspiration-ai-prop-list">
+                          {inspirationAiBrief.propIdeas.map((row, idx) => (
+                            <li key={`prop-idea-${idx}`} className="inspiration-ai-prop-item">
+                              {row.props.length > 0 ? (
+                                <p className="inspiration-ai-prop-line">
+                                  <strong>{row.props.join(", ")}</strong>
+                                </p>
+                              ) : null}
+                              <p className="inspiration-ai-angle">{row.puzzleAngle}</p>
+                              {row.searchHints && row.searchHints.length > 0 ? (
+                                <p className="muted inspiration-ai-hints">
+                                  <strong>Search:</strong> {row.searchHints.join(" · ")}
+                                </p>
+                              ) : null}
+                              {row.resourceIds.length > 0 ? (
+                                <ul className="inspiration-ai-resource-chips">
+                                  {row.resourceIds.map((rid) => {
+                                    const entry = inspirationCatalogEntryById(rid);
+                                    if (!entry) return null;
+                                    return (
+                                      <li key={rid}>
+                                        <a href={entry.url} target="_blank" rel="noreferrer">
+                                          {entry.label}
+                                        </a>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    ) : null}
+                    {inspirationAiBrief.resourceNotes.length > 0 ? (
+                      <>
+                        <h3 className="inspiration-ai-subhead">Where to dig next</h3>
+                        <ul className="inspiration-ai-notes-list">
+                          {inspirationAiBrief.resourceNotes.map((note, idx) => {
+                            const entry = inspirationCatalogEntryById(note.resourceId);
+                            if (!entry) return null;
+                            return (
+                              <li key={`${note.resourceId}-${idx}`}>
+                                <a href={entry.url} target="_blank" rel="noreferrer">
+                                  {entry.label}
+                                </a>
+                                <span className="muted"> — {note.note}</span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </>
+                    ) : null}
+                    {inspirationAiBrief.proTip ? (
+                      <p className="inspiration-ai-protip">
+                        <strong>Pro tip:</strong> {inspirationAiBrief.proTip}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              {INSPIRATION_DRAWER_CATEGORY_ORDER.map((category) => {
+                const links = INSPIRATION_CATALOG.filter((e) => e.category === category);
+                if (links.length === 0) return null;
+                return (
+                  <Fragment key={category}>
+                    <h3 className="inspiration-drawer-category">{category}</h3>
+                    <ul className="inspiration-drawer-list">
+                      {links.map((link) => (
+                        <li key={link.id}>
+                          <a className="inspiration-drawer-link" href={link.url} target="_blank" rel="noreferrer">
+                            {link.label}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </Fragment>
+                );
+              })}
+            </aside>
+          </>
+        ) : null}
+      </div>
+      {upgradePromptOpen && authUser ? (
+        <div className="idle-session-overlay" role="dialog" aria-modal="true" aria-labelledby="upgrade-prompt-title">
+          <div className="idle-session-dialog glass-panel upgrade-prompt-dialog">
+            <h2 id="upgrade-prompt-title">Purchase a room pack</h2>
+            <p className="muted">{upgradePromptMessage}</p>
+            {billingPlans.length > 0 ? (
+              <div className="pricing-grid pricing-grid--compact">
+                {billingPlans
+                  .filter((plan) => plan.purchasable)
+                  .map((plan) => (
+                    <article key={plan.id} className={`pricing-card${plan.highlight ? " pricing-card--highlight" : ""}`}>
+                      <header className="pricing-card-head">
+                        <h3>{plan.name}</h3>
+                        <p className="pricing-price">{plan.priceLabel}</p>
+                      </header>
+                      <button
+                        type="button"
+                        className={plan.highlight ? "primary-btn" : "secondary-btn"}
+                        disabled={!squarePaymentsReady || checkoutPlanId === plan.id}
+                        onClick={() => void handlePurchasePlan(plan.id)}
+                      >
+                        {checkoutPlanId === plan.id ? "Opening Square…" : `Buy — ${plan.priceLabel}`}
+                      </button>
+                    </article>
+                  ))}
+              </div>
+            ) : null}
+            <div className="idle-session-actions">
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => {
+                  setUpgradePromptOpen(false);
+                  setAppView("account");
+                }}
+              >
+                View all plans in Account
+              </button>
+              <button type="button" className="secondary-btn" onClick={() => setUpgradePromptOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {idlePromptOpen && authUser ? (
+        <div className="idle-session-overlay" role="dialog" aria-modal="true" aria-labelledby="idle-session-title">
+          <div className="idle-session-dialog glass-panel">
+            <h2 id="idle-session-title">Still there?</h2>
+            <p className="muted">
+              {authUser.canSaveRooms ? (
+                <>
+                  You have been inactive for a while. Save a draft so you can open it from{" "}
+                  <strong>Account → Saved room plans</strong> on your next visit, or stay signed in to keep working. If you do not respond
+                  in time, we will try to save a draft automatically and reopen it after your next sign-in.
+                </>
+              ) : (
+                <>
+                  You have been inactive for a while. Trial accounts cannot save drafts—stay signed in to keep working, or sign out.
+                  Purchase a room pack under <strong>Account</strong> to save plans.
+                </>
+              )}
+            </p>
+            <div className="idle-session-actions">
+              {authUser.canSaveRooms ? (
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={idleDraftBusy}
+                  onClick={async () => {
+                    setIdleDraftBusy(true);
+                    try {
+                      const planId = await saveDraftPlan();
+                      if (planId) {
+                        idleLastActivityRef.current = Date.now();
+                        setIdlePromptOpen(false);
+                      }
+                    } finally {
+                      setIdleDraftBusy(false);
+                    }
+                  }}
+                >
+                  {idleDraftBusy ? "Saving draft…" : "Save draft & keep session"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => {
+                    setIdlePromptOpen(false);
+                    setAppView("account");
+                  }}
+                >
+                  View room packs
+                </button>
+              )}
+              <button
+                type="button"
+                className={authUser.canSaveRooms ? "secondary-btn" : "primary-btn"}
+                onClick={() => {
+                  idleLastActivityRef.current = Date.now();
+                  setIdlePromptOpen(false);
+                }}
+              >
+                I&apos;m still working
+              </button>
+              <button type="button" className="secondary-btn" onClick={() => signOut()}>
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      </>
+      ) : null}
+      <div className="page-footer-block">
+        <footer className="site-footer">
+          <a href="/faq.html" target="_blank" rel="noreferrer">FAQ</a>
+          <a href="/terms-of-service.html" target="_blank" rel="noreferrer">Terms of Service</a>
+          <a href="/how-to.html" target="_blank" rel="noreferrer">How To Use</a>
+          <a href="/contact.html" target="_blank" rel="noreferrer">Contact Us</a>
+          <a href="/privacy.html" target="_blank" rel="noreferrer">Privacy</a>
+          <a href="/disclaimer.html" target="_blank" rel="noreferrer">Disclaimer</a>
+        </footer>
+        <p className="footer-build-stamp">Build: {APP_BUILD_STAMP}</p>
+        <div className="footer-logo-wrap">
+          <img src="/tipsy-fox-logo.JPEG" alt="The Tipsy Fox logo" className="footer-logo" />
+        </div>
+        {appView === "builder" ? (
+          <p className="footer-content-policy muted">
+            In-app plans and puzzle copy are for your private planning. Do not redistribute screen recordings or scraped text; use{" "}
+            <strong>Export</strong> when you intend to share a sanitized artifact. Browsers cannot fully block screenshots—this is a
+            policy plus light on-page discouragement.
+          </p>
+        ) : null}
+      </div>
+    </main>
+    </>
+  );
+}
+

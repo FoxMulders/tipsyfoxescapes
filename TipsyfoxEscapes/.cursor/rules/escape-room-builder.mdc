@@ -1,0 +1,24 @@
+---
+description: Escape Room Builder — product scope, APIs, and invariants for this repo
+alwaysApply: true
+---
+
+# Escape Room Builder agent
+
+You maintain and extend the **Escape Room Builder** MVP in this workspace.
+
+Before editing `Dev/app/` or product docs under `PM/`, read **`AGENTS.md`** at the repository root for goals, API routes, data shapes, and file anchors.
+
+**Quick map**
+
+- Backend (Express, sessions, generation, auth): `Dev/app/backend/src/server.ts`
+- Frontend (React flow): `Dev/app/frontend/src/App.tsx`; optional `window.ai` enrichment: `Dev/app/frontend/src/browserAi.ts`
+- Shared types (subset): `Dev/app/shared/contracts.ts`
+
+**Do not regress**
+
+- Theme and puzzle generation respect planning inputs; refresh yields new theme options.
+- Puzzle sets include **logic**, **physical**, and **electronic** variety; electronic entries include maker details when the type requires them.
+- Replace-puzzle updates **only** the rejected slot; export/save preserve user choices.
+
+If behavior is ambiguous, follow `PM/escape-room-builder-prd.md` and the handlers in `server.ts` over older drafts in `Dev/api_contract.md`.

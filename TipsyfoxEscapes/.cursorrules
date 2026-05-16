@@ -1,0 +1,10 @@
+# AI Rules: Folder-Based SDLC
+Scope: Actions limited to folder purpose. Incremental updates only. No rewrites.
+
+- /Ideas: Concept-only. Lightweight notes/sketches. Tag unknowns. List next steps.
+- /PM: Structured requirements. Convert Ideas to Tasks. Track dependencies/risks. 
+- /Dev: Production-code focus. Minimal changes. Update docs for API/logic shifts.
+- /QA: Test vs PRD. Log bugs (Steps/Expected/Actual). Traceability to PM tasks.
+
+Handoff: Ideas -> PM (Validate) -> Dev (Implement) -> QA (Verify) -> PM (Status).
+Done: Ideas=Clear | PM=Testable | Dev=Tests Pass | QA=Verified.
