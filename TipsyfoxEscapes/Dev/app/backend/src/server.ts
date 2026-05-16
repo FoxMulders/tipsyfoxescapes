@@ -13,6 +13,14 @@ import {
   trialAccessError,
   trialSaveError,
 } from "./billing/trial.js";
+import { ensureDataDir, getDataDir } from "./dataDir.js";
+import { createOAuthState, verifyOAuthState } from "./oauthState.js";
+import {
+  loadAuthTokens,
+  loadPlanningSessions,
+  persistAuthTokens,
+  persistPlanningSessions,
+} from "./runtimePersistence.js";
 
 type PuzzleReferenceLink = {
   title: string;
@@ -168,6 +176,28 @@ type SessionState = {
   suggestedAdditionsRequired: string[];
   currentStoryPlan?: StoryPlan;
 };
+
+const serializeSessionForDisk = (session: SessionState) => ({
+  ...session,
+  seenThemeIds: [...session.seenThemeIds],
+  seenThemeTitlesLower: [...session.seenThemeTitlesLower],
+  seenPuzzleIds: [...session.seenPuzzleIds],
+});
+
+const deserializeSessionFromDisk = (raw: Record<string, unknown>): SessionState => {
+  const data = raw as Omit<SessionState, "seenThemeIds" | "seenThemeTitlesLower" | "seenPuzzleIds"> & {
+    seenThemeIds?: string[];
+    seenThemeTitlesLower?: string[];
+    seenPuzzleIds?: string[];
+  };
+  return {
+    ...data,
+    seenThemeIds: new Set(data.seenThemeIds ?? []),
+    seenThemeTitlesLower: new Set(data.seenThemeTitlesLower ?? []),
+    seenPuzzleIds: new Set(data.seenPuzzleIds ?? []),
+  };
+};
+
 type SkipEntryType = "theme" | "puzzle";
 type SkipEntry = {
   type: SkipEntryType;
@@ -248,6 +278,15 @@ registerSquareWebhook(app, () => {
 
 // Parse JSON request bodies for API endpoints.
 app.use(express.json());
+app.use((_req, res, next) => {
+  res.on("finish", () => {
+    void (async () => {
+      await persistAuthTokens(authTokens);
+      await persistPlanningSessions(sessions, (session) => serializeSessionForDisk(session as SessionState));
+    })();
+  });
+  next();
+});
 let nextSessionId = 1;
 const sessions = new Map<string, SessionState>();
 let nextThemeId = 1000;
@@ -258,16 +297,16 @@ const SKIP_TTL_MS = 24 * 60 * 60 * 1000;
  * `npm run dev` / `npm start` from `Dev/app/backend`). Use lowercase path segments only: Oracle Linux
  * and other case-sensitive filesystems will not resolve `Data/Users.json` as the same file.
  */
-const skipHistoryPath = path.join(process.cwd(), "data", "skip-history.json");
+const skipHistoryPath = path.join(getDataDir(), "skip-history.json");
 const skipEntries = new Map<string, SkipEntry>();
 const usersByEmail = new Map<string, StoredUser>();
 const authTokens = new Map<string, string>();
 let nextUserId = 1;
-const savedPlansPath = path.join(process.cwd(), "data", "user-plans.json");
-const usersPath = path.join(process.cwd(), "data", "users.json");
-const organizationPoolsPath = path.join(process.cwd(), "data", "organization-pools.json");
-const billingAuditPath = path.join(process.cwd(), "data", "billing-audit.jsonl");
-const usageLedgerPath = path.join(process.cwd(), "data", "usage-ledger.json");
+const savedPlansPath = path.join(getDataDir(), "user-plans.json");
+const usersPath = path.join(getDataDir(), "users.json");
+const organizationPoolsPath = path.join(getDataDir(), "organization-pools.json");
+const billingAuditPath = path.join(getDataDir(), "billing-audit.jsonl");
+const usageLedgerPath = path.join(getDataDir(), "usage-ledger.json");
 const savedPlansByUser = new Map<string, SavedPlan[]>();
 /** Planning session -> user id (first authenticated creator or claim). */
 const sessionUserOwners = new Map<string, string>();
@@ -579,11 +618,6 @@ const persistUsageLedger = async (): Promise<void> => {
   await fs.mkdir(path.dirname(usageLedgerPath), { recursive: true });
   await fs.writeFile(usageLedgerPath, JSON.stringify(usageLedger, null, 2), "utf8");
 };
-const oauthStateStore = new Map<
-  string,
-  { provider: "google" | "facebook" | "github"; returnTo: string; createdAtMs: number }
->();
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 const themePool: Theme[] = [
   {
@@ -3161,13 +3195,6 @@ const redirectOAuthStartFailure = (res: express.Response, returnToRaw: string, c
   res.redirect(302, u.toString());
 };
 
-const cleanupExpiredOauthStates = (): void => {
-  const now = Date.now();
-  for (const [state, payload] of oauthStateStore.entries()) {
-    if (now - payload.createdAtMs > OAUTH_STATE_TTL_MS) oauthStateStore.delete(state);
-  }
-};
-
 const readAuthUserId = (req: express.Request): string | undefined => {
   const authHeader = String(req.headers.authorization ?? "");
   if (!authHeader.toLowerCase().startsWith("bearer ")) return undefined;
@@ -3506,7 +3533,6 @@ app.get("/api/billing/audit-log", async (req, res) => {
 
 app.get("/api/auth/oauth/:provider/start", (req, res) => {
   try {
-    cleanupExpiredOauthStates();
     const provider = String(req.params.provider ?? "").toLowerCase() as "google" | "facebook" | "github";
     const allowedProviders = new Set(["google", "facebook", "github"]);
     if (!allowedProviders.has(provider)) {
@@ -3532,8 +3558,7 @@ app.get("/api/auth/oauth/:provider/start", (req, res) => {
     }
 
     const callbackUri = `${callbackBaseUrl.replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`;
-    const state = `${provider}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    oauthStateStore.set(state, { provider, returnTo, createdAtMs: Date.now() });
+    const state = createOAuthState(provider, returnTo);
 
     const params = new URLSearchParams({
       client_id: clientId,
@@ -3568,18 +3593,16 @@ app.get("/api/auth/oauth/:provider/start", (req, res) => {
 });
 
 app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
-  cleanupExpiredOauthStates();
   const provider = String(req.params.provider ?? "").toLowerCase() as "google" | "facebook" | "github";
   const code = String(req.query.code ?? "");
   const state = String(req.query.state ?? "");
-  const stateData = oauthStateStore.get(state);
-  if (!code || !stateData || stateData.provider !== provider) {
+  const stateData = verifyOAuthState(state, provider);
+  if (!code || !stateData) {
     res.status(400).json({
       error: { code: "OAUTH_CALLBACK_INVALID", message: "Invalid or expired OAuth callback state.", details: [] },
     });
     return;
   }
-  oauthStateStore.delete(state);
 
   try {
     const callbackBaseUrl = String(process.env.AUTH_CALLBACK_BASE_URL ?? "").trim();
@@ -5008,12 +5031,35 @@ const applyPlanTopUp = (
 };
 
 const port = process.env.PORT || 3001;
-void (async () => {
+
+const recomputeIdCountersFromSessions = (): void => {
+  for (const id of sessions.keys()) {
+    const match = /^sess_(\d+)$/.exec(id);
+    if (match) nextSessionId = Math.max(nextSessionId, Number(match[1]) + 1);
+  }
+  for (const session of sessions.values()) {
+    const themes = [
+      ...(session as SessionState).customThemes,
+      ...(session as SessionState).generatedThemes,
+      ...((session as SessionState).selectedTheme ? [(session as SessionState).selectedTheme!] : []),
+    ];
+    for (const theme of themes) {
+      const match = /(\d+)$/.exec(theme.id);
+      if (match) nextThemeId = Math.max(nextThemeId, Number(match[1]) + 1);
+    }
+  }
+};
+
+export async function bootstrap(): Promise<void> {
+  await ensureDataDir();
   await loadSkipHistory();
   await loadUsers();
   await loadOrganizationPools();
   await loadUsageLedger();
   await loadSavedPlans();
+  await loadAuthTokens(authTokens);
+  await loadPlanningSessions(sessions, deserializeSessionFromDisk);
+  recomputeIdCountersFromSessions();
 
   let usersMigrated = false;
   for (const user of usersByEmail.values()) {
@@ -5042,10 +5088,16 @@ void (async () => {
     toPublicUser: (user) => toPublicUser(user as StoredUser),
   };
   registerBillingRoutes(app, () => billingRouteDeps!);
+}
 
-  app.listen(port, () => {
-    // eslint-disable-next-line no-console
-    console.log(`Backend running on http://localhost:${port}`);
+export { app };
+
+if (!process.env.VERCEL) {
+  void bootstrap().then(() => {
+    app.listen(port, () => {
+      // eslint-disable-next-line no-console
+      console.log(`Backend running on http://localhost:${port}`);
+    });
   });
-})();
+}
 
