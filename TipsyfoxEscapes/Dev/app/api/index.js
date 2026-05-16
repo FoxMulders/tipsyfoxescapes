@@ -3,8 +3,7 @@ const { existsSync } = require("node:fs");
 const { join } = require("node:path");
 
 const requireFromHere = createRequire(__filename);
-const apiDir = __dirname;
-const serverBundlePath = join(apiDir, "server.cjs");
+const serverBundlePath = join(__dirname, "server.cjs");
 let expressHandler;
 
 /** Restore full /api/... path after rewrite to /api. */

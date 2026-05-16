@@ -14,7 +14,7 @@
     "api/health.js": {
       "maxDuration": 10
     },
-    "api/index.cjs": {
+    "api/index.js": {
       "maxDuration": 30,
       "memory": 1024,
       "includeFiles": "api/server.cjs"
