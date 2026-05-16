@@ -41,8 +41,13 @@ export default async function handler(req, res) {
     return;
   }
 
-  const incomingPath = req.url ?? "/api";
-  const targetUrl = `${backendBase}${incomingPath.startsWith("/") ? incomingPath : `/${incomingPath}`}`;
+  // Vercel catch-all: path segments are in req.query.path, not always in req.url.
+  const pathParam = req.query.path;
+  const segments = Array.isArray(pathParam) ? pathParam.join("/") : String(pathParam ?? "").trim();
+  const queryStart = typeof req.url === "string" ? req.url.indexOf("?") : -1;
+  const queryString = queryStart >= 0 ? req.url.slice(queryStart) : "";
+  const incomingPath = segments ? `/api/${segments}${queryString}` : `/api${queryString}`;
+  const targetUrl = `${backendBase}${incomingPath}`;
 
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
