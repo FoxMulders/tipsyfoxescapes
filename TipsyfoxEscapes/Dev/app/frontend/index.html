@@ -2,24 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Escape Room Builder — plan cinematic home escape rooms with themes, puzzles, and host-ready exports." />
+    <meta name="theme-color" content="#0f172a" />
     <title>Escape Room Builder</title>
   </head>
   <body>
-    <div id="root">Loading app...</div>
+    <div id="root" role="status" aria-live="polite">Loading app…</div>
     <script>
       window.setTimeout(function () {
         var root = document.getElementById("root");
         if (!root) return;
-        if (root.textContent && root.textContent.indexOf("Loading app...") !== -1) {
+        if (root.textContent && root.textContent.indexOf("Loading app") !== -1) {
           root.innerHTML =
-            "<h1>Escape Room Builder</h1>" +
+            "<main><h1>Escape Room Builder</h1>" +
             "<p>The app did not boot from this file directly.</p>" +
-            "<p>Start the frontend dev server in <code>Dev/app/frontend</code> with <code>npm install</code> then <code>npm run dev</code>, and open the Vite URL.</p>";
+            "<p>Start the frontend dev server in <code>Dev/app/frontend</code> with <code>npm install</code> then <code>npm run dev</code>, and open the Vite URL.</p></main>";
         }
       }, 1500);
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

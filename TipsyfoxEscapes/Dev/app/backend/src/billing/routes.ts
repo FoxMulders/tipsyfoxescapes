@@ -137,6 +137,8 @@ export const registerBillingRoutes = (app: Express, getDeps: () => BillingRouteD
       square: {
         configured: square.configured,
         environment: square.environment,
+        applicationId: square.applicationId || null,
+        locationId: square.configured ? square.locationId : null,
       },
       billingModel: "one_time_room_packs",
     });
@@ -262,6 +264,45 @@ export const registerBillingRoutes = (app: Express, getDeps: () => BillingRouteD
       roomsAdded: result.roomsAdded,
       exportCreditsAdded: result.exportCreditsAdded,
       user: result.user,
+    });
+  });
+
+  /** Web Payments SDK nonce handler (stub — charge + fulfill wired next). */
+  app.post("/api/payments/square/process", async (req, res) => {
+    const user = deps().readAuthUser(req);
+    if (!user) {
+      res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
+      return;
+    }
+    const sourceId = String((req.body as { sourceId?: string })?.sourceId ?? "").trim();
+    const planId = String((req.body as { planId?: string })?.planId ?? "").trim();
+    if (!sourceId || !planId) {
+      res.status(400).json({
+        error: { code: "VALIDATION_ERROR", message: "sourceId and planId are required.", details: [] },
+      });
+      return;
+    }
+    const plan = billingPlanById(planId);
+    if (!plan || !plan.purchasable) {
+      res.status(400).json({ error: { code: "INVALID_PLAN", message: "Unknown or non-purchasable plan.", details: [] } });
+      return;
+    }
+    const square = readSquareConfig();
+    if (!square.configured) {
+      res.status(503).json({
+        error: {
+          code: "SQUARE_NOT_CONFIGURED",
+          message: "Square payments are not configured on the server.",
+          details: [],
+        },
+      });
+      return;
+    }
+    res.status(202).json({
+      ok: true,
+      status: "stub",
+      message: "Payment nonce received. Server-side charge fulfillment will complete this flow.",
+      planId,
     });
   });
 };

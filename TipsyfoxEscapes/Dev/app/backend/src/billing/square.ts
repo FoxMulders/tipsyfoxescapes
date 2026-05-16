@@ -13,6 +13,7 @@ import {
 export type SquareConfig = {
   configured: boolean;
   environment: "sandbox" | "production";
+  applicationId: string;
   locationId: string;
   accessToken: string;
   webhookSignatureKey: string;
@@ -22,6 +23,7 @@ export type SquareConfig = {
 
 export const readSquareConfig = (): SquareConfig => {
   const accessToken = String(process.env.SQUARE_ACCESS_TOKEN ?? "").trim();
+  const applicationId = String(process.env.SQUARE_APPLICATION_ID ?? "").trim();
   const locationId = String(process.env.SQUARE_LOCATION_ID ?? "").trim();
   const envRaw = String(process.env.SQUARE_ENVIRONMENT ?? "sandbox").trim().toLowerCase();
   const environment = envRaw === "production" ? "production" : "sandbox";
@@ -35,6 +37,7 @@ export const readSquareConfig = (): SquareConfig => {
   return {
     configured: Boolean(accessToken && locationId),
     environment,
+    applicationId,
     locationId,
     accessToken,
     webhookSignatureKey,

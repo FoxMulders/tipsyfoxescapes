@@ -27,6 +27,7 @@ import {
   type InspirationCatalogEntry,
 } from "./browserAi.ts";
 import { getOrCreateDeviceId } from "./deviceId.ts";
+import { SquareCheckout } from "./components/SquareCheckout.tsx";
 
 const APP_BUILD_STAMP = typeof __APP_SEMVER__ !== "undefined" ? __APP_SEMVER__ : "0.0.0";
 
@@ -2098,6 +2099,13 @@ export default function App() {
   const [billingNotice, setBillingNotice] = useState<string>("");
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [squarePaymentsReady, setSquarePaymentsReady] = useState<boolean>(false);
+  const [squareWebConfig, setSquareWebConfig] = useState<{
+    applicationId: string;
+    locationId: string;
+    environment: "sandbox" | "production";
+  } | null>(null);
+  const [socialAuthProvider, setSocialAuthProvider] = useState<"google" | "facebook" | "github" | null>(null);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
   const [upgradePromptOpen, setUpgradePromptOpen] = useState(false);
   const [upgradePromptMessage, setUpgradePromptMessage] = useState("");
@@ -2778,13 +2786,30 @@ export default function App() {
         if (!response.ok) return;
         const data = (await response.json()) as {
           plans?: BillingPlan[];
-          square?: { configured?: boolean };
+          square?: {
+            configured?: boolean;
+            environment?: string;
+            applicationId?: string | null;
+            locationId?: string | null;
+          };
         };
         setBillingPlans(Array.isArray(data.plans) ? data.plans : []);
         setSquarePaymentsReady(Boolean(data.square?.configured));
+        const appId = String(data.square?.applicationId ?? "").trim();
+        const locationId = String(data.square?.locationId ?? "").trim();
+        setSquareWebConfig(
+          appId && locationId
+            ? {
+                applicationId: appId,
+                locationId,
+                environment: data.square?.environment === "production" ? "production" : "sandbox",
+              }
+            : null,
+        );
       } catch {
         setBillingPlans([]);
         setSquarePaymentsReady(false);
+        setSquareWebConfig(null);
       }
     })();
   }, []);
@@ -2941,10 +2966,12 @@ export default function App() {
   }, [authToken]);
 
   const handleSignup = async (): Promise<void> => {
+    setAuthSubmitting(true);
     try {
       setError("");
       if (!termsAccepted) {
         setError("Please read and accept the Terms of Service to create an account.");
+        setAuthSubmitting(false);
         return;
       }
       const response = await fetch(`${API_BASE}/api/auth/signup`, {
@@ -2970,10 +2997,13 @@ export default function App() {
       persistAuth(data.authToken, signedUp);
     } catch {
       setError("Sign up failed. Check backend and try again.");
+    } finally {
+      setAuthSubmitting(false);
     }
   };
 
   const handleLogin = async (): Promise<void> => {
+    setAuthSubmitting(true);
     try {
       setError("");
       const response = await fetch(`${API_BASE}/api/auth/login`, {
@@ -2994,11 +3024,14 @@ export default function App() {
       persistAuth(data.authToken, loggedIn);
     } catch {
       setError("Log in failed. Check backend and try again.");
+    } finally {
+      setAuthSubmitting(false);
     }
   };
 
   const handleSocialAuth = (provider: "google" | "facebook" | "github"): void => {
     setError("");
+    setSocialAuthProvider(provider);
     const returnTo = `${window.location.origin}${window.location.pathname}`;
     window.location.assign(
       `${API_BASE}/api/auth/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`,
@@ -4754,9 +4787,9 @@ export default function App() {
               </div>
             </div>
           </section>
-        <section id="auth-card-panel" className="card auth-card auth-panel glass-panel">
-          <div className="auth-panel-head">
-            <h2 className="auth-panel-title">{authMode === "signup" ? "Create account" : "Log in"}</h2>
+        <section id="auth-card-panel" className="card auth-card auth-panel glass-panel" aria-labelledby="auth-panel-title">
+          <header className="auth-panel-head">
+            <h2 id="auth-panel-title" className="auth-panel-title">{authMode === "signup" ? "Create account" : "Log in"}</h2>
             <p className="muted auth-mode-switch">
               {authMode === "signup" ? (
                 <>
@@ -4781,7 +4814,7 @@ export default function App() {
                 </>
               )}
             </p>
-          </div>
+          </header>
           <div className="form-grid">
             {authMode === "signup" ? (
               <label className="field-row">
@@ -4819,24 +4852,48 @@ export default function App() {
                 </p>
               </div>
             ) : null}
-            <button type="button" className="primary-btn" onClick={authMode === "signup" ? handleSignup : handleLogin}>
-              {authMode === "signup" ? "Create Account" : "Log In"}
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={authSubmitting || !!socialAuthProvider}
+              aria-busy={authSubmitting}
+              onClick={authMode === "signup" ? handleSignup : handleLogin}
+            >
+              {authSubmitting ? "Please wait…" : authMode === "signup" ? "Create Account" : "Log In"}
             </button>
           </div>
           <p className="muted">
             Or continue with social sign-in:
           </p>
-          <div className="social-auth-grid">
-            <button type="button" className="social-btn social-google" onClick={() => handleSocialAuth("google")}>
-              Continue with Google
+          <nav className="social-auth-grid" aria-label="Social sign-in">
+            <button
+              type="button"
+              className="social-btn social-google"
+              disabled={!!socialAuthProvider || authSubmitting}
+              aria-busy={socialAuthProvider === "google"}
+              onClick={() => handleSocialAuth("google")}
+            >
+              {socialAuthProvider === "google" ? "Redirecting to Google…" : "Continue with Google"}
             </button>
-            <button type="button" className="social-btn social-facebook" onClick={() => handleSocialAuth("facebook")}>
-              Continue with Facebook
+            <button
+              type="button"
+              className="social-btn social-facebook"
+              disabled={!!socialAuthProvider || authSubmitting}
+              aria-busy={socialAuthProvider === "facebook"}
+              onClick={() => handleSocialAuth("facebook")}
+            >
+              {socialAuthProvider === "facebook" ? "Redirecting to Facebook…" : "Continue with Facebook"}
             </button>
-            <button type="button" className="social-btn social-github" onClick={() => handleSocialAuth("github")}>
-              Continue with GitHub
+            <button
+              type="button"
+              className="social-btn social-github"
+              disabled={!!socialAuthProvider || authSubmitting}
+              aria-busy={socialAuthProvider === "github"}
+              onClick={() => handleSocialAuth("github")}
+            >
+              {socialAuthProvider === "github" ? "Redirecting to GitHub…" : "Continue with GitHub"}
             </button>
-          </div>
+          </nav>
         </section>
         </div>
         {billingPlans.length > 0 ? (
@@ -5012,6 +5069,27 @@ export default function App() {
                   <code>SQUARE_LOCATION_ID</code> in the backend <code>.env</code> to enable purchases.
                 </p>
               ) : null}
+              {squarePaymentsReady && authToken ? (
+                <SquareCheckout
+                  planId={
+                    billingPlans.find((plan) => plan.purchasable && plan.highlight)?.id ??
+                    billingPlans.find((plan) => plan.purchasable)?.id ??
+                    "single"
+                  }
+                  planLabel={
+                    billingPlans.find((plan) => plan.purchasable && plan.highlight)?.name ??
+                    billingPlans.find((plan) => plan.purchasable)?.name ??
+                    "Room pack"
+                  }
+                  authToken={authToken}
+                  square={squareWebConfig}
+                  onNotice={(message) => {
+                    setBillingNotice(message);
+                    setError("");
+                  }}
+                  onError={(message) => setError(message)}
+                />
+              ) : null}
               <div className="pricing-grid">
                 {billingPlans.map((plan) => {
                   const isCurrent = plan.id === "free" ? authUser.billingTier === "trial" : false;
@@ -5043,6 +5121,7 @@ export default function App() {
                           type="button"
                           className={plan.highlight ? "primary-btn" : "secondary-btn"}
                           disabled={!squarePaymentsReady || checkoutPlanId === plan.id}
+                          aria-busy={checkoutPlanId === plan.id}
                           onClick={() => void handlePurchasePlan(plan.id)}
                         >
                           {checkoutPlanId === plan.id

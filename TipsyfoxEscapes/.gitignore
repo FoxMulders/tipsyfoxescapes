@@ -20,7 +20,6 @@ pnpm-debug.log*
 **/node_modules/
 **/dist/
 **/build/
-Dev/app/frontend/api/_bundle/
 **/.vite/
 **/.cache/
 **/*.tsbuildinfo
