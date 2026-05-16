@@ -8,6 +8,7 @@ const apiDir = dirname(fileURLToPath(import.meta.url));
 const serverBundlePath = join(apiDir, "server.cjs");
 let expressHandler;
 
+/** Restore full /api/... path after rewrite to /api. */
 const normalizeApiUrl = (req) => {
   const query = req.url?.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
   for (const raw of [
@@ -35,13 +36,17 @@ const normalizeApiUrl = (req) => {
 export default async function handler(req, res) {
   normalizeApiUrl(req);
   if (!existsSync(serverBundlePath)) {
-    res.status(503).json({
-      error: {
-        code: "SERVER_BUNDLE_MISSING",
-        message:
-          "api/server.cjs was not built. Check the Vercel build log for [bundle-server] and confirm Root Directory is TipsyfoxEscapes/Dev/app.",
-      },
-    });
+    res.statusCode = 503;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(
+      JSON.stringify({
+        error: {
+          code: "SERVER_BUNDLE_MISSING",
+          message:
+            "api/server.cjs was not built. Check the Vercel build log for [bundle-server] and confirm Root Directory is TipsyfoxEscapes/Dev/app.",
+        },
+      }),
+    );
     return;
   }
   try {
@@ -52,8 +57,8 @@ export default async function handler(req, res) {
     return expressHandler(req, res);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({
-      error: { code: "SERVER_LOAD_FAILED", message },
-    });
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(JSON.stringify({ error: { code: "SERVER_LOAD_FAILED", message } }));
   }
 }
