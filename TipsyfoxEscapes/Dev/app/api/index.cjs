@@ -1,10 +1,9 @@
-import { createRequire } from "node:module";
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+const { createRequire } = require("node:module");
+const { existsSync } = require("node:fs");
+const { join } = require("node:path");
 
-const require = createRequire(import.meta.url);
-const apiDir = dirname(fileURLToPath(import.meta.url));
+const requireFromHere = createRequire(__filename);
+const apiDir = __dirname;
 const serverBundlePath = join(apiDir, "server.cjs");
 let expressHandler;
 
@@ -33,7 +32,7 @@ const normalizeApiUrl = (req) => {
   }
 };
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   normalizeApiUrl(req);
   if (!existsSync(serverBundlePath)) {
     res.statusCode = 503;
@@ -51,7 +50,7 @@ export default async function handler(req, res) {
   }
   try {
     if (!expressHandler) {
-      const mod = require(serverBundlePath);
+      const mod = requireFromHere(serverBundlePath);
       expressHandler = mod.default ?? mod;
     }
     return expressHandler(req, res);
@@ -61,4 +60,4 @@ export default async function handler(req, res) {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.end(JSON.stringify({ error: { code: "SERVER_LOAD_FAILED", message } }));
   }
-}
+};

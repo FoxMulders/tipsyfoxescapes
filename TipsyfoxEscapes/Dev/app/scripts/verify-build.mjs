@@ -6,7 +6,7 @@ const appRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const required = [
   join(appRoot, "api/server.cjs"),
   join(appRoot, "api/health.js"),
-  join(appRoot, "api/index.js"),
+  join(appRoot, "api/index.cjs"),
   join(appRoot, "frontend/dist/index.html"),
 ];
 
