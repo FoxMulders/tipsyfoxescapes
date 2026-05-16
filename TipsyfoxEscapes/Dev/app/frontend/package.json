@@ -14,7 +14,6 @@
     "prebuild": "node scripts/bump-app-version.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "vercel-build": "npm ci --prefix ../backend && npm run build --prefix ../backend && npm run build",
     "preview": "vite preview",
     "upload": "powershell -ExecutionPolicy Bypass -File ./scripts/upload-dist.ps1"
   },

@@ -1,8 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "buildCommand": "npm run vercel-build",
-  "outputDirectory": "dist",
+  "installCommand": "npm ci --prefix frontend",
+  "buildCommand": "npm ci --prefix backend && npm run build --prefix backend && SKIP_VERSION_BUMP=1 npm run build --prefix frontend",
+  "outputDirectory": "frontend/dist",
   "rewrites": [
     {
       "source": "/api/:path*",
