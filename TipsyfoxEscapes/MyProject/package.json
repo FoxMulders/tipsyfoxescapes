@@ -1,0 +1,12 @@
+{
+  "name": "escape-room-builder",
+  "private": true,
+  "description": "Root convenience scripts; packages live under Dev/app/",
+  "scripts": {
+    "build": "npm run build --prefix Dev/app/frontend",
+    "build:frontend": "npm run build --prefix Dev/app/frontend",
+    "build:backend": "npm run build --prefix Dev/app/backend",
+    "dev:frontend": "npm run dev --prefix Dev/app/frontend",
+    "dev:backend": "npm run dev --prefix Dev/app/backend"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "escape-room-builder-frontend",
+  "version": "1.0.3",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bump:patch": "node scripts/bump-app-version.mjs patch",
+    "bump:minor": "node scripts/bump-app-version.mjs minor",
+    "bump:major": "node scripts/bump-app-version.mjs major",
+    "predev": "node scripts/bump-app-version.mjs",
+    "prebuild": "node scripts/bump-app-version.mjs",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "upload": "powershell -ExecutionPolicy Bypass -File ./scripts/upload-dist.ps1"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.8",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "typescript": "^5.6.2",
+    "vite": "^8.0.12"
+  }
+}

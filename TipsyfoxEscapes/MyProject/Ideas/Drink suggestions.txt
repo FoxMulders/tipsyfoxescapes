@@ -1,0 +1,6 @@
+Drink suggestions
+Uses camera to take images or a movie of all the products you have. 
+It should also been a website that you feed a video or photos to.
+Local AI will take that and convert it into a list for you in app. It should include all beverages and tools (ie muddler, shaker etc). This will have to use item identification. 
+From there the app will ask what type of drink you would like and will make suggestions based on what you have. 
+It will provide the recipe and any directions. 

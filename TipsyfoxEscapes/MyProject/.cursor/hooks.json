@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": "node scripts/qa-notify.mjs --source=after-file-edit",
+        "timeout": 60,
+        "matcher": "Write|TabWrite"
+      }
+    ],
+    "stop": [
+      {
+        "command": "node scripts/qa-notify.mjs --source=cursor-stop",
+        "timeout": 120
+      }
+    ]
+  }
+}

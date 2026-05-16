@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How To Use | Tipsy Fox Escape Builder</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem auto; max-width: 900px; line-height: 1.55; padding: 0 1rem; color: #1a1a1a; }
+    h1 { margin-bottom: 0.5rem; }
+    h2 { font-size: 1.1rem; margin-top: 1.25rem; }
+    .muted { color: #444; font-size: 0.95rem; }
+    ol { padding-left: 1.2rem; }
+    ol li { margin: 0.35rem 0; }
+    code { background: #f0f4f8; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.9em; }
+    a { color: #1a56db; }
+  </style>
+</head>
+<body>
+  <h1>How To Use</h1>
+  <p class="muted">Follow the <strong>Flow</strong> strip at the top of the builder. Steps match what you see in the app.</p>
+
+  <h2>1. Sign in</h2>
+  <ol>
+    <li>Create an account or log in. The builder assumes a signed-in user for saving and for catalog limits.</li>
+  </ol>
+
+  <h2>2. Room details</h2>
+  <ol start="2">
+    <li>Enter <strong>players at one time</strong>, <strong>total participants</strong>, and <strong>session duration</strong> (minutes).</li>
+    <li>Enter <strong>environment</strong> (where the game runs) and <strong>available items</strong> as tags — the server uses these for themes, puzzle hooks, and export ideas. See <a href="#how-items-become-puzzles">How available items become puzzles</a> below.</li>
+    <li>Set <strong>room difficulty</strong> and optional <strong>junior add-on</strong> options if you need a parallel easier track.</li>
+    <li>Click <strong>Continue to themes</strong> (or equivalent). Incomplete required fields are highlighted.</li>
+  </ol>
+
+  <h2>3. Choose a theme</h2>
+  <ol start="6">
+    <li>
+      On the <strong>free trial</strong>, the <strong>same three curated themes</strong> load automatically when you reach this step — pick a theme with the radio, then <strong>Continue to puzzle builder</strong>. With a <strong>paid room pack / full catalog</strong>, use <strong>Generate For Me</strong> or <strong>Refresh Ideas</strong> for the wider rotating set.
+    </li>
+    <li><strong>Use My Own Theme</strong> — only if you have <strong>full catalog</strong> access (room pack). Enter a <strong>theme name</strong>.</li>
+    <li>Write or paste your <strong>theme description</strong> in the large text area <strong>above</strong> the theme coach (markdown-friendly sections are fine).</li>
+    <li>Optional: use the <strong>theme coach</strong> below that field when Chrome on-device AI is enabled; use <strong>Apply answers to description</strong> to merge interview answers into the text area.</li>
+    <li>Click <strong>Add and Select Custom Theme</strong> to save the custom theme and jump to <strong>Build puzzle set</strong>. If something fails, read the red banner at the <strong>top of the Flow card</strong>.</li>
+  </ol>
+
+  <h2 id="how-items-become-puzzles">How available items become puzzles</h2>
+  <ul>
+    <li><strong>Each tag is a physical anchor.</strong> List one prop per tag (sofa, ping-pong table, TV, side table). The generator folds them into the theme brief as a numbered story-integration list: where the object sits in the fiction and how a puzzle uses it (clues on a table, a looping video on the TV, a lockbox on a side table, tags in sofa cushions, and similar).</li>
+    <li><strong>Puzzles and copy reference those anchors.</strong> Generated puzzles get inventory tie-ins, and the export includes a <strong>Build team anchor checklist</strong> so ops knows which objects are load-bearing for logic — not movable without redesign.</li>
+    <li><strong>“Add existing puzzle” links</strong> are stored as references in your plan and export (the app does not scrape them). <strong>Puzzle reference links</strong> after generation are for technique, credit, and safety — adapt into <strong>original</strong> venue builds.</li>
+    <li><strong>Polish with on-device AI.</strong> On the theme step, use <strong>Editor pass</strong> (when available in supported browsers) so awkward generator sentences read more cleanly — without changing your inventory contract.</li>
+  </ul>
+
+  <h2>4. Build puzzle set</h2>
+  <ol start="11">
+    <li>Optionally add <strong>existing puzzles</strong> you already own (name, link, room part).</li>
+    <li>Click <strong>Generate puzzles</strong> when you are ready. Puzzle count follows the room timing and difficulty you saved earlier.</li>
+    <li>
+      Use <strong>Continue to output review</strong> after you have at least one generated puzzle (the button stays disabled until then). The <strong>Output: Review</strong> card opens <strong>below</strong> the Flow summary; the view scrolls to it. If room details are invalid, fix them via <strong>← Back</strong> to Room details—the app shows a red banner at the top of the Flow card.
+    </li>
+  </ol>
+
+  <h2>5. Output</h2>
+  <ol start="14">
+    <li>Review the puzzle list and storyline. Use <strong>Continue to Export</strong> when ready.</li>
+    <li>Run <strong>Export Plan</strong>, optionally <strong>Mark Approved for Build</strong>, then <strong>Save Plan</strong> to keep it on your account.</li>
+  </ol>
+
+  <h2>Local development</h2>
+  <p class="muted">Run the backend from <code>Dev/app/backend</code> and the frontend from <code>Dev/app/frontend</code> (see project README / AGENTS). Open the Vite dev URL (not the raw <code>index.html</code> file) so scripts load correctly.</p>
+
+  <p><a href="/faq.html">FAQ</a> · <a href="/contact.html">Contact</a></p>
+</body>
+</html>

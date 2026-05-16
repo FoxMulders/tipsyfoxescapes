@@ -1,0 +1,9 @@
+Asks how many players at one time. 
+Asks the environment it will be in and what if any furniture and existing items are in the room. 
+Asks how many people will be participating. 
+Provide escape room theme suggestions with the ability to refresh new ones. 
+Once one is selected propose different puzzles to be made. 
+Each room should always have a variety of different puzzles, thinking, physical, electronic etc. 
+A puzzle can be rejected and should be replaced with a new one. 
+The same puzzles should not be suggested often. 
+Electronic puzzles use Arduino type electonics. They should provide the plans, parts required and instructions on how to build it (complete with code). 
