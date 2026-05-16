@@ -1,4 +1,4 @@
-/** Lightweight health check — confirms Vercel is routing /api/* to serverless functions. */
+/** Confirms Vercel routes /api/* to serverless functions (Root Directory = frontend). */
 export default function handler(_req, res) {
   res.status(200).json({
     ok: true,

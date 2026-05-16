@@ -22,6 +22,8 @@ pnpm-debug.log*
 **/build/
 api/server.cjs
 api/server.cjs.map
+Dev/app/frontend/api/server.cjs
+Dev/app/frontend/api/server.cjs.map
 **/.vite/
 **/.cache/
 **/*.tsbuildinfo
