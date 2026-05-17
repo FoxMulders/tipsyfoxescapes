@@ -1,0 +1,36 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const pkgPath = join(import.meta.dirname, "..", "frontend", "package.json");
+
+const readAppVersion = () => {
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    return typeof pkg.version === "string" ? pkg.version : "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+};
+
+const version = readAppVersion();
+
+const resolveBuildId = () => {
+  const sha = String(process.env.VERCEL_GIT_COMMIT_SHA ?? "").trim();
+  if (sha) return sha.slice(0, 7);
+  const deployment = String(process.env.VERCEL_DEPLOYMENT_ID ?? "").trim();
+  if (deployment) return deployment;
+  return String(process.env.BUILD_ID ?? "").trim();
+};
+
+/** Public app version for ops and footer cross-check. */
+export default function handler(_req, res) {
+  const build = resolveBuildId();
+  const body = JSON.stringify({
+    version,
+    build: build || new Date().toISOString(),
+  });
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=60");
+  res.end(body);
+}

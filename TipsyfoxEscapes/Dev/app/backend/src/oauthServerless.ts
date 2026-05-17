@@ -4,6 +4,7 @@ import path from "node:path";
 import { FREE_TIER_ROOM_ALLOWANCE, isTrialTierUser } from "./billing/trial.js";
 import { ensureDataDir, getDataDir } from "./dataDir.js";
 import { handleGitHubWebhook } from "./githubWebhook.js";
+import { buildOAuthCallbackUrl, resolveAuthCallbackBaseUrl } from "./oauthCallbackUrl.js";
 import { createOAuthState, verifyOAuthState } from "./oauthState.js";
 
 export { handleGitHubWebhook };
@@ -294,11 +295,11 @@ export const handleOAuthStart = async (
       return;
     }
 
-    const callbackBaseUrl = String(process.env.AUTH_CALLBACK_BASE_URL ?? "").trim();
+    const callbackBaseUrl = resolveAuthCallbackBaseUrl();
     const clientId = String(process.env[`${provider.toUpperCase()}_CLIENT_ID`] ?? "").trim();
     const clientSecret = String(process.env[`${provider.toUpperCase()}_CLIENT_SECRET`] ?? "").trim();
     if (!callbackBaseUrl || !clientId || !clientSecret) {
-      const exampleCallback = `${(callbackBaseUrl || "http://localhost:5173").replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`;
+      const exampleCallback = buildOAuthCallbackUrl(provider, callbackBaseUrl || "http://localhost:5173");
       redirectOAuthStartFailure(
         res,
         returnTo,
@@ -308,7 +309,7 @@ export const handleOAuthStart = async (
       return;
     }
 
-    const callbackUri = `${callbackBaseUrl.replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`;
+    const callbackUri = buildOAuthCallbackUrl(provider);
     const state = createOAuthState(provider, returnTo);
     const params = new URLSearchParams({
       client_id: clientId,
@@ -389,7 +390,7 @@ export const handleOAuthCallback = async (
     const message =
       oauthErrorDescription ||
       (oauthError === "redirect_uri_mismatch"
-        ? `GitHub redirect URI must exactly match ${String(process.env.AUTH_CALLBACK_BASE_URL ?? "").replace(/\/$/, "")}/api/auth/oauth/github/callback`
+        ? `GitHub redirect URI must exactly match ${buildOAuthCallbackUrl("github")}`
         : oauthError
           ? `${provider} sign-in failed (${oauthError}).`
           : "Authorization was not completed. Try signing in again.");
@@ -399,10 +400,9 @@ export const handleOAuthCallback = async (
 
   try {
     await ensureStorage();
-    const callbackBaseUrl = String(process.env.AUTH_CALLBACK_BASE_URL ?? "").trim();
     const clientId = String(process.env[`${provider.toUpperCase()}_CLIENT_ID`] ?? "").trim();
     const clientSecret = String(process.env[`${provider.toUpperCase()}_CLIENT_SECRET`] ?? "").trim();
-    const callbackUri = `${callbackBaseUrl.replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`;
+    const callbackUri = buildOAuthCallbackUrl(provider);
     let email = "";
     let name = "";
 

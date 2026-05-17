@@ -14,6 +14,7 @@ import {
   trialSaveError,
 } from "./billing/trial.js";
 import { ensureDataDir, getDataDir } from "./dataDir.js";
+import { buildOAuthCallbackUrl, resolveAuthCallbackBaseUrl } from "./oauthCallbackUrl.js";
 import { createOAuthState, verifyOAuthState } from "./oauthState.js";
 import {
   loadAuthTokens,
@@ -3557,11 +3558,11 @@ app.get("/api/auth/oauth/:provider/start", (req, res) => {
     }
 
     const returnTo = String(req.query.returnTo ?? "").trim() || "http://localhost:5173/";
-    const callbackBaseUrl = String(process.env.AUTH_CALLBACK_BASE_URL ?? "").trim();
+    const callbackBaseUrl = resolveAuthCallbackBaseUrl();
     const clientId = String(process.env[`${provider.toUpperCase()}_CLIENT_ID`] ?? "").trim();
     const clientSecret = String(process.env[`${provider.toUpperCase()}_CLIENT_SECRET`] ?? "").trim();
     if (!callbackBaseUrl || !clientId || !clientSecret) {
-      const exampleCallback = `${(callbackBaseUrl || "http://localhost:5173").replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`;
+      const exampleCallback = buildOAuthCallbackUrl(provider, callbackBaseUrl || "http://localhost:5173");
       redirectOAuthStartFailure(
         res,
         returnTo,
@@ -3571,7 +3572,7 @@ app.get("/api/auth/oauth/:provider/start", (req, res) => {
       return;
     }
 
-    const callbackUri = `${callbackBaseUrl.replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`;
+    const callbackUri = buildOAuthCallbackUrl(provider);
     const state = createOAuthState(provider, returnTo);
 
     const params = new URLSearchParams({
@@ -3627,11 +3628,10 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
     return;
   }
   if (!code) {
-    const callbackBase = String(process.env.AUTH_CALLBACK_BASE_URL ?? "").replace(/\/$/, "");
     const message =
       oauthErrorDescription ||
       (oauthError === "redirect_uri_mismatch"
-        ? `GitHub redirect URI must exactly match ${callbackBase}/api/auth/oauth/github/callback`
+        ? `GitHub redirect URI must exactly match ${buildOAuthCallbackUrl("github")}`
         : oauthError
           ? `${provider} sign-in failed (${oauthError}).`
           : "Authorization was not completed. Try signing in again.");
@@ -3640,10 +3640,9 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
   }
 
   try {
-    const callbackBaseUrl = String(process.env.AUTH_CALLBACK_BASE_URL ?? "").trim();
     const clientId = String(process.env[`${provider.toUpperCase()}_CLIENT_ID`] ?? "").trim();
     const clientSecret = String(process.env[`${provider.toUpperCase()}_CLIENT_SECRET`] ?? "").trim();
-    const callbackUri = `${callbackBaseUrl.replace(/\/$/, "")}/api/auth/oauth/${provider}/callback`;
+    const callbackUri = buildOAuthCallbackUrl(provider);
     let email = "";
     let name = "";
 

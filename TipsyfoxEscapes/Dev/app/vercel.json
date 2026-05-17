@@ -10,11 +10,15 @@
   },
   "rewrites": [
     { "source": "/webhook", "destination": "/api/webhook" },
+    { "source": "/version", "destination": "/api/version" },
     { "source": "/api/(.*)", "destination": "/api?path=$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "functions": {
     "api/health.js": {
+      "maxDuration": 10
+    },
+    "api/version.js": {
       "maxDuration": 10
     },
     "api/index.js": {
