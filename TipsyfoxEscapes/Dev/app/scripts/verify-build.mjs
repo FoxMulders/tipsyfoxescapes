@@ -7,6 +7,8 @@ const required = [
   join(appRoot, "api/oauth.cjs"),
   join(appRoot, "api/server.cjs"),
   join(appRoot, "api/health.js"),
+  join(appRoot, "api/version.js"),
+  join(appRoot, "api/app-version.json"),
   join(appRoot, "api/index.js"),
   join(appRoot, "api/auth/oauth/[provider]/start.js"),
   join(appRoot, "api/auth/oauth/[provider]/callback.js"),

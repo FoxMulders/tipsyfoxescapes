@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { promises as fs } from "fs";
+import { readFileSync, promises as fs } from "fs";
 import path from "path";
 import crypto from "crypto";
 import { loadEnv } from "./loadEnv.js";
@@ -3290,6 +3290,28 @@ app.get("/health", (_req, res) => {
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, service: "escape-room-builder" });
+});
+
+app.get("/version", (_req, res) => {
+  const readVersion = (): string => {
+    const bundled = path.join(__dirname, "..", "..", "api", "app-version.json");
+    try {
+      const data = JSON.parse(readFileSync(bundled, "utf8")) as { version?: string };
+      if (typeof data.version === "string" && data.version.trim()) return data.version.trim();
+    } catch {
+      /* fall through */
+    }
+    try {
+      const pkg = JSON.parse(
+        readFileSync(path.join(__dirname, "..", "..", "frontend", "package.json"), "utf8"),
+      ) as { version?: string };
+      return typeof pkg.version === "string" ? pkg.version : "0.0.0";
+    } catch {
+      return "0.0.0";
+    }
+  };
+  res.setHeader("Cache-Control", "public, max-age=60");
+  res.json({ version: readVersion(), build: "local" });
 });
 
 app.get("/webhook", (req, res) => {

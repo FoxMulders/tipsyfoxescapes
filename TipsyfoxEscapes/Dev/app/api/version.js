@@ -1,9 +1,17 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
-const pkgPath = join(import.meta.dirname, "..", "frontend", "package.json");
+const { readFileSync, existsSync } = require("node:fs");
+const { join } = require("node:path");
 
 const readAppVersion = () => {
+  const bundled = join(__dirname, "app-version.json");
+  if (existsSync(bundled)) {
+    try {
+      const data = JSON.parse(readFileSync(bundled, "utf8"));
+      if (typeof data.version === "string" && data.version.trim()) return data.version.trim();
+    } catch {
+      /* fall through */
+    }
+  }
+  const pkgPath = join(__dirname, "..", "frontend", "package.json");
   try {
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
     return typeof pkg.version === "string" ? pkg.version : "0.0.0";
@@ -23,7 +31,7 @@ const resolveBuildId = () => {
 };
 
 /** Public app version for ops and footer cross-check. */
-export default function handler(_req, res) {
+module.exports = function handler(_req, res) {
   const build = resolveBuildId();
   const body = JSON.stringify({
     version,
@@ -33,4 +41,4 @@ export default function handler(_req, res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "public, max-age=60");
   res.end(body);
-}
+};

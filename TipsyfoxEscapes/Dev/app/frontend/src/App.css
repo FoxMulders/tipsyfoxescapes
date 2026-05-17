@@ -202,7 +202,8 @@ body {
 
 .pricing-lead {
   margin: 0 0 1rem;
-  max-width: 62ch;
+  width: 100%;
+  max-width: none;
   line-height: 1.45;
 }
 
