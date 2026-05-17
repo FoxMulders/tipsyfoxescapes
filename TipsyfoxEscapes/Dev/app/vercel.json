@@ -1,4 +1,4 @@
-{
+﻿{
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm ci && npm ci --prefix backend && npm ci --prefix frontend",
   "buildCommand": "npm run vercel-build",
@@ -6,7 +6,7 @@
   "env": {
     "SKIP_VERSION_BUMP": "1",
     "DATA_DIR": "/tmp/erb-data",
-    "OAUTH_GOOGLE_ENABLED": "0"
+    "OAUTH_GOOGLE_ENABLED": "1"
   },
   "rewrites": [
     { "source": "/api/auth/oauth/:provider/start", "destination": "/api/auth/oauth/:provider/start" },
@@ -30,7 +30,7 @@
     "api/index.js": {
       "maxDuration": 30,
       "memory": 1024,
-      "includeFiles": "api/server.cjs"
+      "includeFiles": "api/{server.cjs,oauth.cjs}"
     }
   }
 }
