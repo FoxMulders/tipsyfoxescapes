@@ -4,9 +4,12 @@ import { fileURLToPath } from "node:url";
 
 const appRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const required = [
+  join(appRoot, "api/oauth.cjs"),
   join(appRoot, "api/server.cjs"),
   join(appRoot, "api/health.js"),
   join(appRoot, "api/index.js"),
+  join(appRoot, "api/auth/oauth/[provider]/start.js"),
+  join(appRoot, "api/auth/oauth/[provider]/callback.js"),
   join(appRoot, "frontend/dist/index.html"),
 ];
 

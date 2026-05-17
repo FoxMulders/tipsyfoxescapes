@@ -4868,15 +4868,6 @@ export default function App() {
           <nav className="social-auth-grid" aria-label="Social sign-in">
             <button
               type="button"
-              className="social-btn social-google"
-              disabled={!!socialAuthProvider || authSubmitting}
-              aria-busy={socialAuthProvider === "google"}
-              onClick={() => handleSocialAuth("google")}
-            >
-              {socialAuthProvider === "google" ? "Redirecting to Google…" : "Continue with Google"}
-            </button>
-            <button
-              type="button"
               className="social-btn social-facebook"
               disabled={!!socialAuthProvider || authSubmitting}
               aria-busy={socialAuthProvider === "facebook"}
