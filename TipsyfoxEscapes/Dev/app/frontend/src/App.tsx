@@ -11,8 +11,11 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
-import "./App.css";
-import { classifyApiCatchError, unexpectedApiResponseMessage } from "./apiErrors.ts";
+import { toast } from "sonner";
+import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
+import { PlanningSidebar } from "@/components/planning/PlanningSidebar";
+import { RoomDetailsStep } from "@/components/planning/RoomDetailsStep";
+import { classifyApiCatchError, parseApiJson, unexpectedApiResponseMessage } from "./apiErrors.ts";
 import { installContentProtection } from "./contentProtection.ts";
 import {
   customThemeCoachSynthesize,
@@ -736,7 +739,7 @@ function RequiredFieldMark(): ReactNode {
   );
 }
 
-function MissionFlowMap({
+function _LegacyMissionFlowMapUnused({
   stepLabels,
   activeIndex,
   youthAddOnEnabled,
@@ -2214,7 +2217,8 @@ export default function App() {
   const [customMixPhysical, setCustomMixPhysical] = useState("");
   const [customMixElectronic, setCustomMixElectronic] = useState("");
   /** Default on: fewer fields until the host opens “All options” or picks a theme (full tools stay on later steps). */
-  const [simpleRoomSetup, setSimpleRoomSetup] = useState<boolean>(true);
+  const [planningSyncing, setPlanningSyncing] = useState(false);
+  const planningAutoSyncRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Theme step + puzzle step: hide long markdown brief and editor until “Full brief” (independent from room Simple / All options). */
   const [simpleThemeView, setSimpleThemeView] = useState<boolean>(true);
   const [existingPuzzles, setExistingPuzzles] = useState<Array<{ name: string; link: string; roomPart: string }>>([]);
@@ -2324,6 +2328,57 @@ export default function App() {
     [themes, selectedThemeId],
   );
   const commercialVenueContext = useMemo(() => isCommercialVenueEventContext(eventType), [eventType]);
+  const propPresetLabels = useMemo(
+    () => getSuggestedPropOptionsForPlanning(environmentType, eventType).map((o) => o.label),
+    [environmentType, eventType],
+  );
+  const simpleRoomSetup = false;
+
+  useEffect(() => {
+    if (appView !== "builder" || !error.trim()) return;
+    toast.error(error);
+  }, [error, appView]);
+
+  useEffect(() => {
+    if (!sessionId || appView !== "builder") return;
+    if (!buildPlanningBody("draft")) return;
+    if (planningAutoSyncRef.current) clearTimeout(planningAutoSyncRef.current);
+    planningAutoSyncRef.current = setTimeout(() => {
+      void (async () => {
+        setPlanningSyncing(true);
+        try {
+          const mode = buildPlanningBody("strict") ? "strict" : "draft";
+          await syncPlanningInputToServer(sessionId, mode);
+        } finally {
+          setPlanningSyncing(false);
+        }
+      })();
+    }, 700);
+    return () => {
+      if (planningAutoSyncRef.current) clearTimeout(planningAutoSyncRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounced planning field sync
+  }, [
+    sessionId,
+    appView,
+    playersConcurrent,
+    participantsTotal,
+    sessionDurationMinutes,
+    environmentType,
+    availableItems,
+    roomDifficulty,
+    youthAddOnEnabled,
+    youthAddOnGatesAdultFlow,
+    youthAddOnAgeNote,
+    eventType,
+    themeMustMatchEnvironment,
+    useCustomMainPuzzleCount,
+    customMainPuzzleCountStr,
+    useCustomMix,
+    customMixLogic,
+    customMixPhysical,
+    customMixElectronic,
+  ]);
 
   const runContextualInspiration = useCallback(async (): Promise<void> => {
     setInspirationAiError("");
@@ -2641,14 +2696,18 @@ export default function App() {
         headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify(body),
       });
-      const data = (await response.json()) as { ok?: boolean; error?: { message?: string } };
+      const data = await parseApiJson<{ ok?: boolean; error?: { message?: string } }>(response);
       if (!response.ok) {
-        setError(data.error?.message ?? "Failed to update planning details.");
+        const msg = data.error?.message ?? "Failed to update planning details.";
+        setError(msg);
+        toast.error(msg);
         return false;
       }
       return true;
     } catch (err) {
-      setError(classifyApiCatchError(err));
+      const msg = classifyApiCatchError(err);
+      setError(msg);
+      toast.error(msg);
       return false;
     }
   };
@@ -2687,10 +2746,43 @@ export default function App() {
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         document
-          .querySelector(".form-grid--blueprint .invalid-field, .form-grid--blueprint .chip-field--invalid")
+          .querySelector("#room-details-blueprint-form .border-destructive, #room-details-blueprint-form .invalid-field")
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     });
+  };
+
+  const navigateWizardToIndex = async (targetIndex: number): Promise<void> => {
+    if (targetIndex < 0 || targetIndex >= wizardSteps.length || targetIndex === wizardIndex) return;
+    const targetStep = wizardSteps[targetIndex];
+    if (targetIndex > wizardIndex) {
+      if (targetIndex > wizardSteps.indexOf("setup") && !buildPlanningBody("strict")) {
+        flagMissingFields(collectStrictPlanningMissing());
+        toast.error("Complete room details before advancing.");
+        setWizardStep("setup");
+        scrollFirstInvalidRoomFieldIntoView();
+        return;
+      }
+      if (
+        (targetStep === "themes-puzzles" || targetStep === "output-review" || targetStep === "output-export") &&
+        !selectedThemeId &&
+        themePath !== "custom"
+      ) {
+        toast.error("Choose a theme before opening this step.");
+        return;
+      }
+    }
+    if (targetStep === "themes-puzzles" && wizardIndex < wizardSteps.indexOf("themes-puzzles")) {
+      await proceedFromThemesToPuzzles();
+      return;
+    }
+    if (targetStep === "output-review" && flowWizardStep !== "output-review") {
+      await proceedToOutputReview();
+      return;
+    }
+    setWizardStep(targetStep);
+    if (targetStep === "themes") setActivePanel("themes");
+    if (targetStep === "setup") setActivePanel("plan");
   };
 
   const proceedFromSetupToThemes = async (): Promise<void> => {
@@ -2803,6 +2895,7 @@ export default function App() {
   };
 
   const canGoWizardBack = wizardIndex > 0;
+
   const flagMissingFields = (keys: string[]): void => {
     const next: Record<string, boolean> = {};
     keys.forEach((key) => {
@@ -4675,245 +4768,6 @@ export default function App() {
 
   const showBackInFlowHeader = !(flowWizardStep === "themes" && themePath === "generated");
 
-  const planningSnapshotPanel = (
-    <div className="planning-summary-body">
-      <div className="planning-summary-form planning-summary-editable">
-        <div className="planning-snap-grid3 planning-snap-grid3--rail">
-          <label className="planning-snap-field">
-            <span>Players at once</span>
-            <input
-              className={`short-input blueprint-input ${validationFlags.playersConcurrent ? "invalid-field" : ""}`}
-              type="number"
-              min={1}
-              max={99}
-              value={playersConcurrent}
-              onChange={(event) => {
-                setPlayersConcurrent(event.target.value);
-                setValidationFlags((current) => ({ ...current, playersConcurrent: false }));
-              }}
-            />
-          </label>
-          <label className="planning-snap-field">
-            <span>Total participants</span>
-            <input
-              className={`short-input blueprint-input ${validationFlags.participantsTotal ? "invalid-field" : ""}`}
-              type="number"
-              min={1}
-              max={99}
-              value={participantsTotal}
-              onChange={(event) => {
-                setParticipantsTotal(event.target.value);
-                setValidationFlags((current) => ({ ...current, participantsTotal: false }));
-              }}
-            />
-          </label>
-          <label className="planning-snap-field">
-            <span>Duration (min)</span>
-            <input
-              className={`short-input blueprint-input ${validationFlags.sessionDurationMinutes ? "invalid-field" : ""}`}
-              type="number"
-              min={10}
-              max={180}
-              step={5}
-              value={sessionDurationMinutes}
-              onChange={(event) => {
-                setSessionDurationMinutes(event.target.value);
-                setValidationFlags((current) => ({ ...current, sessionDurationMinutes: false }));
-              }}
-            />
-          </label>
-        </div>
-        <label className="planning-snap-field">
-          <span>Environment</span>
-          <EnvironmentTypeField
-            id="planning-snap-environment"
-            value={environmentType}
-            invalid={validationFlags.environmentType}
-            onChange={(v) => {
-              setEnvironmentType(v);
-              setValidationFlags((current) => ({ ...current, environmentType: false }));
-            }}
-            onEnvironmentCleared={() => setAvailableItems("")}
-          />
-        </label>
-        <label className="planning-snap-field">
-          <span>Event context</span>
-          <input
-            id="planning-snap-event"
-            className="blueprint-input"
-            type="text"
-            value={eventType}
-            maxLength={200}
-            onChange={(event) => setEventType(event.target.value)}
-            placeholder="Optional: party type, venue policy, holiday"
-          />
-        </label>
-        <label className="planning-snap-field">
-          <span>Available items (optional — things that may be on hand)</span>
-          <textarea
-            id="planning-snap-items"
-            className={`planning-snap-textarea ${validationFlags.availableItems ? "invalid-field" : ""}`}
-            rows={3}
-            value={availableItems}
-            disabled={!environmentType.trim()}
-            onChange={(event) => {
-              setAvailableItems(event.target.value);
-              setValidationFlags((current) => ({ ...current, availableItems: false }));
-            }}
-            placeholder={
-              environmentType.trim()
-                ? "Optional: comma-separated props you might have (e.g. whiteboard, filing cabinet)"
-                : "Set environment first, then add optional prop tags"
-            }
-          />
-        </label>
-        <label className="planning-snap-field">
-          <span>Room puzzle difficulty</span>
-          <select
-            className="room-difficulty-select"
-            value={roomDifficulty}
-            onChange={(event) => {
-              setRoomDifficulty(event.target.value as "easy" | "medium" | "hard");
-            }}
-          >
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-        </label>
-        <label className="checkbox-field theme-env-fit-checkbox">
-          <input
-            type="checkbox"
-            checked={themeMustMatchEnvironment}
-            onChange={(event) => setThemeMustMatchEnvironment(event.target.checked)}
-          />
-          <span className="theme-env-fit-checkbox-label">
-            Theme ideas should <strong>fit this environment</strong> when generating catalog picks
-          </span>
-        </label>
-        <p className="muted planning-snap-env-fit-note">
-          Fiction can stretch; props and zones still have to work in the room you listed.
-        </p>
-        <div className="planning-snap-theme-row">
-          <span className="planning-snap-label">Theme</span>
-          {themePath === "custom" ? (
-            <label className="planning-snap-field planning-snap-field--grow">
-              <span>Custom theme name</span>
-              <input
-                type="text"
-                className="blueprint-input"
-                value={customThemeName}
-                onChange={(event) => setCustomThemeName(event.target.value)}
-                placeholder="Custom theme title"
-              />
-            </label>
-          ) : (
-            <div className="planning-snap-theme-readout">
-              <p className="planning-snap-theme-name">
-                {selectedTheme
-                  ? selectedTheme.name
-                  : themePath === "generated" && selectedThemeId
-                    ? themes.find((t) => t.id === selectedThemeId)?.name ?? "—"
-                    : "—"}
-              </p>
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => {
-                  setWizardStep("themes");
-                  setActivePanel("themes");
-                }}
-              >
-                Change theme
-              </button>
-            </div>
-          )}
-        </div>
-        <div className="planning-snap-readonly">
-          <span className="planning-snap-label">Main puzzles</span>
-          <p className="planning-snap-readonly-value">
-            <strong>{mainTrackPuzzles.length}</strong> generated (target from plan: ~{plannerMainPuzzleTarget})
-          </p>
-        </div>
-      </div>
-      {snapshotSyncHint ? <p className="success-inline planning-snapshot-sync-hint">{snapshotSyncHint}</p> : null}
-      <div className="planning-summary-sync-row">
-        <button
-          type="button"
-          className="secondary-btn"
-          disabled={!sessionId}
-          onClick={() => void pushSnapshotPlanningToSession()}
-        >
-          Save snapshot to server session
-        </button>
-        {!sessionId ? <span className="muted">Continue the flow to attach a server session before syncing.</span> : null}
-      </div>
-      <div className="planning-summary-actions" role="group" aria-label="Jump to planning sections">
-        <button
-          type="button"
-          className="secondary-btn"
-          disabled={flowWizardStep === "setup"}
-          onClick={() => {
-            setWizardStep("setup");
-            setActivePanel("plan");
-          }}
-        >
-          Room details
-        </button>
-        <button
-          type="button"
-          className="secondary-btn"
-          disabled={flowWizardStep === "themes"}
-          onClick={() => {
-            if (!buildPlanningBody("strict")) {
-              flagMissingFields(collectStrictPlanningMissing());
-              setError("Complete required room details before opening theme selection.");
-              setWizardStep("setup");
-              setActivePanel("plan");
-              scrollFirstInvalidRoomFieldIntoView();
-              return;
-            }
-            setWizardStep("themes");
-            setActivePanel("themes");
-          }}
-        >
-          Choose theme
-        </button>
-        <button
-          type="button"
-          className="secondary-btn"
-          disabled={flowWizardStep === "themes-puzzles"}
-          onClick={() => {
-            void proceedFromThemesToPuzzles();
-          }}
-        >
-          Build puzzles
-        </button>
-        <button
-          type="button"
-          className="secondary-btn"
-          disabled={flowWizardStep === "output-review" || !canNavigateToOutputReview || outputReviewBusy}
-          title={
-            outputReviewBusy
-              ? "Working…"
-              : flowWizardStep === "output-review"
-                ? "You are already on Output: Review."
-                : !canNavigateToOutputReview
-                  ? "Choose a theme on the Theme step first."
-                  : puzzles.length === 0
-                    ? "Syncs planning, generates a puzzle set if the list is empty, then opens Output: Review."
-                    : "Opens Output: Review with your current puzzles."
-          }
-          aria-busy={outputReviewBusy}
-          data-testid="review-output-summary"
-          onClick={() => void proceedToOutputReview()}
-        >
-          {outputReviewBusy ? "Opening…" : "Review output"}
-        </button>
-      </div>
-    </div>
-  );
-
   const savedPlansManageList: ReactNode =
     authUser && !authUser.canSaveRooms ? (
       <p className="muted">
@@ -5468,31 +5322,38 @@ export default function App() {
       {appView === "builder" ? (
       <>
       <div className="stage-layout stage-layout--hud">
-        <aside className="stage-sidebar planning-snapshot-rail glass-panel" aria-label="Plan snapshot">
-          <h2 className="planning-snapshot-rail-title">Your plan snapshot</h2>
-          <p className="muted planning-snapshot-rail-lead">Stays visible as you move through each step—edit here anytime.</p>
-          {planningSnapshotPanel}
+        <aside className="stage-sidebar">
+          <PlanningSidebar
+            playersConcurrent={playersConcurrent}
+            participantsTotal={participantsTotal}
+            sessionDurationMinutes={sessionDurationMinutes}
+            environmentType={environmentType.trim() || "—"}
+            eventType={eventType}
+            availableItems={availableItems}
+            roomDifficulty={roomDifficulty}
+            themeMustMatchEnvironment={themeMustMatchEnvironment}
+            youthAddOnEnabled={youthAddOnEnabled}
+            themeLabel={
+              themePath === "custom"
+                ? customThemeName.trim() || "Custom theme"
+                : selectedTheme?.name ?? (selectedThemeId ? "Theme selected" : "Not selected")
+            }
+            mainPuzzleCount={mainTrackPuzzles.length}
+            plannerTarget={plannerMainPuzzleTarget}
+            sessionSyncing={planningSyncing}
+          />
         </aside>
         <section className="stage-main">
           <section className="card mission-panel flow-shell glass-panel">
-            {error ? (
-              <p
-                id="flow-shell-error-anchor"
-                className="error-banner flow-shell-error"
-                role="alert"
-                aria-live="assertive"
-                data-testid="flow-error-banner"
-              >
-                {error}
-              </p>
-            ) : null}
-            <div className="flow-shell-map-bar">
+            <div id="flow-shell-error-anchor" className="flow-shell-map-bar" aria-live="polite">
               <p className="muted flow-map-label">Mission map</p>
               <MissionFlowMap
                 stepLabels={missionStepLabels}
                 activeIndex={wizardIndex}
                 youthAddOnEnabled={youthAddOnEnabled}
                 forkSegmentIndex={juniorForkSegmentIndex}
+                onStepClick={(index) => void navigateWizardToIndex(index)}
+                canNavigateToStep={(index) => index <= wizardIndex || buildPlanningBody("strict") !== null}
               />
             </div>
             <div className="flow-controls">
@@ -5510,338 +5371,52 @@ export default function App() {
               </div>
             </div>
             {flowWizardStep === "setup" ? (
-              <div className="flow-content flow-content--blueprint">
-                <div className="setup-blueprint-header">
-                  <h2 className="room-details-title" title="Theme is the fictional layer you choose in the next step.">
-                    Room details
-                  </h2>
-                  <div className="setup-header-actions">
-                    <div className="setup-mode-toggle" role="group" aria-label="Room form detail level">
-                      <button
-                        type="button"
-                        className={simpleRoomSetup ? "primary-btn setup-mode-btn" : "secondary-btn setup-mode-btn"}
-                        onClick={() => setSimpleRoomSetup(true)}
-                        title="Minimal fields: headcount, duration, environment, and items. Advanced tuning stays available on later steps."
-                      >
-                        Simple
-                      </button>
-                      <button
-                        type="button"
-                        className={!simpleRoomSetup ? "primary-btn setup-mode-btn" : "secondary-btn setup-mode-btn"}
-                        onClick={() => setSimpleRoomSetup(false)}
-                        title="Full room form: event context, difficulty, junior add-on, existing puzzles, and the live puzzle-count HUD."
-                      >
-                        All options
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      className="secondary-btn inspiration-drawer-trigger"
-                      onClick={() => setInspirationOpen(true)}
-                      title="Curated links and optional on-device AI tips tailored to your plan (environment, items, theme)."
-                    >
-                      Inspiration
-                    </button>
-                  </div>
-                </div>
-                <p className="muted room-details-lead">
-                  {simpleRoomSetup ? (
-                    <>
-                      Short checklist: <strong>who plays</strong>, <strong>how long</strong>, <strong>where</strong>, and{" "}
-                      <strong>props</strong> you can use. Event type is optional—if you run a <strong>commercial / ticketed room</strong>,
-                      say so; we’ll note that guests usually expect a <strong>unique</strong> experience.
-                    </>
-                  ) : (
-                    <>
-                      Enter the real room, timing, headcount, and <strong>target puzzle difficulty</strong> before themes or puzzles.
-                      Duration and concurrent players update the live puzzle-count estimate below (same formula as the server).
-                    </>
-                  )}
-                </p>
-                {simpleRoomSetup ? (
-                  <p className="muted puzzle-estimate-simple" role="status">
-                    Rough guide: about <RollingPuzzleEstimate target={plannerMainPuzzleTarget} /> main puzzles (open{" "}
-                    <strong>All options</strong> for the full estimate strip and junior add-on).
-                  </p>
-                ) : (
-                  <p className="puzzle-estimate-hud glass-hud-strip" role="status">
+              <RoomDetailsStep
+                playersConcurrent={playersConcurrent}
+                setPlayersConcurrent={setPlayersConcurrent}
+                participantsTotal={participantsTotal}
+                setParticipantsTotal={setParticipantsTotal}
+                sessionDurationMinutes={sessionDurationMinutes}
+                setSessionDurationMinutes={setSessionDurationMinutes}
+                eventType={eventType}
+                setEventType={setEventType}
+                environmentType={environmentType}
+                setEnvironmentType={setEnvironmentType}
+                availableItems={availableItems}
+                setAvailableItems={setAvailableItems}
+                themeMustMatchEnvironment={themeMustMatchEnvironment}
+                setThemeMustMatchEnvironment={setThemeMustMatchEnvironment}
+                roomDifficulty={roomDifficulty}
+                setRoomDifficulty={setRoomDifficulty}
+                youthAddOnEnabled={youthAddOnEnabled}
+                setYouthAddOnEnabled={setYouthAddOnEnabled}
+                youthAddOnGatesAdultFlow={youthAddOnGatesAdultFlow}
+                setYouthAddOnGatesAdultFlow={setYouthAddOnGatesAdultFlow}
+                youthAddOnAgeNote={youthAddOnAgeNote}
+                setYouthAddOnAgeNote={setYouthAddOnAgeNote}
+                validationFlags={validationFlags}
+                clearValidation={(key) => setValidationFlags((current) => ({ ...current, [key]: false }))}
+                commercialVenueContext={commercialVenueContext}
+                eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
+                itemHistory={inputHistory.availableItems ?? []}
+                propPresetLabels={propPresetLabels}
+                puzzleEstimateHud={
+                  <p className="puzzle-estimate-hud glass-hud-strip mx-auto max-w-xl" role="status">
                     Estimated main-track puzzle count:{" "}
                     <strong>
                       <RollingPuzzleEstimate target={plannerMainPuzzleTarget} />
-                    </strong>{" "}
-                    {useCustomMainPuzzleCount ? (
-                      <span className="muted">
-                        (custom; auto from time × players would be ~{livePuzzleEstimate})
-                      </span>
-                    ) : (
-                      <span className="muted">(scales with players × minutes)</span>
-                    )}
+                    </strong>
                     {youthAddOnEnabled && juniorAddOnPuzzleSlots > 0 ? (
                       <>
                         {" "}
-                        · Junior add-on (parallel easy–medium):{" "}
-                        <strong>+{juniorAddOnPuzzleSlots}</strong> puzzles
+                        · Junior add-on: <strong>+{juniorAddOnPuzzleSlots}</strong> puzzles
                       </>
                     ) : null}
                   </p>
-                )}
-                <div className="form-grid form-grid--blueprint" id="room-details-blueprint-form">
-                  <label
-                    className={
-                      validationFlags.playersConcurrent ? "blueprint-field-label blueprint-field-label--invalid" : "blueprint-field-label"
-                    }
-                  >
-                    <span className="blueprint-field-label-heading">
-                      Players at one time
-                      <RequiredFieldMark />
-                    </span>
-                    <input
-                      className={`short-input blueprint-input ${validationFlags.playersConcurrent ? "invalid-field" : ""}`}
-                      type="number"
-                      min={1}
-                      max={99}
-                      value={playersConcurrent}
-                      onChange={(event) => {
-                        setPlayersConcurrent(event.target.value);
-                        setValidationFlags((current) => ({ ...current, playersConcurrent: false }));
-                      }}
-                    />
-                  </label>
-                  <label
-                    className={
-                      validationFlags.participantsTotal ? "blueprint-field-label blueprint-field-label--invalid" : "blueprint-field-label"
-                    }
-                  >
-                    <span className="blueprint-field-label-heading">
-                      Total participants
-                      <RequiredFieldMark />
-                    </span>
-                    <input
-                      className={`short-input blueprint-input ${validationFlags.participantsTotal ? "invalid-field" : ""}`}
-                      type="number"
-                      min={1}
-                      max={99}
-                      value={participantsTotal}
-                      onChange={(event) => {
-                        setParticipantsTotal(event.target.value);
-                        setValidationFlags((current) => ({ ...current, participantsTotal: false }));
-                      }}
-                    />
-                  </label>
-                  <label
-                    className={
-                      validationFlags.sessionDurationMinutes
-                        ? "blueprint-field-label blueprint-field-label--invalid"
-                        : "blueprint-field-label"
-                    }
-                  >
-                    <span className="blueprint-field-label-heading">
-                      Session duration (minutes)
-                      <RequiredFieldMark />
-                    </span>
-                    <input
-                      className={`short-input blueprint-input ${validationFlags.sessionDurationMinutes ? "invalid-field" : ""}`}
-                      type="number"
-                      min={10}
-                      max={180}
-                      step={5}
-                      value={sessionDurationMinutes}
-                      onChange={(event) => {
-                        setSessionDurationMinutes(event.target.value);
-                        setValidationFlags((current) => ({ ...current, sessionDurationMinutes: false }));
-                      }}
-                    />
-                  </label>
-                  <label>
-                    Event context (optional)
-                    <input
-                      id="event-context-input"
-                      className="blueprint-input"
-                      type="text"
-                      list="event-type-suggestions"
-                      value={eventType}
-                      maxLength={200}
-                      onChange={(event) => setEventType(event.target.value)}
-                      placeholder="e.g. commercial venue, Halloween party, corporate team building, school fundraiser"
-                      aria-describedby={
-                        commercialVenueContext ? "commercial-venue-below-event event-context-hint" : "event-context-hint"
-                      }
-                    />
-                  </label>
-                  <datalist id="event-type-suggestions">
-                    {dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])]).map((entry) => (
-                      <option key={entry} value={entry} />
-                    ))}
-                  </datalist>
-                  {commercialVenueContext ? (
-                    <p id="commercial-venue-below-event" className="commercial-venue-callout commercial-venue-callout--below-event" role="note">
-                      <strong>Commercial / ticketed venue:</strong> Guests typically expect this room to feel <strong>clearly different</strong>{" "}
-                      from other games they have paid for. Use generated ideas as raw material—design <strong>original</strong> puzzles, flow,
-                      and reveals so the run is unmistakably yours.
-                    </p>
-                  ) : null}
-                  <div id="event-context-hint">
-                    {simpleRoomSetup ? (
-                      <p className="muted">
-                        Home parties, schools, and most informal events can <strong>remix and adapt</strong> ideas more freely—still follow
-                        safety and any venue rules.
-                      </p>
-                    ) : (
-                      <p className="muted">
-                        Themes and puzzles bias toward this context when it matches a holiday, team event, or commercial run (for example,
-                        spook-season wording for Halloween). Informal events can stay more flexible unless you want a specific tone.
-                      </p>
-                    )}
-                  </div>
-                  <label
-                    className={
-                      validationFlags.environmentType ? "blueprint-field-label blueprint-field-label--invalid" : "blueprint-field-label"
-                    }
-                    title="Environment is the actual space and objects players can touch."
-                  >
-                    <span className="blueprint-field-label-heading">
-                      Environment
-                      <RequiredFieldMark />
-                    </span>
-                    <EnvironmentTypeField
-                      value={environmentType}
-                      invalid={validationFlags.environmentType}
-                      onChange={(v) => {
-                        setEnvironmentType(v);
-                        setValidationFlags((current) => ({ ...current, environmentType: false }));
-                      }}
-                      onEnvironmentCleared={() => setAvailableItems("")}
-                    />
-                  </label>
-                  <label className="checkbox-field theme-env-fit-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={themeMustMatchEnvironment}
-                      onChange={(event) => setThemeMustMatchEnvironment(event.target.checked)}
-                    />
-                    <span className="theme-env-fit-checkbox-label">
-                      Theme ideas should <strong>fit this environment</strong> — staging must match logistics, not just the story
-                    </span>
-                  </label>
-                  <details className="theme-env-fit-examples">
-                    <summary>Staging examples for your environment{eventType.trim() ? " and event" : ""}</summary>
-                    {getStagingExampleParagraphs(environmentType, eventType).map((paragraph, index) => (
-                      <p key={`staging-example-${index}`} className="muted">
-                        {paragraph}
-                      </p>
-                    ))}
-                  </details>
-                  <p className="muted theme-env-fit-hint">
-                    When on, the server ranks themes toward your <strong>environment</strong> wording (indoor vs outdoor, school, garage,
-                    etc.) so suggestions stay buildable where you actually host. Turn off if you want pure fantasy and will translate every
-                    beat yourself.
-                  </p>
-                  <label
-                    className={
-                      validationFlags.availableItems ? "blueprint-field-label blueprint-field-label--invalid" : "blueprint-field-label"
-                    }
-                  >
-                    <span className="blueprint-field-label-heading">Available items (optional suggestions)</span>
-                    <AvailableItemsField
-                      value={availableItems}
-                      environmentType={environmentType}
-                      eventType={eventType}
-                      onChange={(next) => {
-                        setAvailableItems(next);
-                        setValidationFlags((current) => ({ ...current, availableItems: false }));
-                      }}
-                      invalid={validationFlags.availableItems}
-                      historyOptions={inputHistory.availableItems ?? []}
-                      disabled={!environmentType.trim()}
-                    />
-                  </label>
-                  {simpleRoomSetup ? (
-                    <p className="muted">
-                      Suggestions list props that <strong>may</strong> be in your space—you do not need to pick any to continue. Add safe
-                      custom lines if you like. Real furnaces, hot water heaters, boilers, gas lines, and propane tanks are blocked—use{" "}
-                      <strong>Fake …</strong> theater props only. <strong>All options</strong> adds difficulty and junior add-on controls.
-                    </p>
-                  ) : (
-                    <p className="muted">
-                      Optional: tell the generator what might be on hand. When provided, these anchors feed theme appendices, puzzle
-                      tie-ins, suggested additions, and export placement notes. High-risk utilities are blocked unless clearly labeled as
-                      non-functional theater props.
-                    </p>
-                  )}
-                  {!simpleRoomSetup ? (
-                    <>
-                      <label title="Room difficulty nudges suggested theme puzzles and generated sets toward easier or harder picks.">
-                        Room difficulty (overall puzzle challenge)
-                        <select
-                          className="room-difficulty-select"
-                          value={roomDifficulty}
-                          onChange={(event) => {
-                            setRoomDifficulty(event.target.value as "easy" | "medium" | "hard");
-                          }}
-                        >
-                          <option value="easy">Easy — lighter deductions, shorter chains, family-friendly bias</option>
-                          <option value="medium">Medium — balanced logic, physical, and light electronics</option>
-                          <option value="hard">Hard — denser reasoning, more steps, expert-friendly bias</option>
-                        </select>
-                      </label>
-                      <div className="youth-addon-block">
-                        <label
-                          className="checkbox-field checkbox-field--stack"
-                          title="The junior add-on (if enabled) appends a parallel easy–medium mini-track in the same fiction; optional gating lets adults depend on kids’ outcomes."
-                        >
-                          <input
-                            type="checkbox"
-                            checked={youthAddOnEnabled}
-                            onChange={(event) => {
-                              const on = event.target.checked;
-                              setYouthAddOnEnabled(on);
-                              if (!on) {
-                                setYouthAddOnGatesAdultFlow(false);
-                                setYouthAddOnAgeNote("");
-                              }
-                            }}
-                          />
-                          <span>
-                            Include a <strong>junior add-on</strong> escape (parallel track for younger players, same theme; generator
-                            adds easy–medium puzzles only)
-                          </span>
-                        </label>
-                        {youthAddOnEnabled ? (
-                          <div className="youth-addon-options">
-                            <label className="checkbox-field checkbox-field--stack">
-                              <input
-                                type="checkbox"
-                                checked={youthAddOnGatesAdultFlow}
-                                onChange={(event) => setYouthAddOnGatesAdultFlow(event.target.checked)}
-                              />
-                              <span>
-                                Junior puzzles may <strong>gate adult progression</strong> (relay code, shared token, or verify kids’
-                                outcome before the main crew advances)
-                              </span>
-                            </label>
-                            <label>
-                              Junior track notes (ages, space, staffing)
-                              <input
-                                type="text"
-                                className="youth-addon-age-input"
-                                value={youthAddOnAgeNote}
-                                maxLength={400}
-                                onChange={(event) => setYouthAddOnAgeNote(event.target.value)}
-                                placeholder="e.g. ages ~6–11, nook off main room, helper resets props"
-                              />
-                            </label>
-                          </div>
-                        ) : null}
-                      </div>
-                    </>
-                  ) : null}
-                </div>
-                <div className="setup-options">
-                  <button type="button" className="primary-btn" onClick={() => void proceedFromSetupToThemes()}>
-                    Continue to theme selection
-                  </button>
-                </div>
-              </div>
+                }
+                onContinue={() => void proceedFromSetupToThemes()}
+                onOpenInspiration={() => setInspirationOpen(true)}
+              />
             ) : null}
             {flowWizardStep === "themes" ? (
               <div className="flow-content flow-content--themes-step">

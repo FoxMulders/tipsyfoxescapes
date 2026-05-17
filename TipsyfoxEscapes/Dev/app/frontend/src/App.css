@@ -2704,6 +2704,15 @@ label.checkbox-field {
   filter: drop-shadow(0 0 10px rgba(55, 210, 200, 0.55));
 }
 
+.mission-flow-node--clickable:focus-visible .mission-flow-node-ring {
+  stroke: rgba(0, 242, 255, 1);
+  stroke-width: 2.5;
+}
+
+.mission-flow-node--clickable:hover .mission-flow-node-ring {
+  stroke: rgba(0, 242, 255, 0.85);
+}
+
 .mission-flow-node-label {
   font-family: "Inter", "Segoe UI", sans-serif;
   font-size: 10px;

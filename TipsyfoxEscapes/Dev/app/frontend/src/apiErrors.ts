@@ -13,6 +13,15 @@ export const unexpectedApiResponseMessage = (status?: number): string => {
     : `The server returned an unexpected response${statusBit}. Refresh and try again; contact support if it persists.`;
 };
 
+/** Parse JSON only when the response declares application/json (avoids HTML proxy pages). */
+export async function parseApiJson<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw new SyntaxError(unexpectedApiResponseMessage(response.status));
+  }
+  return (await response.json()) as T;
+}
+
 /** Classify errors from fetch + response.json() in one try block. */
 export const classifyApiCatchError = (err: unknown, response?: Response): string => {
   if (err instanceof SyntaxError) {
