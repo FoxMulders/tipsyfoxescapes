@@ -66,6 +66,9 @@ export const readSquareConfig = (): SquareConfig => {
   };
 };
 
+/** True when SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID are set (e.g. Vercel runtime env). */
+export const isSquareConfigured = (): boolean => readSquareConfig().configured;
+
 const squareClient = (): SquareClient => {
   const cfg = readSquareConfig();
   if (!cfg.configured) {
@@ -103,7 +106,7 @@ export const createSquareCheckout = async (input: {
 
   const response = await client.checkout.paymentLinks.create({
     idempotencyKey,
-    description: `Escape Room Builder — ${input.plan.name}`,
+    description: `Tipsy Fox Escapes — ${input.plan.name}`,
     order: {
       locationId: cfg.locationId,
       referenceId,

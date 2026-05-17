@@ -4135,6 +4135,29 @@ ul.auth-hero-para {
   }
 }
 
+.page-shell--builder-protect.content-protect-hidden .stage-layout,
+.page-shell--builder-protect.content-protect-hidden .command-header {
+  filter: blur(14px);
+  opacity: 0.35;
+  transition: filter 0.2s ease, opacity 0.2s ease;
+}
+
+.page-shell--builder-protect.content-protect-flash .stage-layout,
+.page-shell--builder-protect.content-protect-flash .command-header {
+  filter: blur(18px);
+  opacity: 0.2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-shell--builder-protect.content-protect-hidden .stage-layout,
+  .page-shell--builder-protect.content-protect-hidden .command-header,
+  .page-shell--builder-protect.content-protect-flash .stage-layout,
+  .page-shell--builder-protect.content-protect-flash .command-header {
+    filter: none;
+    opacity: 1;
+  }
+}
+
 /*
  * Control deck glass — ID selector so this always wins over .glass-panel (class-only rules
  * were losing in some builds / order). Tune frosted look here only.
@@ -4154,4 +4177,61 @@ ul.auth-hero-para {
     linear-gradient(90deg, rgba(255, 255, 255, 0) 66.15%, rgba(255, 255, 255, 0.01) 66.45%, rgba(255, 255, 255, 0) 66.75%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.014) 0%, transparent 38%),
     linear-gradient(210deg, rgba(14, 20, 36, 0.03) 0%, rgba(8, 13, 26, 0.04) 100%) !important;
+}
+
+/* Room flowchart (Mermaid) */
+.room-flowchart-lead {
+  margin: 0 0 0.75rem;
+  max-width: 52rem;
+}
+
+.export-flowchart-block {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--glass-edge);
+}
+
+.room-flowchart-panel {
+  margin: 0.5rem 0 1rem;
+}
+
+.room-flowchart-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.room-flowchart-toolbar-label {
+  margin-right: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.room-flowchart-canvas {
+  overflow-x: auto;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: rgba(6, 12, 22, 0.55);
+  border: 1px solid var(--glass-edge);
+  min-height: 120px;
+}
+
+.room-flowchart-canvas svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.room-flowchart-source {
+  margin-top: 0.75rem;
+}
+
+.room-flowchart-source summary {
+  cursor: pointer;
+  margin-bottom: 0.35rem;
+}
+
+.room-flowchart-error {
+  margin: 0 0 0.5rem;
 }

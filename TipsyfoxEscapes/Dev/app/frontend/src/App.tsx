@@ -29,9 +29,14 @@ import {
   type InspirationCatalogEntry,
 } from "./browserAi.ts";
 import { getOrCreateDeviceId } from "./deviceId.ts";
+import { RoomFlowchartPanel } from "./components/RoomFlowchartPanel.tsx";
 import { SquareCheckout } from "./components/SquareCheckout.tsx";
 
 const APP_BUILD_STAMP = typeof __APP_SEMVER__ !== "undefined" ? __APP_SEMVER__ : "0.0.0";
+
+const BRAND_NAME = "Tipsy Fox Escapes";
+const BRAND_INTRO =
+  "Build your next escape room from concept to runbook. Seamlessly combine story beats, puzzle logic, and tech wiring notes into an exportable Markdown plan built specifically for indie creators and home haunts.";
 
 type PuzzleReferenceLink = { title: string; url: string; creditTo?: string; affiliateUrl?: string };
 type Puzzle = {
@@ -44,6 +49,7 @@ type Puzzle = {
   referenceLinks: PuzzleReferenceLink[];
   solveSteps: string[];
   difficulty: "easy" | "medium" | "hard";
+  stageHint?: string;
   audienceTrack?: "main" | "youth_addon";
   gatesAdultProgression?: boolean;
   electronicDetails?: {
@@ -974,6 +980,9 @@ const ENVIRONMENT_PRESETS = [
   "Indoor party venue",
   "Warehouse / studio",
 ] as const;
+
+/** Select value when the host types a space not listed in ENVIRONMENT_PRESETS. */
+const ENVIRONMENT_CUSTOM_OPTION = "__custom_environment__";
 
 const EVENT_CONTEXT_PRESETS = [
   "Commercial escape venue (ticketed)",
@@ -4799,8 +4808,9 @@ export default function App() {
             <div className="hero-grid">
               <div>
                 <p className="hero-chip hero-chip--planning-studio">Escape Planning Studio</p>
-                <h1>Escape Room Builder</h1>
-                <p className="auth-hero-para">
+                <h1>{BRAND_NAME}</h1>
+                <p className="auth-hero-para">{BRAND_INTRO}</p>
+                <p className="auth-hero-para muted">
                   Sign up to try the builder: one <strong>free trial</strong> with the same three curated themes every time, a full
                   export, and no saved rooms until you purchase a <strong>room pack</strong>.
                 </p>
@@ -5015,12 +5025,8 @@ export default function App() {
         <div className="hero-grid command-header-grid">
           <div>
             <p className="hero-chip">Control Deck</p>
-            <h1>Escape Room Builder</h1>
-            <p className="hero-tagline">Build your mission from plan to output in one cinematic workspace.</p>
-            <p className="promo-lead">
-              Turn a Saturday brainstorm into a host-ready runbook: themed beats, puzzle mix, wiring notes, and exportable
-              markdown—built for indie venues and home haunt seasons.
-            </p>
+            <h1>{BRAND_NAME}</h1>
+            <p className="hero-tagline promo-lead">{BRAND_INTRO}</p>
           </div>
           <div className="hero-right">
             <div className="mission-stats">
@@ -6573,6 +6579,20 @@ export default function App() {
                       <pre className="staging-diagram-block">{storyPlan.stagingDiagram}</pre>
                     </>
                   ) : null}
+                  {puzzles.length > 0 ? (
+                    <>
+                      <h3 className="output-review-section-title">Room flowchart</h3>
+                      <p className="muted room-flowchart-lead">
+                        Stages, puzzles, and progression from your story plan—download SVG, PNG, or Mermaid source for runbooks.
+                      </p>
+                      <RoomFlowchartPanel
+                        storyPlan={storyPlan}
+                        puzzles={puzzles}
+                        themeName={selectedTheme?.name}
+                        fileBase="room-flow-review"
+                      />
+                    </>
+                  ) : null}
                 </div>
               ) : null}
               {puzzles.length > 0 || refusedPuzzleSlots.length > 0 ? (
@@ -6710,6 +6730,21 @@ export default function App() {
           {flowWizardStep === "output-export" ? (
             <section className="card mission-panel glass-panel" id="builder-export-anchor">
               <h2>Output: Export and Save</h2>
+              {storyPlan && puzzles.length > 0 ? (
+                <div className="export-flowchart-block">
+                  <h3 className="output-review-section-title">Room flowchart</h3>
+                  <p className="muted room-flowchart-lead">
+                    Visual map of stages and puzzles—use <strong>Download flowchart</strong> for SVG, PNG, or Mermaid files alongside your
+                    markdown export.
+                  </p>
+                  <RoomFlowchartPanel
+                    storyPlan={storyPlan}
+                    puzzles={puzzles}
+                    themeName={selectedTheme?.name}
+                    fileBase="room-flow-export"
+                  />
+                </div>
+              ) : null}
               <div className="export-action-flow" role="group" aria-label="Approve, save, then export">
                 <div className="export-action-flow__row">
                   <div className={`export-action-flow__node${approvedForBuild ? " export-action-flow__node--done" : ""}`}>
