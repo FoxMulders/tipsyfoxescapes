@@ -17,7 +17,9 @@ import {
 } from "./billing/trial.js";
 import { ensureDataDir, getDataDir } from "./dataDir.js";
 import { buildOAuthCallbackUrl, resolveAuthCallbackBaseUrl } from "./oauthCallbackUrl.js";
+import { exchangeOAuthCode } from "./oauthTokenExchange.js";
 import { createOAuthState, verifyOAuthState } from "./oauthState.js";
+import { createVercelDiskSyncMiddleware } from "./vercelDiskSync.js";
 import {
   loadAuthTokens,
   loadPlanningSessions,
@@ -608,6 +610,14 @@ const loadUsers = async (): Promise<void> => {
     }
   }
 };
+
+app.use(
+  createVercelDiskSyncMiddleware({
+    authTokens,
+    loadAuthTokens,
+    loadUsers,
+  }),
+);
 
 const loadUsageLedger = async (): Promise<void> => {
   try {
@@ -3644,15 +3654,11 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
   const oauthErrorDescription = String(req.query.error_description ?? "").trim();
   const stateData = verifyOAuthState(state, provider);
   if (!stateData) {
-    res.status(400).json({
-      error: {
-        code: "OAUTH_CALLBACK_INVALID",
-        message: state
-          ? "Invalid or expired OAuth callback state."
-          : "Missing OAuth state. Start sign-in again from the app.",
-        details: oauthError ? [oauthError] : [],
-      },
-    });
+    const fallbackReturn = `${resolveAuthCallbackBaseUrl() || "http://localhost:5173"}/`;
+    const message = state
+      ? "Invalid or expired OAuth callback state. Start sign-in again from the app."
+      : "Missing OAuth state. Start sign-in again from the app.";
+    redirectOAuthStartFailure(res, fallbackReturn, "invalid_state", message);
     return;
   }
   if (!code) {
@@ -3671,99 +3677,22 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
     const clientId = String(process.env[`${provider.toUpperCase()}_CLIENT_ID`] ?? "").trim();
     const clientSecret = String(process.env[`${provider.toUpperCase()}_CLIENT_SECRET`] ?? "").trim();
     const callbackUri = buildOAuthCallbackUrl(provider);
-    let email = "";
-    let name = "";
-
-    if (provider === "google") {
-      const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          code,
-          client_id: clientId,
-          client_secret: clientSecret,
-          redirect_uri: callbackUri,
-          grant_type: "authorization_code",
-        }),
-      });
-      if (!tokenResponse.ok) throw new Error("Google token exchange failed.");
-      const tokenData = (await tokenResponse.json()) as { access_token?: string; id_token?: string };
-      const tokenToVerify = tokenData.id_token || tokenData.access_token;
-      if (!tokenToVerify) throw new Error("Google token payload missing id_token/access_token.");
-      const verifyResponse = await fetch(
-        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(tokenToVerify)}`,
-      );
-      if (!verifyResponse.ok) throw new Error("Google token verification failed.");
-      const verifyData = (await verifyResponse.json()) as { email?: string; name?: string };
-      email = String(verifyData.email ?? "").trim().toLowerCase();
-      name = String(verifyData.name ?? "Google User").trim();
-    } else if (provider === "facebook") {
-      const tokenResponse = await fetch(
-        `https://graph.facebook.com/v20.0/oauth/access_token?${new URLSearchParams({
-          client_id: clientId,
-          client_secret: clientSecret,
-          redirect_uri: callbackUri,
-          code,
-        }).toString()}`,
-      );
-      if (!tokenResponse.ok) throw new Error("Facebook token exchange failed.");
-      const tokenData = (await tokenResponse.json()) as { access_token?: string };
-      if (!tokenData.access_token) throw new Error("Facebook token payload missing access_token.");
-      const profileResponse = await fetch(
-        `https://graph.facebook.com/me?${new URLSearchParams({
-          fields: "id,name,email",
-          access_token: tokenData.access_token,
-        }).toString()}`,
-      );
-      if (!profileResponse.ok) throw new Error("Facebook profile lookup failed.");
-      const profileData = (await profileResponse.json()) as { email?: string; name?: string; id?: string };
-      email = String(profileData.email ?? `${profileData.id}@facebook.local`).trim().toLowerCase();
-      name = String(profileData.name ?? "Facebook User").trim();
-    } else {
-      const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
-        method: "POST",
-        headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: clientId,
-          client_secret: clientSecret,
-          code,
-          redirect_uri: callbackUri,
-        }),
-      });
-      if (!tokenResponse.ok) throw new Error("GitHub token exchange failed.");
-      const tokenData = (await tokenResponse.json()) as { access_token?: string };
-      if (!tokenData.access_token) throw new Error("GitHub token payload missing access_token.");
-      const profileResponse = await fetch("https://api.github.com/user", {
-        headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: "application/vnd.github+json" },
-      });
-      if (!profileResponse.ok) throw new Error("GitHub profile lookup failed.");
-      const profileData = (await profileResponse.json()) as { email?: string; name?: string; login?: string };
-      if (profileData.email) {
-        email = String(profileData.email).trim().toLowerCase();
-      } else {
-        const emailsResponse = await fetch("https://api.github.com/user/emails", {
-          headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: "application/vnd.github+json" },
-        });
-        if (!emailsResponse.ok) throw new Error("GitHub email lookup failed.");
-        const emailsData = (await emailsResponse.json()) as Array<{ email: string; primary?: boolean; verified?: boolean }>;
-        const primary = emailsData.find((entry) => entry.primary && entry.verified) ?? emailsData[0];
-        email = String(primary?.email ?? "").trim().toLowerCase();
-      }
-      name = String(profileData.name ?? profileData.login ?? "GitHub User").trim();
-    }
-
+    const { email, name } = await exchangeOAuthCode(provider, code, clientId, clientSecret, callbackUri);
     if (!email) throw new Error(`${provider} account did not provide a usable email.`);
     const user = upsertSocialUser(provider, email, name);
     const authToken = createAuthTokenForUser(user);
+    await persistAuthTokens(authTokens);
     res.redirect(buildAuthSuccessRedirect(stateData.returnTo, authToken, user));
   } catch (error) {
-    res.status(401).json({
-      error: {
-        code: "SOCIAL_AUTH_VERIFICATION_FAILED",
-        message: `OAuth verification failed for ${provider}.`,
-        details: [String(error instanceof Error ? error.message : error)],
-      },
-    });
+    const detail = String(error instanceof Error ? error.message : error);
+    // eslint-disable-next-line no-console
+    console.error(`[oauth] ${provider} callback failed:`, detail);
+    redirectOAuthStartFailure(
+      res,
+      stateData.returnTo,
+      "verification_failed",
+      `OAuth verification failed for ${provider}. ${detail}`,
+    );
   }
 });
 

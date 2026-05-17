@@ -29,14 +29,6 @@
     "api/webhook.js": {
       "maxDuration": 10,
       "includeFiles": "api/oauth.cjs"
-    },
-    "api/auth/oauth/[provider]/start.js": {
-      "maxDuration": 15,
-      "includeFiles": "api/oauth.cjs"
-    },
-    "api/auth/oauth/[provider]/callback.js": {
-      "maxDuration": 30,
-      "includeFiles": "api/oauth.cjs"
     }
   }
 }
