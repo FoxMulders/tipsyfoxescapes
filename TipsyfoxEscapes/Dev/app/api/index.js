@@ -37,9 +37,35 @@ const normalizeApiUrl = (req) => {
     const pathOnly = String(req.url ?? "/").split("?")[0] || "/";
     req.url = `/api${pathOnly === "/" ? "" : pathOnly}` + query;
   }
+  const pathQuery = req.query?.path;
+  if (typeof pathQuery === "string" && pathQuery.trim()) {
+    const segment = pathQuery.replace(/^\//, "");
+    const params = new URLSearchParams(query.replace(/^\?/, ""));
+    params.delete("path");
+    const rest = params.toString();
+    req.url = `/api/${segment}${rest ? `?${rest}` : ""}`;
+  }
 };
 
 const pathnameFromReq = (req) => {
+  for (const raw of [
+    req.headers["x-vercel-original-url"],
+    req.headers["x-original-url"],
+    req.headers["x-invoke-path"],
+  ]) {
+    if (typeof raw !== "string" || !raw.trim()) continue;
+    try {
+      const pathname = raw.startsWith("http") ? new URL(raw).pathname : raw.split("?")[0] || "";
+      if (pathname.startsWith("/api/")) return pathname;
+    } catch {
+      /* next */
+    }
+  }
+  const pathQuery = req.query?.path;
+  if (typeof pathQuery === "string" && pathQuery.trim()) {
+    const segment = pathQuery.replace(/^\//, "");
+    return `/api/${segment}`;
+  }
   const raw = String(req.url ?? "/").split("?")[0] || "/";
   try {
     return new URL(raw, "http://localhost").pathname;
