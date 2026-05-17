@@ -9,9 +9,6 @@
     "OAUTH_GOOGLE_ENABLED": "1"
   },
   "rewrites": [
-    { "source": "/api/auth/oauth/:provider/start", "destination": "/api/auth/oauth/:provider/start" },
-    { "source": "/api/auth/oauth/:provider/callback", "destination": "/api/auth/oauth/:provider/callback" },
-    { "source": "/api/health", "destination": "/api/health" },
     { "source": "/api/(.*)", "destination": "/api?path=$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
@@ -19,18 +16,10 @@
     "api/health.js": {
       "maxDuration": 10
     },
-    "api/auth/oauth/[provider]/start.js": {
-      "maxDuration": 15,
-      "includeFiles": "api/oauth.cjs"
-    },
-    "api/auth/oauth/[provider]/callback.js": {
-      "maxDuration": 15,
-      "includeFiles": "api/oauth.cjs"
-    },
     "api/index.js": {
       "maxDuration": 30,
       "memory": 1024,
-      "includeFiles": "api/{server.cjs,oauth.cjs}"
+      "includeFiles": "api/*.cjs"
     }
   }
 }
