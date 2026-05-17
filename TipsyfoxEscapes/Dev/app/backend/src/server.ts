@@ -21,6 +21,7 @@ import {
   persistAuthTokens,
   persistPlanningSessions,
 } from "./runtimePersistence.js";
+import { handleFacebookWebhookVerify } from "./oauthServerless.js";
 
 type PuzzleReferenceLink = {
   title: string;
@@ -3277,6 +3278,10 @@ const loadSavedPlans = async (): Promise<void> => {
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/api/webhooks/facebook", (req, res) => {
+  handleFacebookWebhookVerify(req, res);
 });
 
 app.post("/api/auth/signup", (req, res) => {

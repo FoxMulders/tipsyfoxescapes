@@ -92,7 +92,20 @@ const matchOAuthRoute = (pathname) => {
 
 module.exports = async function handler(req, res) {
   normalizeApiUrl(req);
-  const oauthRoute = matchOAuthRoute(pathnameFromReq(req));
+  const pathname = pathnameFromReq(req);
+  if (pathname === "/api/webhooks/facebook" || pathname === "/api/webhooks/facebook/") {
+    try {
+      const oauth = loadOAuthHandler();
+      return oauth.handleFacebookWebhookVerify(req, res);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.statusCode = message.includes("not built") ? 503 : 500;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(JSON.stringify({ error: { code: "OAUTH_HANDLER_FAILED", message } }));
+      return;
+    }
+  }
+  const oauthRoute = matchOAuthRoute(pathname);
   if (oauthRoute) {
     try {
       const oauth = loadOAuthHandler();

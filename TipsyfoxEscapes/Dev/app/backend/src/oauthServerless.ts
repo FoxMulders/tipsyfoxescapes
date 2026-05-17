@@ -226,6 +226,24 @@ const providerEnabled = (provider: OAuthProvider): boolean => {
 const isAllowedProvider = (raw: string): raw is OAuthProvider =>
   raw === "google" || raw === "facebook" || raw === "github";
 
+/** Meta webhook subscription verification (Facebook Developer → Webhooks). */
+export const handleFacebookWebhookVerify = (req: IncomingMessage, res: ServerResponse): void => {
+  const query = readQuery(req);
+  const mode = query.get("hub.mode");
+  const token = query.get("hub.verify_token");
+  const challenge = query.get("hub.challenge");
+  const expected = String(process.env.FACEBOOK_VERIFY_TOKEN ?? "").trim();
+  if (mode === "subscribe" && expected && token === expected && challenge) {
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end(challenge);
+    return;
+  }
+  res.statusCode = 403;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.end("Forbidden");
+};
+
 export const handleOAuthStart = async (
   req: IncomingMessage,
   res: ServerResponse,
