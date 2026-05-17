@@ -22,8 +22,8 @@ export function MissionFlowMap({
   const segW = compact ? 72 : n <= 5 ? 132 : 96;
   const w = Math.max(520, 56 + (n - 1) * segW);
   const useFork = youthAddOnEnabled && forkSegmentIndex !== null && forkSegmentIndex >= 0 && forkSegmentIndex < n - 1;
-  const h = useFork ? 118 : 88;
-  const nodeY = useFork ? 56 : 44;
+  const h = 88;
+  const nodeY = 44;
   const nodeR = compact ? 9 : 11;
   const lineEndInset = nodeR + 4;
   const xs = stepLabels.map((_, i) => 40 + i * ((w - 80) / Math.max(1, n - 1)));
@@ -50,24 +50,8 @@ export function MissionFlowMap({
   const segStroke = (done: boolean, active: boolean): string => {
     if (active) return "rgba(0, 242, 255, 0.98)";
     if (done) return "rgba(175, 228, 255, 1)";
-    return "rgba(145, 188, 255, 0.92)";
+    return "rgba(88, 108, 148, 0.55)";
   };
-
-  const forkSeg = forkSegmentIndex ?? 0;
-  const forkBranchD =
-    useFork && forkSeg >= 0
-      ? (() => {
-          const x0 = xs[forkSeg] ?? 0;
-          const x1 = xs[forkSeg + 1] ?? 0;
-          const dir = Math.sign(x1 - x0) || 1;
-          const sx = x0 + dir * lineEndInset;
-          const ex = x1 - dir * lineEndInset;
-          const mid = (sx + ex) / 2;
-          const yTop = nodeY - 20;
-          const yBot = nodeY + 20;
-          return `M ${sx} ${nodeY} Q ${mid} ${yTop} ${ex} ${nodeY} M ${sx} ${nodeY} Q ${mid} ${yBot} ${ex} ${nodeY}`;
-        })()
-      : "";
 
   const glowId = `missionFlowGlow-${reactId}`;
 
@@ -97,32 +81,34 @@ export function MissionFlowMap({
           if (!d) return null;
           const done = segComplete(i);
           const active = segActive(i);
+          const upcoming = !done && !active;
           return (
             <g key={`seg-g-${i}`} className="mission-flow-segment">
-              <path d={d} className="mission-flow-path-track" fill="none" stroke="rgba(52, 68, 108, 0.95)" strokeWidth={6} strokeLinecap="round" />
               <path
                 d={d}
-                className={cn("mission-flow-path", done && "mission-flow-path--done", active && "mission-flow-path--active")}
+                className="mission-flow-path-track"
+                fill="none"
+                stroke={upcoming ? "rgba(40, 52, 82, 0.65)" : "rgba(52, 68, 108, 0.95)"}
+                strokeWidth={6}
+                strokeLinecap="round"
+              />
+              <path
+                d={d}
+                className={cn(
+                  "mission-flow-path",
+                  done && "mission-flow-path--done",
+                  active && "mission-flow-path--active",
+                  upcoming && "mission-flow-path--todo",
+                )}
                 fill="none"
                 stroke={segStroke(done, active)}
-                strokeWidth={active ? 4.1 : done ? 3.5 : 3.1}
+                strokeWidth={active ? 4.1 : done ? 3.5 : 2.6}
                 strokeLinecap="round"
                 filter={active ? `url(#${glowId})` : undefined}
               />
             </g>
           );
         })}
-        {forkBranchD ? (
-          <path
-            d={forkBranchD}
-            className={cn("mission-flow-fork", forkSeg >= 0 && activeIndex >= forkSeg && "mission-flow-fork--live")}
-            fill="none"
-            stroke="rgba(0,242,255,0.55)"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeDasharray="6 5"
-          />
-        ) : null}
         {stepLabels.map((label, i) => {
           const st = nodeState(i);
           const cx = xs[i] ?? 0;
@@ -165,8 +151,9 @@ export function MissionFlowMap({
         })}
       </svg>
       {useFork ? (
-        <p className="muted mission-flow-fork-caption">
-          Junior add-on: parallel branch on the Build → Review leg (adults + kids tracks).
+        <p className="muted mission-flow-fork-caption" role="note">
+          <span className="mission-flow-fork-badge">Junior add-on</span> Parallel easy–medium track on the Build → Review
+          leg (same fiction as the main crew).
         </p>
       ) : null}
     </div>

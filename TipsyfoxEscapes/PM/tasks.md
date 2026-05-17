@@ -157,6 +157,12 @@ This backlog is derived from `PM/escape-room-builder-prd.md` and organized by de
 - **Acceptance Criteria**:
   - Recommendation quality measurably improves over baseline.
 
+## P3 — Commercial Studio / Venue direction
+
+Structured operator backlog (GM dashboard, reset checklists, staff seats, prop logs, white-label exports, seasonal vault, live-sync): see **`PM/commercial-plans.md`**.
+
+Placeholder `futureFeatureFlags` on Studio/Venue billing catalog entries in `Dev/app/backend/src/billing/catalog.ts` — not enforced in MVP.
+
 ## Suggested Execution Order
 1. P0-01 -> P0-04 (core generation flow)
 2. P0-05 -> P0-06 (iterative refinement + duplicate safety)

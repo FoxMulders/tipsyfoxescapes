@@ -16,6 +16,11 @@ import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
 import { PlanningSidebar } from "@/components/planning/PlanningSidebar";
 import { RoomDetailsStep } from "@/components/planning/RoomDetailsStep";
 import { classifyApiCatchError, parseApiJson, unexpectedApiResponseMessage } from "./apiErrors.ts";
+import { filterJuniorStoryHooks } from "./juniorStoryHooks.ts";
+import {
+  isInvalidPlanningSessionResponse,
+  planningSessionRecoveryNotice,
+} from "./planningSession.ts";
 import { installContentProtection } from "./contentProtection.ts";
 import {
   customThemeCoachSynthesize,
@@ -608,39 +613,34 @@ function PuzzleWindowCard({
   );
 }
 
-function JuniorTrackEnvironmentIdeas() {
+function JuniorTrackEnvironmentIdeas({
+  themeName,
+  environmentType,
+  availableItems,
+}: {
+  themeName: string;
+  environmentType: string;
+  availableItems: string;
+}) {
+  const hooks = useMemo(
+    () => filterJuniorStoryHooks(themeName, environmentType, availableItems),
+    [themeName, environmentType, availableItems],
+  );
+  const themeLabel = themeName.trim() || "your selected theme";
+  const envLabel = environmentType.trim() || "your room environment";
   return (
     <details className="junior-env-inspiration">
       <summary>Environment-first story hooks (junior-friendly)</summary>
       <p className="muted junior-env-inspiration-lead">
-        Re-skin ordinary furniture using your <strong>Room details</strong> tags so kids feel scale, humor, or mild spook without new
-        purchases—keep sight-lines and safety rules identical to the real room.
+        Hooks below are filtered for <strong>{themeLabel}</strong> in <strong>{envLabel}</strong>. Re-skin furniture you already
+        have—keep sight-lines and safety rules identical to the real room.
       </p>
       <ul className="list-compact junior-env-inspiration-list">
-        <li>
-          <strong>The giant’s living room (micro-scale):</strong> A pool table becomes a “vast green plain,” a sofa “leather
-          mountains,” a side table a “looming plateau”—you supply the perspective story; they navigate the epic in-place.
-        </li>
-        <li>
-          <strong>Ghost of a 1990s arcade:</strong> Lean into rec-room energy—balls become “trapped souls” to pot in order, joysticks
-          become séance toggles, high scores become séance phrases (keep lighting bright if needed for ages).
-        </li>
-        <li>
-          <strong>Sensory / perception:</strong> “Echo chamber” beats use sound and touch in dim (not dark) light; “2D glitch” uses
-          forced perspective murals where a clue only lines up from one standing spot.
-        </li>
-        <li>
-          <strong>Micro-world tech:</strong> “Inside the motherboard”—furniture reads as oversized resistors, fiber runs as power
-          conduits; breadcrumbs and pull-tabs become ant-scale props for a colony heist.
-        </li>
-        <li>
-          <strong>Weird history:</strong> A patent office of impossible inventions, or a greenhouse matching an imaginary codex—both
-          reward reading tables and specimens already in your space.
-        </li>
-        <li>
-          <strong>Mundane → surreal:</strong> A laundromat where washers sort “dimensions” to recover a sock-macguffin—great when your
-          venue already looks everyday.
-        </li>
+        {hooks.map((hook) => (
+          <li key={hook.title}>
+            <strong>{hook.title}:</strong> {hook.detail}
+          </li>
+        ))}
       </ul>
     </details>
   );
@@ -2298,6 +2298,10 @@ export default function App() {
   const [appView, setAppView] = useState<"builder" | "account">("builder");
   const lastPlanningAuthTokenRef = useRef(initialAuth.authToken);
   const pendingAuthSessionBootstrap = useRef(false);
+  const planningSessionRecoveryInFlight = useRef(false);
+  const recoverPlanningSessionRef = useRef<
+    (options?: { seedThemes?: boolean }) => Promise<string | undefined>
+  >(async () => undefined);
   const themesAutoFetchInFlight = useRef(false);
   const idleLastActivityRef = useRef(0);
   const idleTimeoutSignOutStartedRef = useRef(false);
@@ -2696,8 +2700,16 @@ export default function App() {
         headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify(body),
       });
-      const data = await parseApiJson<{ ok?: boolean; error?: { message?: string } }>(response);
+      const data = await parseApiJson<{ ok?: boolean; error?: { message?: string; code?: string } }>(response);
       if (!response.ok) {
+        if (isInvalidPlanningSessionResponse(response, data)) {
+          const freshId = await recoverPlanningSessionRef.current({ seedThemes: false });
+          if (freshId && freshId !== activeSessionId) {
+            return syncPlanningInputToServer(freshId, mode);
+          }
+          setError(planningSessionRecoveryNotice);
+          return false;
+        }
         const msg = data.error?.message ?? "Failed to update planning details.";
         setError(msg);
         toast.error(msg);
@@ -2941,6 +2953,9 @@ export default function App() {
       const normalized = normalizeAuthUser(user);
       if (normalized) {
         window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authToken: token, authUser: normalized }));
+        // Drop stale planning session ids before OAuth/email login bootstrap (server may have restarted).
+        setSessionId("");
+        pendingAuthSessionBootstrap.current = true;
       }
     } catch {
       // Ignore storage errors; in-memory auth state still works for this session.
@@ -3223,8 +3238,15 @@ export default function App() {
     }
   };
   const handleAuthExpired = (): void => {
+    if (planningAutoSyncRef.current) {
+      clearTimeout(planningAutoSyncRef.current);
+      planningAutoSyncRef.current = null;
+    }
+    planningSessionRecoveryInFlight.current = false;
+    pendingAuthSessionBootstrap.current = false;
+    lastPlanningAuthTokenRef.current = "";
     persistAuth("", null);
-    setError("Your session expired. Please log in again.");
+    setError("Your sign-in expired. Please log in again.");
   };
 
   useEffect(() => {
@@ -3347,6 +3369,14 @@ export default function App() {
     const data = (await response.json()) as { themes?: Theme[]; error?: { message?: string; code?: string } };
     if (!response.ok || !data.themes) {
       if (handleBillingGate(data.error?.code, data.error?.message)) return undefined;
+      if (isInvalidPlanningSessionResponse(response, data)) {
+        const freshId = await recoverPlanningSessionRef.current({ seedThemes: true });
+        if (freshId && freshId !== activeSessionId) {
+          return requestThemes(freshId, endpoint, currentThemes);
+        }
+        setError(planningSessionRecoveryNotice);
+        return undefined;
+      }
       setError(data.error?.message ?? "Failed to load themes.");
       return undefined;
     }
@@ -3376,6 +3406,14 @@ export default function App() {
       };
       if (!response.ok || !data.puzzles) {
         if (handleBillingGate(data.error?.code, data.error?.message)) return false;
+        if (isInvalidPlanningSessionResponse(response, data)) {
+          const freshId = await recoverPlanningSessionRef.current({ seedThemes: false });
+          if (freshId && freshId !== activeSessionId) {
+            return requestPuzzles(freshId, themeId, themeForEnhance);
+          }
+          setError(planningSessionRecoveryNotice);
+          return false;
+        }
         setError(data.error?.message ?? "Failed to generate puzzles.");
         return false;
       }
@@ -3509,6 +3547,21 @@ export default function App() {
     } catch (err) {
       setError(classifyApiCatchError(err));
       return undefined;
+    }
+  };
+
+  recoverPlanningSessionRef.current = async (options?: { seedThemes?: boolean }) => {
+    if (planningSessionRecoveryInFlight.current) return sessionId || undefined;
+    planningSessionRecoveryInFlight.current = true;
+    try {
+      setSessionId("");
+      const freshId = await createSession(undefined, { seedThemes: options?.seedThemes ?? false });
+      if (freshId) {
+        toast.message(planningSessionRecoveryNotice);
+      }
+      return freshId;
+    } finally {
+      planningSessionRecoveryInFlight.current = false;
     }
   };
 
@@ -6153,7 +6206,11 @@ export default function App() {
                             onReject={(id) => void rejectPuzzle(id)}
                             onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
                           />
-                          <JuniorTrackEnvironmentIdeas />
+                          <JuniorTrackEnvironmentIdeas
+                            themeName={selectedThemeName}
+                            environmentType={environmentType}
+                            availableItems={availableItems}
+                          />
                         </>
                       ) : (
                         <PuzzleWindowsTrack
@@ -6384,7 +6441,11 @@ export default function App() {
                         onReject={(id) => void rejectPuzzle(id)}
                         onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
                       />
-                      <JuniorTrackEnvironmentIdeas />
+                      <JuniorTrackEnvironmentIdeas
+                        themeName={selectedThemeName}
+                        environmentType={environmentType}
+                        availableItems={availableItems}
+                      />
                     </>
                   ) : (
                     <PuzzleWindowsTrack

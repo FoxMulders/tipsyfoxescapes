@@ -16,6 +16,8 @@ export type BillingPlanDefinition = {
   roomsToAdd: number;
   exportCreditsToAdd: number;
   features: string[];
+  /** Placeholder flags for future operator tooling (not enforced in MVP). */
+  futureFeatureFlags?: string[];
   /** One inline sentence after "Compared to:" in the UI */
   comparedTo: string;
   purchasable: boolean;
@@ -93,6 +95,14 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
       "Full catalog, custom themes, and refresh",
       "Professional tier — higher per-room than Home host, far below hiring a designer",
     ],
+    futureFeatureFlags: [
+      "gm_tablet_dashboard",
+      "reset_checklists",
+      "multi_user_staff",
+      "prop_maintenance_logs",
+      "commercial_license_exports",
+      "white_label_exports",
+    ],
     comparedTo:
       "ten group nights out (~$1,200–$2,400+ for parties of 4–6) or a fraction of one design-firm room ($5,000–$15,000+); about $65 per digital plan—you build and operate.",
   },
@@ -110,6 +120,16 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
       "25 full electronic export credits",
       "Full catalog for multi-room venues",
       "Stackable with org pool bonuses on the server",
+    ],
+    futureFeatureFlags: [
+      "gm_tablet_dashboard",
+      "reset_checklists",
+      "multi_user_staff",
+      "prop_maintenance_logs",
+      "commercial_license_exports",
+      "white_label_exports",
+      "seasonal_content_vault",
+      "live_sync_sessions",
     ],
     comparedTo:
       "twenty-five commercial nights out (~$3,000–$6,000+ in tickets for groups of 4–6) or a sliver of turn-key install ($55,000+); about $72 per plan—software and exports only, not build labor or staff.",

@@ -553,8 +553,8 @@ pre.code-inline {
 
 .stage-layout {
   display: grid;
-  grid-template-columns: minmax(260px, 20rem) minmax(0, 1fr);
-  gap: var(--shell-panel-gap, 1rem);
+  grid-template-columns: minmax(220px, 17.5rem) minmax(0, 1fr);
+  gap: 0.65rem;
   align-items: start;
 }
 
@@ -628,11 +628,40 @@ pre.code-inline {
   margin-top: 0.35rem;
 }
 
+.mission-panel.flow-shell {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 1.25rem);
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 0.72rem;
+  padding-bottom: 0.72rem;
+}
+
 .flow-shell-map-bar {
+  position: sticky;
+  top: 0;
+  z-index: 24;
+  flex-shrink: 0;
   width: 100%;
-  padding-bottom: 0.65rem;
+  padding: 0.35rem 0 0.65rem;
   margin-bottom: 0.35rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(8, 14, 28, 0.94);
+  backdrop-filter: blur(10px) saturate(1.05);
+  -webkit-backdrop-filter: blur(10px) saturate(1.05);
+}
+
+.flow-shell .flow-controls {
+  flex-shrink: 0;
+}
+
+.flow-shell .flow-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.15rem;
 }
 
 .flow-controls {
@@ -2643,6 +2672,25 @@ label.checkbox-field {
 
 .mission-flow-path--active {
   stroke-opacity: 1;
+}
+
+.mission-flow-path--todo {
+  stroke-opacity: 0.72;
+}
+
+.mission-flow-fork-badge {
+  display: inline-block;
+  margin-right: 0.35rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 242, 255, 0.45);
+  background: rgba(0, 242, 255, 0.12);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(200, 245, 255, 0.95);
+  vertical-align: middle;
 }
 
 @keyframes mission-flow-glow {

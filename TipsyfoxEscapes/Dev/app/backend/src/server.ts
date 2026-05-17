@@ -300,6 +300,31 @@ app.use((_req, res, next) => {
 });
 let nextSessionId = 1;
 const sessions = new Map<string, SessionState>();
+
+const resolvePlanningSession = (sessionId: unknown): SessionState | undefined => {
+  if (typeof sessionId !== "string") return undefined;
+  const id = sessionId.trim();
+  if (!id) return undefined;
+  return sessions.get(id);
+};
+
+/** Distinguish missing sessionId from a stale id (serverless restart / TTL) so clients can re-auth or recreate. */
+const respondInvalidPlanningSession = (res: express.Response, sessionId: unknown): void => {
+  const hasId = typeof sessionId === "string" && sessionId.trim().length > 0;
+  if (hasId) {
+    res.status(404).json({
+      error: {
+        code: "INVALID_SESSION",
+        message: "Planning session not found or expired. Start a new session.",
+        details: [],
+      },
+    });
+    return;
+  }
+  res.status(400).json({
+    error: { code: "INVALID_SESSION", message: "sessionId is required.", details: [] },
+  });
+};
 let nextThemeId = 1000;
 let globalGeneratedThemeCount = 0;
 const SKIP_TTL_MS = 24 * 60 * 60 * 1000;
@@ -3247,9 +3272,9 @@ const requireAuthedSessionOwnership = (
     res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
     return undefined;
   }
-  const session = sessions.get(sessionId);
+  const session = resolvePlanningSession(sessionId);
   if (!session) {
-    res.status(404).json({ error: { code: "INVALID_SESSION", message: "Session not found.", details: [] } });
+    respondInvalidPlanningSession(res, sessionId);
     return undefined;
   }
   const ownerId = sessionUserOwners.get(sessionId);
@@ -3787,9 +3812,9 @@ app.post("/api/planning/session", (req, res) => {
 
 app.patch("/api/planning/session/:sessionId/planning-input", (req, res) => {
   const sessionId = req.params.sessionId;
-  const session = sessions.get(sessionId);
+  const session = resolvePlanningSession(sessionId);
   if (!session) {
-    res.status(404).json({ error: { code: "INVALID_SESSION", message: "Session not found.", details: [] } });
+    respondInvalidPlanningSession(res, sessionId);
     return;
   }
   const {
@@ -3903,9 +3928,9 @@ app.put("/api/planning/session/:sessionId/theme-coach", (req, res) => {
 
 app.post("/api/themes/generate", (req, res) => {
   const { sessionId } = req.body ?? {};
-  const session = sessionId ? sessions.get(sessionId) : undefined;
+  const session = resolvePlanningSession(sessionId);
   if (!session) {
-    res.status(400).json({ error: { code: "INVALID_SESSION", message: "sessionId is required.", details: [] } });
+    respondInvalidPlanningSession(res, sessionId);
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
@@ -3961,9 +3986,9 @@ app.post("/api/themes/generate", (req, res) => {
 
 app.post("/api/themes/refresh", (req, res) => {
   const { sessionId, excludeThemeIds } = req.body ?? {};
-  const session = sessionId ? sessions.get(sessionId) : undefined;
+  const session = resolvePlanningSession(sessionId);
   if (!session) {
-    res.status(400).json({ error: { code: "INVALID_SESSION", message: "sessionId is required.", details: [] } });
+    respondInvalidPlanningSession(res, sessionId);
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
@@ -4023,9 +4048,9 @@ app.post("/api/themes/refresh", (req, res) => {
 app.post("/api/themes/custom", (req, res) => {
   // Support user-authored themes and include them in selectable options.
   const { sessionId, name, description } = req.body ?? {};
-  const session = sessionId ? sessions.get(sessionId) : undefined;
+  const session = resolvePlanningSession(sessionId);
   if (!session) {
-    res.status(400).json({ error: { code: "INVALID_SESSION", message: "sessionId is required.", details: [] } });
+    respondInvalidPlanningSession(res, sessionId);
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
@@ -4095,9 +4120,9 @@ app.post("/api/themes/custom", (req, res) => {
 
 app.post("/api/planning/session/:sessionId/existing-puzzles", (req, res) => {
   const sessionId = req.params.sessionId;
-  const session = sessions.get(sessionId);
+  const session = resolvePlanningSession(sessionId);
   if (!session) {
-    res.status(404).json({ error: { code: "INVALID_SESSION", message: "Session not found.", details: [] } });
+    respondInvalidPlanningSession(res, sessionId);
     return;
   }
   const { existingPuzzles } = req.body ?? {};
@@ -4127,9 +4152,9 @@ app.post("/api/planning/session/:sessionId/existing-puzzles", (req, res) => {
 
 app.post("/api/puzzles/generate", (req, res) => {
   const { sessionId, themeId } = req.body ?? {};
-  const session = sessionId ? sessions.get(sessionId) : undefined;
+  const session = resolvePlanningSession(sessionId);
   if (!session) {
-    res.status(400).json({ error: { code: "INVALID_SESSION", message: "sessionId is required.", details: [] } });
+    respondInvalidPlanningSession(res, sessionId);
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
@@ -4270,9 +4295,9 @@ app.post("/api/puzzles/generate", (req, res) => {
 app.post("/api/puzzles/:puzzleId/replace", (req, res) => {
   const { sessionId } = req.body ?? {};
   const puzzleId = req.params.puzzleId;
-  const session = sessionId ? sessions.get(sessionId) : undefined;
+  const session = resolvePlanningSession(sessionId);
   if (!session) {
-    res.status(400).json({ error: { code: "INVALID_SESSION", message: "sessionId is required.", details: [] } });
+    respondInvalidPlanningSession(res, sessionId);
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
@@ -4363,9 +4388,9 @@ app.post("/api/puzzles/:puzzleId/replace", (req, res) => {
 app.post("/api/puzzles/:puzzleId/reject", (req, res) => {
   const { sessionId } = req.body ?? {};
   const puzzleId = req.params.puzzleId;
-  const session = sessionId ? sessions.get(sessionId) : undefined;
+  const session = resolvePlanningSession(sessionId);
   if (!session) {
-    res.status(400).json({ error: { code: "INVALID_SESSION", message: "sessionId is required.", details: [] } });
+    respondInvalidPlanningSession(res, sessionId);
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
@@ -4417,9 +4442,9 @@ app.post("/api/puzzles/:puzzleId/reject", (req, res) => {
 
 app.post("/api/puzzles/fill-slot", (req, res) => {
   const { sessionId, category, audienceTrack, gatesAdultProgression } = req.body ?? {};
-  const session = sessionId ? sessions.get(sessionId) : undefined;
+  const session = resolvePlanningSession(sessionId);
   if (!session) {
-    res.status(400).json({ error: { code: "INVALID_SESSION", message: "sessionId is required.", details: [] } });
+    respondInvalidPlanningSession(res, sessionId);
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
@@ -4515,9 +4540,9 @@ app.post("/api/puzzles/fill-slot", (req, res) => {
 app.post("/api/plans/:sessionId/export", async (req, res) => {
   // Export full planning output for host/runbook usage.
   const sessionId = req.params.sessionId;
-  const session = sessions.get(sessionId);
+  const session = resolvePlanningSession(sessionId);
   if (!session) {
-    res.status(404).json({ error: { code: "INVALID_SESSION", message: "Session not found.", details: [] } });
+    respondInvalidPlanningSession(res, sessionId);
     return;
   }
   const billingUser = claimSessionForAuth(sessionId, req);
@@ -4771,9 +4796,9 @@ app.post("/api/plans/:sessionId/save", async (req, res) => {
     return;
   }
   const sessionId = req.params.sessionId;
-  const session = sessions.get(sessionId);
+  const session = resolvePlanningSession(sessionId);
   if (!session) {
-    res.status(404).json({ error: { code: "INVALID_SESSION", message: "Session not found.", details: [] } });
+    respondInvalidPlanningSession(res, sessionId);
     return;
   }
   const isDraft = Boolean(req.body?.draft);
