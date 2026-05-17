@@ -2141,7 +2141,7 @@ export default function App() {
     | "setup"
     | "output-review"
     | "output-export";
-  const [wizardStep, setWizardStep] = useState<WizardStep>(initialAuth.authUser ? "saved" : "setup");
+  const [wizardStep, setWizardStep] = useState<WizardStep>("setup");
   const [hoverPreviewThemeId, setHoverPreviewThemeId] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
 
@@ -2351,10 +2351,15 @@ export default function App() {
     customMixElectronic,
     customThemeName,
   ]);
-  const wizardSteps = hasSavedPlans
-    ? (["saved", "setup", "themes", "themes-puzzles", "output-review", "output-export"] as WizardStep[])
-    : (["setup", "themes", "themes-puzzles", "output-review", "output-export"] as WizardStep[]);
-  const wizardIndex = Math.max(0, wizardSteps.indexOf(wizardStep));
+  const wizardSteps = useMemo(
+    () =>
+      hasSavedPlans
+        ? (["saved", "setup", "themes", "themes-puzzles", "output-review", "output-export"] as WizardStep[])
+        : (["setup", "themes", "themes-puzzles", "output-review", "output-export"] as WizardStep[]),
+    [hasSavedPlans],
+  );
+  const flowWizardStep: WizardStep = wizardSteps.includes(wizardStep) ? wizardStep : (wizardSteps[0] ?? "setup");
+  const wizardIndex = wizardSteps.indexOf(flowWizardStep);
   const missionStepLabels = useMemo(() => wizardSteps.map(wizardStepLabel), [wizardSteps]);
   const juniorForkSegmentIndex = useMemo(() => {
     if (!youthAddOnEnabled) return null;
@@ -2440,10 +2445,10 @@ export default function App() {
   };
 
   const wizardLabel = (() => {
-    if (wizardStep === "saved") return "Saved Plans";
-    if (wizardStep === "setup") return "Room details";
-    if (wizardStep === "themes") return "Choose a theme";
-    if (wizardStep === "themes-puzzles") return "Build puzzle set";
+    if (flowWizardStep === "saved") return "Saved Plans";
+    if (flowWizardStep === "setup") return "Room details";
+    if (flowWizardStep === "themes") return "Choose a theme";
+    if (flowWizardStep === "themes-puzzles") return "Build puzzle set";
     return "Output";
   })();
 
@@ -2627,12 +2632,12 @@ export default function App() {
   };
 
   const goWizardBack = (): void => {
-    const idx = wizardSteps.indexOf(wizardStep);
+    const idx = wizardSteps.indexOf(flowWizardStep);
     if (idx <= 0) return;
     setWizardStep(wizardSteps[idx - 1]);
   };
 
-  const canGoWizardBack = wizardSteps.indexOf(wizardStep) > 0;
+  const canGoWizardBack = wizardIndex > 0;
   const flagMissingFields = (keys: string[]): void => {
     const next: Record<string, boolean> = {};
     keys.forEach((key) => {
@@ -2646,7 +2651,7 @@ export default function App() {
     setAuthUser(user ? normalizeAuthUser(user) : null);
     setShowPlanPicker(Boolean(user));
     setActivePanel(Boolean(user?.canSaveRooms) ? "saved" : "plan");
-    setWizardStep(Boolean(user) ? "saved" : "setup");
+    setWizardStep("setup");
     if (!user || !token) {
       setAppView("builder");
       setBillingNotice("");
@@ -4364,17 +4369,25 @@ export default function App() {
   }, [authToken, authUser]);
 
   useEffect(() => {
+    if (!wizardSteps.includes(wizardStep)) {
+      setWizardStep(wizardSteps[0] ?? "setup");
+    }
+  }, [wizardSteps, wizardStep]);
+
+  useEffect(() => {
     if (!authUser) return;
     if (savedPlans.length > 0) {
       setShowPlanPicker(true);
       return;
     }
     setShowPlanPicker(false);
-    if (activePanel === "saved") {
-      setActivePanel("plan");
+    if (wizardStep === "saved") {
       setWizardStep("setup");
     }
-  }, [savedPlans, authUser, activePanel]);
+    if (activePanel === "saved") {
+      setActivePanel("plan");
+    }
+  }, [savedPlans, authUser, activePanel, wizardStep]);
 
   useEffect(() => {
     if (!authToken || !authUser) {
@@ -4463,29 +4476,29 @@ export default function App() {
   }, [error, wizardStep]);
 
   const flowMutedHelper =
-    wizardStep === "setup"
+    flowWizardStep === "setup"
       ? simpleRoomSetup
         ? "Simple setup covers who’s playing, how long, where, props, and optional event type. Use **All options** for difficulty, junior track, and the live puzzle-count strip."
         : "Set duration, headcount, room difficulty, and optional junior add-on—the app sizes puzzle count from session length and players, biases suggestions, and can append an easy–medium parallel track for kids. Add optional props, then pick a theme."
-      : wizardStep === "themes-puzzles"
+      : flowWizardStep === "themes-puzzles"
         ? selectedTheme
           ? `Build or refresh puzzles for: ${selectedTheme.name}. Add any **premade** puzzles you already own on this step before generating; count follows room timing and difficulty from Room details. Treat generator output and web references as starting points—adapt into **original** venue-specific puzzles (including any Arduino builds) and **QA** electronics before opening.`
           : "Choose a theme first, then add any premade puzzles you already own and generate when you are ready."
-        : wizardStep === "themes" && selectedTheme
+        : flowWizardStep === "themes" && selectedTheme
           ? simpleRoomSetup
             ? `Theme selected: ${selectedTheme.name}. The full brief and loadout are above—continue when you’re ready.`
             : `Theme selected: ${selectedTheme.name}`
-          : wizardStep === "themes"
+          : flowWizardStep === "themes"
             ? simpleRoomSetup && !selectedThemeId
               ? "Curated theme cards load automatically. Use **Use My Own Theme** at the top of this step if you want a custom brief—pick one radio, then continue."
               : "Room timing is locked in from the previous step; pick or author a theme next."
-            : wizardStep === "output-review"
+            : flowWizardStep === "output-review"
               ? "Review the puzzle list and storyline below this header, then continue to export when you are ready."
-              : wizardStep === "output-export"
+              : flowWizardStep === "output-export"
                 ? "Export markdown, mark approval if you want, and save the plan to your account."
                 : null;
 
-  const showBackInFlowHeader = !(wizardStep === "themes" && themePath === "generated");
+  const showBackInFlowHeader = !(flowWizardStep === "themes" && themePath === "generated");
 
   const planningSnapshotPanel = (
     <div className="planning-summary-body">
@@ -4667,7 +4680,7 @@ export default function App() {
         <button
           type="button"
           className="secondary-btn"
-          disabled={wizardStep === "setup"}
+          disabled={flowWizardStep === "setup"}
           onClick={() => {
             setWizardStep("setup");
             setActivePanel("plan");
@@ -4678,7 +4691,7 @@ export default function App() {
         <button
           type="button"
           className="secondary-btn"
-          disabled={wizardStep === "themes"}
+          disabled={flowWizardStep === "themes"}
           onClick={() => {
             if (!buildPlanningBody("strict")) {
               flagMissingFields(collectStrictPlanningMissing());
@@ -4697,7 +4710,7 @@ export default function App() {
         <button
           type="button"
           className="secondary-btn"
-          disabled={wizardStep === "themes-puzzles"}
+          disabled={flowWizardStep === "themes-puzzles"}
           onClick={() => {
             void proceedFromThemesToPuzzles();
           }}
@@ -4707,11 +4720,11 @@ export default function App() {
         <button
           type="button"
           className="secondary-btn"
-          disabled={wizardStep === "output-review" || !canNavigateToOutputReview || outputReviewBusy}
+          disabled={flowWizardStep === "output-review" || !canNavigateToOutputReview || outputReviewBusy}
           title={
             outputReviewBusy
               ? "Working…"
-              : wizardStep === "output-review"
+              : flowWizardStep === "output-review"
                 ? "You are already on Output: Review."
                 : !canNavigateToOutputReview
                   ? "Choose a theme on the Theme step first."
@@ -4777,8 +4790,7 @@ export default function App() {
                   <li>Room packs unlock the full theme library plus “bring your own theme”</li>
                 </ul>
                 <p className="muted promo-footnote auth-hero-para">
-                  We combine account limits with device and network signals to reduce trial farming—pair with card-backed checkout
-                  in production for best results.
+                  One trial per account: the same three curated themes, one full export, and no saved rooms until you purchase a room pack.
                 </p>
               </div>
             </div>
@@ -5186,8 +5198,7 @@ export default function App() {
                   </strong>
                 </p>
                 <p className="muted anti-abuse-note">
-                  <strong>Anti-abuse:</strong> device and network signals help limit trial farming; paid access is applied through your
-                  account on the server.
+                  Your free trial is tied to this account. After your one export, purchase a room pack to design and export more rooms.
                 </p>
               </div>
               {authUser.isAdmin ? (
@@ -5311,7 +5322,7 @@ export default function App() {
               <div className="flow-controls-top">
                 <div>
                   <p className="muted">Step {wizardIndex + 1} of {wizardSteps.length}</p>
-                  {wizardStep === "setup" ? null : <p><strong>{wizardLabel}</strong></p>}
+                  {flowWizardStep === "setup" ? null : <p><strong>{wizardLabel}</strong></p>}
                   {flowMutedHelper ? <p className="muted">{flowMutedHelper}</p> : null}
                 </div>
                 {showBackInFlowHeader && canGoWizardBack ? (
@@ -5321,7 +5332,7 @@ export default function App() {
                 ) : null}
               </div>
             </div>
-            {wizardStep === "setup" ? (
+            {flowWizardStep === "setup" ? (
               <div className="flow-content flow-content--blueprint">
                 <div className="setup-blueprint-header">
                   <h2 className="room-details-title" title="Theme is the fictional layer you choose in the next step.">
@@ -5665,7 +5676,7 @@ export default function App() {
                 </div>
               </div>
             ) : null}
-            {wizardStep === "themes" ? (
+            {flowWizardStep === "themes" ? (
               <div className="flow-content flow-content--themes-step">
                 <div className="theme-view-toggle-row theme-view-toggle-row--themes-step">
                   <span className="theme-view-toggle-legend" id="theme-view-toggle-label">
@@ -6014,7 +6025,7 @@ export default function App() {
                 ) : null}
               </div>
             ) : null}
-            {wizardStep === "themes-puzzles" ? (
+            {flowWizardStep === "themes-puzzles" ? (
               <div className="flow-content">
                 {!hasFullCatalogAccess ? (
                   <p className="muted puzzle-builder-freegen-note puzzle-builder-freegen-note--top">
@@ -6306,7 +6317,7 @@ export default function App() {
                     {outputReviewBusy ? "Opening review…" : "Continue to output review"}
                   </button>
                 </div>
-                {wizardStep === "themes-puzzles" && !canNavigateToOutputReview ? (
+                {flowWizardStep === "themes-puzzles" && !canNavigateToOutputReview ? (
                   <p className="muted puzzle-builder-blocked-hint" role="status" data-testid="continue-output-review-blocked-hint">
                     <strong>Continue to output review</strong> needs a selected theme. Use <strong>← Back</strong> to the Theme step, pick
                     one idea (or your custom theme), then return here—the button stays disabled until a theme is selected.
@@ -6407,7 +6418,7 @@ export default function App() {
               </div>
             ) : null}
           </section>
-          {wizardStep === "saved" && hasSavedPlans && showPlanPicker ? (
+          {flowWizardStep === "saved" && hasSavedPlans && showPlanPicker ? (
         <section className="card mission-panel">
           <h2>Welcome back</h2>
           <p className="muted">Load a saved plan to continue where you left off, or start a new plan.</p>
@@ -6444,7 +6455,7 @@ export default function App() {
         </section>
           ) : null}
 
-          {wizardStep === "output-review" ? (
+          {flowWizardStep === "output-review" ? (
             <section className="card mission-panel glass-panel output-review-panel" id="builder-output-anchor">
               <h2>Output: Review</h2>
               {storyPlan ? (
@@ -6667,7 +6678,7 @@ export default function App() {
             </section>
           ) : null}
 
-          {wizardStep === "output-export" ? (
+          {flowWizardStep === "output-export" ? (
             <section className="card mission-panel glass-panel" id="builder-export-anchor">
               <h2>Output: Export and Save</h2>
               <div className="export-action-flow" role="group" aria-label="Approve, save, then export">
@@ -6815,15 +6826,15 @@ export default function App() {
           ) : null}
 
         </section>
-        {wizardStep === "setup" ? (
+        {flowWizardStep === "setup" ? (
           <button type="button" className="mobile-continue-fab" onClick={() => void proceedFromSetupToThemes()}>
             Continue → Themes
           </button>
-        ) : wizardStep === "themes" && selectedThemeId ? (
+        ) : flowWizardStep === "themes" && selectedThemeId ? (
           <button type="button" className="mobile-continue-fab" onClick={() => void proceedFromThemesToPuzzles()}>
             Continue → Build puzzles
           </button>
-        ) : wizardStep === "themes-puzzles" ? (
+        ) : flowWizardStep === "themes-puzzles" ? (
           <button
             type="button"
             className="mobile-continue-fab"
