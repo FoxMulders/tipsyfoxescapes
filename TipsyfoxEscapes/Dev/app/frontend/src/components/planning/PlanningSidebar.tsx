@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { AvailableItemsChips, parseItemChips } from "@/components/planning/AvailableItemsChips";
 import { EnvironmentSelect } from "@/components/planning/EnvironmentSelect";
 import { FieldHint } from "@/components/planning/FieldHint";
+import { VenueBuildTypeField } from "@/components/planning/VenueBuildTypeField";
 import { cn } from "@/lib/utils";
+import type { VenueBuildType } from "../../../../shared/contracts";
 
 type SummaryProps = {
   playersConcurrent: string;
@@ -16,6 +18,7 @@ type SummaryProps = {
   availableItems: string;
   roomDifficulty: string;
   themeMustMatchEnvironment: boolean;
+  venueBuildType: VenueBuildType;
   youthAddOnEnabled: boolean;
   themeLabel: string;
   mainPuzzleCount: number;
@@ -31,6 +34,7 @@ type EditHandlers = {
   setEventType: (v: string) => void;
   setAvailableItems: (v: string) => void;
   setThemeMustMatchEnvironment: (v: boolean) => void;
+  setVenueBuildType: (v: VenueBuildType) => void;
   setRoomDifficulty: (v: "easy" | "medium" | "hard") => void;
   setYouthAddOnEnabled: (v: boolean) => void;
   setYouthAddOnGatesAdultFlow: (v: boolean) => void;
@@ -65,6 +69,14 @@ function PlanningSidebarSummary(props: SummaryProps) {
 
   return (
     <>
+      <SummaryRow
+        label="Venue type"
+        value={
+          props.venueBuildType === "professional_empty"
+            ? "Professional empty room"
+            : "Prebuilt space"
+        }
+      />
       <SummaryRow label="Players at once" value={props.playersConcurrent} />
       <SummaryRow label="Total participants" value={props.participantsTotal} />
       <SummaryRow label="Duration (min)" value={props.sessionDurationMinutes} />
@@ -88,6 +100,13 @@ function PlanningSidebarEdit(props: PlanningSidebarProps) {
 
   return (
     <div className="space-y-3">
+      <VenueBuildTypeField
+        value={props.venueBuildType}
+        onChange={props.setVenueBuildType}
+        environmentType={props.environmentType}
+        compact
+      />
+
       <FieldHint label="Players at once" required invalid={invalid("playersConcurrent")}>
         <input
           className={cn(inputClass, invalid("playersConcurrent") && "border-destructive")}

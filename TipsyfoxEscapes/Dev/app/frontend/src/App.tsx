@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
 import { PlanningSidebar } from "@/components/planning/PlanningSidebar";
 import { RoomDetailsStep } from "@/components/planning/RoomDetailsStep";
+import type { VenueBuildType } from "../../shared/contracts";
 import { classifyApiCatchError, parseApiJson, unexpectedApiResponseMessage } from "./apiErrors.ts";
 import { filterJuniorStoryHooks } from "./juniorStoryHooks.ts";
 import {
@@ -272,6 +273,7 @@ type SavedPlanPayload = {
     puzzleMixPhysical?: number | null;
     puzzleMixElectronic?: number | null;
     themeMustMatchEnvironment?: boolean;
+    venueBuildType?: VenueBuildType;
   };
   themes: Theme[];
   selectedThemeId: string;
@@ -2209,6 +2211,7 @@ export default function App() {
   const [youthAddOnAgeNote, setYouthAddOnAgeNote] = useState<string>("");
   const [environmentType, setEnvironmentType] = useState<string>("");
   const [themeMustMatchEnvironment, setThemeMustMatchEnvironment] = useState<boolean>(false);
+  const [venueBuildType, setVenueBuildType] = useState<VenueBuildType>("prebuilt_space");
   const [availableItems, setAvailableItems] = useState<string>("");
   const [useCustomMainPuzzleCount, setUseCustomMainPuzzleCount] = useState(false);
   const [customMainPuzzleCountStr, setCustomMainPuzzleCountStr] = useState("");
@@ -2376,6 +2379,7 @@ export default function App() {
     youthAddOnAgeNote,
     eventType,
     themeMustMatchEnvironment,
+    venueBuildType,
     useCustomMainPuzzleCount,
     customMainPuzzleCountStr,
     useCustomMix,
@@ -2484,6 +2488,7 @@ export default function App() {
     puzzleMixPhysical: number | null;
     puzzleMixElectronic: number | null;
     themeMustMatchEnvironment: boolean;
+    venueBuildType: VenueBuildType;
   };
 
   const buildPlanningBody = (mode: "draft" | "strict"): PlanningApiBody | null => {
@@ -2534,6 +2539,7 @@ export default function App() {
         puzzleMixPhysical: mixTriple?.physical ?? null,
         puzzleMixElectronic: mixTriple?.electronic ?? null,
         themeMustMatchEnvironment,
+        venueBuildType,
       };
     }
     const players = Number.isFinite(pc) && pc > 0 ? Math.min(99, Math.max(1, Math.trunc(pc))) : 4;
@@ -2555,6 +2561,7 @@ export default function App() {
       puzzleMixPhysical: mixTriple?.physical ?? null,
       puzzleMixElectronic: mixTriple?.electronic ?? null,
       themeMustMatchEnvironment,
+      venueBuildType,
     };
   };
 
@@ -4565,6 +4572,8 @@ export default function App() {
       );
       setEnvironmentType(payload.planningInput.environmentType);
       setThemeMustMatchEnvironment(Boolean(payload.planningInput.themeMustMatchEnvironment));
+      const vbt = payload.planningInput.venueBuildType;
+      setVenueBuildType(vbt === "professional_empty" ? "professional_empty" : "prebuilt_space");
       setAvailableItems(payload.planningInput.availableItems.join(", "));
       const mo = payload.planningInput.mainTrackPuzzleCountOverride;
       setUseCustomMainPuzzleCount(typeof mo === "number" && Number.isFinite(mo));
@@ -5385,6 +5394,7 @@ export default function App() {
             availableItems={availableItems}
             roomDifficulty={roomDifficulty}
             themeMustMatchEnvironment={themeMustMatchEnvironment}
+            venueBuildType={venueBuildType}
             youthAddOnEnabled={youthAddOnEnabled}
             themeLabel={
               themePath === "custom"
@@ -5401,6 +5411,7 @@ export default function App() {
             setEventType={setEventType}
             setAvailableItems={setAvailableItems}
             setThemeMustMatchEnvironment={setThemeMustMatchEnvironment}
+            setVenueBuildType={setVenueBuildType}
             setRoomDifficulty={setRoomDifficulty}
             setYouthAddOnEnabled={setYouthAddOnEnabled}
             setYouthAddOnGatesAdultFlow={setYouthAddOnGatesAdultFlow}
@@ -5458,6 +5469,8 @@ export default function App() {
                 setAvailableItems={setAvailableItems}
                 themeMustMatchEnvironment={themeMustMatchEnvironment}
                 setThemeMustMatchEnvironment={setThemeMustMatchEnvironment}
+                venueBuildType={venueBuildType}
+                setVenueBuildType={setVenueBuildType}
                 roomDifficulty={roomDifficulty}
                 setRoomDifficulty={setRoomDifficulty}
                 youthAddOnEnabled={youthAddOnEnabled}

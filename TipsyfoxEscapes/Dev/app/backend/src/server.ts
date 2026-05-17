@@ -139,6 +139,8 @@ type StoryPlan = {
 };
 type ThemeCoachStoredMessage = { id: string; role: "user" | "assistant"; content: string };
 
+type VenueBuildType = "professional_empty" | "prebuilt_space";
+
 type SessionState = {
   planningInput: {
     playersConcurrent: number;
@@ -165,6 +167,8 @@ type SessionState = {
     puzzleMixElectronic: number | null;
     /** When true, generated theme ordering favors settings that align with the physical environment (indoor/outdoor, school, etc.). */
     themeMustMatchEnvironment: boolean;
+    /** Commercial empty shell vs. existing furnished space (home, office, rec room). */
+    venueBuildType: VenueBuildType;
   };
   /** Custom-theme coach transcript; only exposed via authed session APIs for the session owner. */
   themeCoachChat: ThemeCoachStoredMessage[];
@@ -184,6 +188,92 @@ type SessionState = {
   currentStoryPlan?: StoryPlan;
 };
 
+const EMPTY_ROOM_INSTALL_HEADING = "## What to install in your empty room";
+
+const parseVenueBuildType = (value: unknown, fallback: VenueBuildType = "prebuilt_space"): VenueBuildType =>
+  value === "professional_empty" || value === "prebuilt_space" ? value : fallback;
+
+const isProfessionalEmptyVenue = (session: SessionState): boolean =>
+  session.planningInput.venueBuildType === "professional_empty";
+
+const venueBuildTypeExportLabel = (v: VenueBuildType): string =>
+  v === "professional_empty"
+    ? "Professional empty room (build from scratch)"
+    : "Prebuilt space (home, office, rec room, etc.)";
+
+const normalizeSessionPlanningInput = (
+  raw: SessionState["planningInput"] | undefined,
+): SessionState["planningInput"] => {
+  if (!raw) {
+    return {
+      playersConcurrent: 4,
+      participantsTotal: 6,
+      sessionDurationMinutes: 45,
+      environmentType: "",
+      availableItems: [],
+      existingPuzzles: [],
+      roomDifficulty: "medium",
+      youthAddOnEnabled: false,
+      youthAddOnGatesAdultFlow: false,
+      youthAddOnAgeNote: "",
+      eventType: "",
+      mainTrackPuzzleCountOverride: null,
+      puzzleMixLogic: null,
+      puzzleMixPhysical: null,
+      puzzleMixElectronic: null,
+      themeMustMatchEnvironment: false,
+      venueBuildType: "prebuilt_space",
+    };
+  }
+  return {
+    ...raw,
+    venueBuildType: parseVenueBuildType(raw.venueBuildType),
+    themeMustMatchEnvironment: Boolean(raw.themeMustMatchEnvironment),
+  };
+};
+
+const buildEmptyRoomInstallChecklistLines = (environmentType: string): string[] => {
+  const envNote = environmentType.trim()
+    ? `_Tailored to your selected environment type: **${environmentType.trim()}** — adapt zones and finishes to match the fiction._`
+    : "_Select an environment type in planning to help theme generation; install zones below apply to any commercial shell._";
+  return [
+    EMPTY_ROOM_INSTALL_HEADING,
+    "",
+    envNote,
+    "",
+    "Starter checklist for a ticketed escape room venue:",
+    "",
+    "1. **Entry & briefing zone** — waiver/consent table, clock/timer display, coat hooks, briefing monitor or printed rules.",
+    "2. **Lock & latch infrastructure** — hasp boxes, mag locks on strike plates you install (not real egress hardware), key cabinets, resettable padlocks.",
+    "3. **Prop & puzzle stations** — 2–4 dedicated work surfaces (desks, plinths, cabinets) sized for concurrent groups; cable routes planned.",
+    "4. **Clue surfaces** — pin boards, whiteboards, or backlit frames for team deductions; keep one central recap zone.",
+    "5. **Lighting** — dimmable zones, accent spots on puzzle faces, emergency egress lighting untouched and code-compliant.",
+    "6. **Control desk / GM position** — sightlines to major zones, hint delivery (intercom or tablet), reset checklist, spare batteries.",
+    "7. **Electronics bench** — Arduino/MCU prototypes on a service shelf; strain relief and labeled harnesses before mounting in-set.",
+    "8. **Audio / ambience** — hidden speakers for tone; volume limits so adjacent rooms are not spoiled.",
+    "9. **Safety & operations** — fire exits clear, no trip hazards across cable runs, first-aid kit, prop quarantine area for resets.",
+    "10. **Finish pass** — paint/theme dressing, signage that boundaries gameplay from staff-only areas.",
+    "",
+  ];
+};
+
+const injectVenueBuildContextIfMissing = (description: string, session: SessionState): string => {
+  if (!isProfessionalEmptyVenue(session)) return description;
+  if (description.includes(EMPTY_ROOM_INSTALL_HEADING)) return description;
+  return `${description}\n\n${buildEmptyRoomInstallChecklistLines(session.planningInput.environmentType).join("\n")}`;
+};
+
+const applyVenueBuildTypeToPuzzleCopy = (puzzles: Puzzle[], session: SessionState): Puzzle[] => {
+  if (!isProfessionalEmptyVenue(session)) return puzzles;
+  const installNote =
+    " Plan fixture placement for a **professional empty room**: mount this beat on installed prop stations or control-desk zones—not ad-hoc living-room furniture.";
+  return puzzles.map((puzzle) => {
+    if (puzzle.themeTags.includes("user-provided")) return puzzle;
+    if (puzzle.howItWorks.includes("professional empty room")) return puzzle;
+    return { ...puzzle, howItWorks: `${puzzle.howItWorks}${installNote}` };
+  });
+};
+
 const serializeSessionForDisk = (session: SessionState) => ({
   ...session,
   seenThemeIds: [...session.seenThemeIds],
@@ -199,6 +289,7 @@ const deserializeSessionFromDisk = (raw: Record<string, unknown>): SessionState 
   };
   return {
     ...data,
+    planningInput: normalizeSessionPlanningInput(data.planningInput),
     seenThemeIds: new Set(data.seenThemeIds ?? []),
     seenThemeTitlesLower: new Set(data.seenThemeTitlesLower ?? []),
     seenPuzzleIds: new Set(data.seenPuzzleIds ?? []),
@@ -305,7 +396,10 @@ const resolvePlanningSession = (sessionId: unknown): SessionState | undefined =>
   if (typeof sessionId !== "string") return undefined;
   const id = sessionId.trim();
   if (!id) return undefined;
-  return sessions.get(id);
+  const session = sessions.get(id);
+  if (!session) return undefined;
+  session.planningInput = normalizeSessionPlanningInput(session.planningInput);
+  return session;
 };
 
 /** Distinguish missing sessionId from a stale id (serverless restart / TTL) so clients can re-auth or recreate. */
@@ -882,9 +976,14 @@ const deriveThemeFitReason = (puzzle: Puzzle, theme?: Theme, session?: SessionSt
   const themeName = theme?.name ?? "this theme";
   const text = `${theme?.name ?? ""} ${theme?.description ?? ""} ${theme?.tldr ?? ""}`.toLowerCase();
   const env = session?.planningInput.environmentType?.trim();
-  const envTail = env
-    ? ` In **${env}**, stage this as a deliberate fiction station (desk, wall, cabinet cluster)—not a random worksheet—so the beat visibly belongs in that room.`
-    : "";
+  const professionalEmpty = session ? isProfessionalEmptyVenue(session) : false;
+  const envTail = professionalEmpty
+    ? env
+      ? ` In your **${env}** build-out, plan a dedicated fiction station (desk cluster, wall panel, or prop plinth) you will **install** for this beat—not borrowed household furniture.`
+      : " Plan this beat on fixtures you will install in the empty venue—prop stations, lock housings, and control-desk sightlines."
+    : env
+      ? ` In **${env}**, stage this as a deliberate fiction station (desk, wall, cabinet cluster)—not a random worksheet—so the beat visibly belongs in that room.`
+      : "";
   const isSciFi =
     text.includes("guardians") ||
     text.includes("galaxy") ||
@@ -1307,6 +1406,9 @@ const buildRunGeometryMarkdown = (session: SessionState): string => {
   const mins = session.planningInput.sessionDurationMinutes;
   const eventLine = (session.planningInput.eventType ?? "").trim() || "Not specified (general audience).";
   const room = session.planningInput.environmentType.trim() || "your play space";
+  const venueLine = isProfessionalEmptyVenue(session)
+    ? "Professional empty room — install fixtures and stations from scratch"
+    : "Prebuilt space — use existing furniture and layout where safe";
   const rec = getRecommendedFlowPathKind(session);
   const recLabel =
     rec === "linear"
@@ -1331,6 +1433,7 @@ const buildRunGeometryMarkdown = (session: SessionState): string => {
   return [
     RUN_GEOMETRY_HEADING,
     "",
+    `- **Venue build:** ${venueLine}`,
     `- **Physical room:** ${room}`,
     `- **Event context:** ${eventLine}`,
     `- **Generator bias for this session:** ${recLabel} — ${explain}`,
@@ -1434,6 +1537,7 @@ const sortThemesForSessionAffinity = (pool: Theme[], session: SessionState): The
 
 const injectItemsIntoThemeDescription = (theme: Theme, session: SessionState): Theme => {
   let description = injectRunGeometryIfMissing(theme.description, session);
+  description = injectVenueBuildContextIfMissing(description, session);
   let tldr = theme.tldr;
   const inv = normalizePlanningInventory(session.planningInput.availableItems);
   if (
@@ -1569,9 +1673,21 @@ const buildSuggestedAdditionLists = (
   const electronicCount = puzzles.filter((puzzle) => puzzle.category === "electronic").length;
   const inv = normalizePlanningInventory(session.planningInput.availableItems);
 
-  optional.push(
-    "Label the room boundary and puzzle zones so players understand where gameplay objects are intentionally placed.",
-  );
+  if (isProfessionalEmptyVenue(session)) {
+    required.push(
+      "Map the empty shell before ordering props: entry/briefing zone, 2–4 puzzle stations, GM control position, and a finale cluster.",
+    );
+    optional.push(
+      "Professional empty room: install lock hardware on dedicated puzzle boxes or strike plates you add—never repurpose real egress latches.",
+    );
+    optional.push(
+      "Run the **What to install in your empty room** checklist in your theme brief before commissioning furniture or electronics.",
+    );
+  } else {
+    optional.push(
+      "Label the room boundary and puzzle zones so players understand where gameplay objects are intentionally placed.",
+    );
+  }
   optional.push(
     "Originality stance: adapt generator ideas into **venue-specific** puzzles—logic, physical, and especially **Arduino/microcontroller** builds should be yours to prototype, then **QA** (all states, resets, power loss, safety) before opening night; treat web references as technique/credit only, not a script to clone.",
   );
@@ -1604,9 +1720,12 @@ const buildSuggestedAdditionLists = (
       "Electronic / Arduino beats: prototype on the bench, then run a formal **QA** pass (every valid and invalid input, reset, unplug mid-sequence, heat, and trip hazards) before mounting in the set—ship original behaviors, not clones of public tutorials.",
     );
   }
-  if (room.includes("living room") || room.includes("house")) {
+  if (!isProfessionalEmptyVenue(session) && (room.includes("living room") || room.includes("house"))) {
     optional.push("Add temporary cable covers/tape routes to keep wiring safe in shared household spaces.");
     optional.push("Add removable prop mounts (command hooks/strips) to avoid permanent room modifications.");
+  }
+  if (isProfessionalEmptyVenue(session)) {
+    optional.push("Cable trenches or surface raceways along walls keep Arduino harnesses off the player path in a commercial shell.");
   }
   if (room.includes("garage") || room.includes("basement")) {
     optional.push("Add focused lighting for clue visibility and a clear safe path around stored equipment.");
@@ -3800,6 +3919,7 @@ app.post("/api/planning/session", (req, res) => {
         (req.body as { themeMustMatchEnvironment?: unknown }).themeMustMatchEnvironment,
         false,
       ),
+      venueBuildType: parseVenueBuildType((req.body as { venueBuildType?: unknown }).venueBuildType),
     },
     themeCoachChat: [],
     customThemes: [],
@@ -3896,6 +4016,10 @@ app.patch("/api/planning/session/:sessionId/planning-input", (req, res) => {
       "themeMustMatchEnvironment" in bodyRaw
         ? parsePlanningBool(bodyRaw.themeMustMatchEnvironment, session.planningInput.themeMustMatchEnvironment ?? false)
         : (session.planningInput.themeMustMatchEnvironment ?? false),
+    venueBuildType:
+      "venueBuildType" in bodyRaw
+        ? parseVenueBuildType(bodyRaw.venueBuildType, session.planningInput.venueBuildType)
+        : session.planningInput.venueBuildType,
   };
   res.json({ ok: true });
 });
@@ -4269,7 +4393,8 @@ app.post("/api/puzzles/generate", (req, res) => {
 
   // De-duplicate in case a small category pool is exhausted.
   const uniqueGenerated = Array.from(new Map(generated.map((puzzle) => [puzzle.id, puzzle])).values());
-  const generatedWithReasons = withThemeFitReasons(uniqueGenerated, session.selectedTheme, session);
+  const venueAdjusted = applyVenueBuildTypeToPuzzleCopy(uniqueGenerated, session);
+  const generatedWithReasons = withThemeFitReasons(venueAdjusted, session.selectedTheme, session);
   let generatedForResponse = withNormalizedReferenceLinks(generatedWithReasons);
   generatedForResponse = breakDuplicateSavedRoomPuzzleSet(
     session.selectedTheme.id,
@@ -4370,6 +4495,7 @@ app.post("/api/puzzles/:puzzleId/replace", (req, res) => {
       session.selectedTheme,
     );
   }
+  session.currentPuzzles = applyVenueBuildTypeToPuzzleCopy(session.currentPuzzles, session);
   session.currentPuzzles = withThemeFitReasons(session.currentPuzzles, session.selectedTheme, session);
   session.currentPuzzles = withNormalizedReferenceLinks(session.currentPuzzles);
   session.currentPuzzles = annotatePuzzlesWithInventoryAnchors(session, session.currentPuzzles);
@@ -4605,7 +4731,8 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
     ...(session.planningInput.youthAddOnAgeNote?.trim()
       ? [`- Junior add-on age / facilitation note: ${session.planningInput.youthAddOnAgeNote.trim()}`]
       : []),
-    `- Environment (physical room): ${session.planningInput.environmentType}`,
+    `- Venue build type: ${venueBuildTypeExportLabel(session.planningInput.venueBuildType)}`,
+    `- Environment (physical room / fiction setting): ${session.planningInput.environmentType}`,
     `- Theme ideas should match this environment: ${session.planningInput.themeMustMatchEnvironment ? "Yes (generator ranks venue-aligned picks)" : "No (fantasy may diverge from the room)"}`,
     `- Available items: ${session.planningInput.availableItems.join(", ")}`,
     `- Existing user puzzles: ${session.planningInput.existingPuzzles.length}`,
@@ -4930,6 +5057,7 @@ const rehydrateLiveSessionFromSavedPlan = (plan: SavedPlan, ownerUserId: string)
     puzzleMixElectronic:
       typeof raw.puzzleMixElectronic === "number" && Number.isFinite(raw.puzzleMixElectronic) ? raw.puzzleMixElectronic : null,
     themeMustMatchEnvironment: Boolean(raw.themeMustMatchEnvironment),
+    venueBuildType: parseVenueBuildType(raw.venueBuildType),
   };
   const selectedTheme = d.themes.find((t) => t.id === d.selectedThemeId);
   const session: SessionState = {

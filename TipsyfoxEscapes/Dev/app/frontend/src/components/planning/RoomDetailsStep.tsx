@@ -3,6 +3,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { AvailableItemsChips } from "@/components/planning/AvailableItemsChips";
 import { EnvironmentSelect } from "@/components/planning/EnvironmentSelect";
 import { FieldHint } from "@/components/planning/FieldHint";
+import { VenueBuildTypeField } from "@/components/planning/VenueBuildTypeField";
+import type { VenueBuildType } from "../../../../shared/contracts";
 
 type RoomDetailsStepProps = {
   playersConcurrent: string;
@@ -19,6 +21,8 @@ type RoomDetailsStepProps = {
   setAvailableItems: (v: string) => void;
   themeMustMatchEnvironment: boolean;
   setThemeMustMatchEnvironment: (v: boolean) => void;
+  venueBuildType: VenueBuildType;
+  setVenueBuildType: (v: VenueBuildType) => void;
   roomDifficulty: "easy" | "medium" | "hard";
   setRoomDifficulty: (v: "easy" | "medium" | "hard") => void;
   youthAddOnEnabled: boolean;
@@ -69,6 +73,12 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
       {props.puzzleEstimateHud}
 
       <div className="mx-auto max-w-xl space-y-6" id="room-details-blueprint-form">
+        <VenueBuildTypeField
+          value={props.venueBuildType}
+          onChange={props.setVenueBuildType}
+          environmentType={props.environmentType}
+        />
+
         <FieldHint label="Players at one time" required invalid={invalid("playersConcurrent")}>
           <input
             className={`${inputClass} max-w-[8rem] ${invalid("playersConcurrent") ? "border-destructive" : ""}`}
@@ -144,7 +154,11 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
           label="Environment"
           required
           invalid={invalid("environmentType")}
-          tooltip="Choosing an environment automatically filters our puzzle catalog to props that realistically fit your physical space layout."
+          tooltip={
+            props.venueBuildType === "professional_empty"
+              ? "Even in an empty commercial shell, pick the fiction setting (warehouse, office, classroom, etc.) so themes and puzzles match your build-out."
+              : "Choosing an environment automatically filters our puzzle catalog to props that realistically fit your physical space layout."
+          }
         >
           <EnvironmentSelect
             value={props.environmentType}
@@ -158,9 +172,17 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
         </FieldHint>
 
         <FieldHint
-          label="Available items & props"
+          label={
+            props.venueBuildType === "professional_empty"
+              ? "Planned installs & props"
+              : "Available items & props"
+          }
           invalid={invalid("availableItems")}
-          tooltip="Optional props that may be on hand. Click suggested chips or add custom theatrical props."
+          tooltip={
+            props.venueBuildType === "professional_empty"
+              ? "Optional list of fixtures and props you plan to order or install—not furniture already in a lived-in space."
+              : "Optional props that may be on hand. Click suggested chips or add custom theatrical props."
+          }
         >
           <AvailableItemsChips
             value={props.availableItems}

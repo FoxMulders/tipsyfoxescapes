@@ -3,6 +3,9 @@ export type PuzzleCategory = "logic" | "physical" | "electronic";
 
 export type RoomDifficulty = "easy" | "medium" | "hard";
 
+/** Commercial empty shell vs. an existing lived-in / furnished space. */
+export type VenueBuildType = "professional_empty" | "prebuilt_space";
+
 export interface PlanningInput {
   playersConcurrent: number;
   participantsTotal: number;
@@ -18,6 +21,8 @@ export interface PlanningInput {
   eventType?: string;
   /** When true, catalog theme ranking favors venue-aligned picks vs the environment field. */
   themeMustMatchEnvironment?: boolean;
+  /** Professional empty room (install from scratch) vs. prebuilt home/office/rec space. */
+  venueBuildType?: VenueBuildType;
 }
 
 export interface Theme {
