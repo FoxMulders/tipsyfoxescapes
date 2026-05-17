@@ -19,6 +19,24 @@ export type SquareConfig = {
   webhookSignatureKey: string;
   webhookNotificationUrl: string;
   appPublicUrl: string;
+  /** Human-readable setup hint when `configured` is false (no secrets). */
+  setupHint: string | null;
+};
+
+const squareSetupHint = (accessToken: string, locationId: string): string | null => {
+  if (accessToken && locationId) return null;
+
+  const typoAccess = String(process.env.SQUARE_ACCED_TOKEN ?? "").trim();
+  if (typoAccess && !accessToken) {
+    return "Remove the misspelled Vercel variable SQUARE_ACCED_TOKEN, set SQUARE_ACCESS_TOKEN instead, then redeploy.";
+  }
+
+  const onVercel = Boolean(process.env.VERCEL);
+  if (onVercel) {
+    return "Set SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID in Vercel → Project → Settings → Environment Variables (Production & Preview), enable Runtime, then redeploy.";
+  }
+
+  return "Set SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID in backend/.env (local) or your host's environment variables, then restart the server.";
 };
 
 export const readSquareConfig = (): SquareConfig => {
@@ -34,8 +52,9 @@ export const readSquareConfig = (): SquareConfig => {
       /\/$/,
       "",
     );
+  const configured = Boolean(accessToken && locationId);
   return {
-    configured: Boolean(accessToken && locationId),
+    configured,
     environment,
     applicationId,
     locationId,
@@ -43,13 +62,14 @@ export const readSquareConfig = (): SquareConfig => {
     webhookSignatureKey,
     webhookNotificationUrl,
     appPublicUrl,
+    setupHint: squareSetupHint(accessToken, locationId),
   };
 };
 
 const squareClient = (): SquareClient => {
   const cfg = readSquareConfig();
   if (!cfg.configured) {
-    throw new Error("Square is not configured. Set SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID.");
+    throw new Error(cfg.setupHint ?? "Square is not configured. Set SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID.");
   }
   return new SquareClient({
     token: cfg.accessToken,

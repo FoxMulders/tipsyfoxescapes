@@ -12,6 +12,8 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import "./App.css";
+import { classifyApiCatchError, unexpectedApiResponseMessage } from "./apiErrors.ts";
+import { installContentProtection } from "./contentProtection.ts";
 import {
   customThemeCoachSynthesize,
   customThemeCoachTurn,
@@ -132,6 +134,13 @@ type AuthUser = {
   trialUsed: boolean;
   trialRemaining: boolean;
   canSaveRooms: boolean;
+};
+
+const AUTH_PROVIDER_LABELS: Record<AuthUser["provider"], string> = {
+  local: "email & password",
+  google: "Google",
+  facebook: "Facebook",
+  github: "GitHub",
 };
 
 type BillingPlan = {
@@ -2099,6 +2108,7 @@ export default function App() {
   const [billingNotice, setBillingNotice] = useState<string>("");
   const [billingPlans, setBillingPlans] = useState<BillingPlan[]>([]);
   const [squarePaymentsReady, setSquarePaymentsReady] = useState<boolean>(false);
+  const [squareSetupHint, setSquareSetupHint] = useState<string | null>(null);
   const [squareWebConfig, setSquareWebConfig] = useState<{
     applicationId: string;
     locationId: string;
@@ -2130,6 +2140,7 @@ export default function App() {
   const [outputReviewBusy, setOutputReviewBusy] = useState(false);
   const persistAuthRef = useRef<(token: string, user: AuthUser | null) => void>(() => {});
   const themeCoachHydratedForSessionRef = useRef<string>("");
+  const builderShellRef = useRef<HTMLElement | null>(null);
   const prevCustomThemeCoachPrereqsOkRef = useRef(false);
   const customThemeCoachMessagesRef = useRef<ThemeCoachUiMessage[]>([]);
   const hasSavedPlans = savedPlans.length > 0;
@@ -2474,8 +2485,8 @@ export default function App() {
         return false;
       }
       return true;
-    } catch (_err) {
-      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } catch (err) {
+      setError(classifyApiCatchError(err));
       return false;
     }
   };
@@ -2796,10 +2807,14 @@ export default function App() {
             environment?: string;
             applicationId?: string | null;
             locationId?: string | null;
+            setupHint?: string | null;
           };
         };
         setBillingPlans(Array.isArray(data.plans) ? data.plans : []);
         setSquarePaymentsReady(Boolean(data.square?.configured));
+        setSquareSetupHint(
+          data.square?.configured ? null : String(data.square?.setupHint ?? "").trim() || null,
+        );
         const appId = String(data.square?.applicationId ?? "").trim();
         const locationId = String(data.square?.locationId ?? "").trim();
         setSquareWebConfig(
@@ -2814,6 +2829,7 @@ export default function App() {
       } catch {
         setBillingPlans([]);
         setSquarePaymentsReady(false);
+        setSquareSetupHint(null);
         setSquareWebConfig(null);
       }
     })();
@@ -3170,8 +3186,8 @@ export default function App() {
       setSuggestedAdditionsRequired(baseSuggestedRequired);
       setSuggestedAdditions(aiEnhancement?.suggestedAdditions?.length ? aiEnhancement.suggestedAdditions : baseSuggestedAdditions);
       return true;
-    } catch {
-      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } catch (err) {
+      setError(classifyApiCatchError(err));
       return false;
     }
   };
@@ -3243,8 +3259,8 @@ export default function App() {
         await requestThemes(data.sessionId, "/api/themes/generate", []);
       }
       return data.sessionId;
-    } catch (_err) {
-      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } catch (err) {
+      setError(classifyApiCatchError(err));
       return undefined;
     }
   };
@@ -3253,6 +3269,11 @@ export default function App() {
     if (sessionId) return sessionId;
     return createSession(undefined, { seedThemes: true });
   };
+
+  useLayoutEffect(() => {
+    if (appView !== "builder") return;
+    return installContentProtection(builderShellRef.current);
+  }, [appView]);
 
   /** New auth token → fresh planning session; same token with empty sessionId (e.g. reload) → create once. */
   useEffect(() => {
@@ -3347,8 +3368,8 @@ export default function App() {
     }
     try {
       await requestThemes(activeSessionId, endpoint, themes);
-    } catch (_err) {
-      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } catch (err) {
+      setError(classifyApiCatchError(err));
     }
   };
 
@@ -3379,9 +3400,9 @@ export default function App() {
       }
       try {
         await requestThemes(activeSessionId, "/api/themes/generate", []);
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+          setError(classifyApiCatchError(err));
         }
       } finally {
         if (!cancelled) themesAutoFetchInFlight.current = false;
@@ -3408,9 +3429,9 @@ export default function App() {
         if (!synced || cancelled) return;
         const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
         await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
-      } catch {
+      } catch (err) {
         if (!cancelled) {
-          setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+          setError(classifyApiCatchError(err));
         }
       }
     })();
@@ -3443,8 +3464,8 @@ export default function App() {
     const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
     try {
       await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
-    } catch (_err) {
-      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } catch (err) {
+      setError(classifyApiCatchError(err));
     }
   };
 
@@ -3487,15 +3508,15 @@ export default function App() {
             description: customThemeDescription,
           }),
         });
-      } catch {
-        setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+      } catch (err) {
+        setError(classifyApiCatchError(err));
         return;
       }
       let data: { theme?: Theme; error?: { message?: string } };
       try {
         data = (await response.json()) as { theme?: Theme; error?: { message?: string } };
       } catch {
-        setError(`Server returned ${response.status} with a non-JSON body. Check backend logs.`);
+        setError(unexpectedApiResponseMessage(response.status));
         return;
       }
       if (!response.ok || !data.theme) {
@@ -3870,8 +3891,8 @@ export default function App() {
         puzzle.id === data.replacedPuzzleId ? replacementPuzzle : puzzle,
       );
       await applyPuzzleSetFromServer(nextPuzzles, data);
-    } catch (_err) {
-      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } catch (err) {
+      setError(classifyApiCatchError(err));
     } finally {
       setPuzzleWindowBusy(null);
     }
@@ -3922,8 +3943,8 @@ export default function App() {
         ]);
       }
       await applyPuzzleSetFromServer(data.puzzles, data);
-    } catch (_err) {
-      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } catch (err) {
+      setError(classifyApiCatchError(err));
     } finally {
       setPuzzleWindowBusy(null);
     }
@@ -3965,8 +3986,8 @@ export default function App() {
       }
       setRefusedPuzzleSlots((prev) => prev.filter((candidate) => candidate.slotId !== slotId));
       await applyPuzzleSetFromServer(data.puzzles, data);
-    } catch (_err) {
-      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } catch (err) {
+      setError(classifyApiCatchError(err));
     } finally {
       setPuzzleWindowBusy(null);
     }
@@ -4032,8 +4053,8 @@ export default function App() {
           "This export omitted full electronic build packs because consumable export credits are at zero. Add credits via activation or webhook.",
         );
       }
-    } catch (_err) {
-      setError("Cannot reach backend API. Make sure backend is running in Dev/app/backend with npm run dev.");
+    } catch (err) {
+      setError(classifyApiCatchError(err));
     } finally {
       setExportBusy(false);
     }
@@ -4966,7 +4987,10 @@ export default function App() {
     <>
       <AppAtmosphere />
       {/* Main application layout and interactive sections. */}
-      <main className={`page-shell page-shell--layered${appView === "builder" ? " page-shell--builder-protect" : ""}`}>
+      <main
+        ref={builderShellRef}
+        className={`page-shell page-shell--layered${appView === "builder" ? " page-shell--builder-protect" : ""}`}
+      >
       {authUser.billingTier === "trial" && appView === "builder" ? (
         <div className="slot-utilization-warning trial-active-banner" role="status">
           <strong>Free trial:</strong> the same three curated themes load every time. You get one full export; saving to your account
@@ -5008,7 +5032,9 @@ export default function App() {
                 <span className="muted">Puzzles</span>
                 <strong>{puzzles.length}</strong>
               </div>
-              <p className="muted hero-signed-in">Signed in as {authUser.name} ({authUser.email})</p>
+              <p className="muted hero-signed-in">
+                Signed in as {authUser.name} ({authUser.email}) via {AUTH_PROVIDER_LABELS[authUser.provider]}
+              </p>
               <button type="button" className="secondary-btn" onClick={signOut}>
                 Sign out
               </button>
@@ -5036,6 +5062,9 @@ export default function App() {
         <div className="account-view-wrap">
           <section className="card mission-panel">
             <h2 className="subscription-title">Account</h2>
+            <p className="muted">
+              Signed in as {authUser.name} ({authUser.email}) via {AUTH_PROVIDER_LABELS[authUser.provider]}.
+            </p>
             <p className="muted">
               Review your room-slot subscription, consumable full-export credits, team pool bonus (if configured), billing
               audit trail, and saved plans.
@@ -5069,8 +5098,8 @@ export default function App() {
               </p>
               {!squarePaymentsReady ? (
                 <p className="muted pricing-square-hint" role="status">
-                  Square checkout is not configured on this server yet. Set <code>SQUARE_ACCESS_TOKEN</code> and{" "}
-                  <code>SQUARE_LOCATION_ID</code> in the backend <code>.env</code> to enable purchases.
+                  {squareSetupHint ??
+                    "Square checkout is not configured yet. Set SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID in Vercel → Environment Variables (Production & Preview), then redeploy."}
                 </p>
               ) : null}
               {squarePaymentsReady && authToken ? (

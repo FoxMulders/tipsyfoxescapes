@@ -139,6 +139,7 @@ export const registerBillingRoutes = (app: Express, getDeps: () => BillingRouteD
         environment: square.environment,
         applicationId: square.applicationId || null,
         locationId: square.configured ? square.locationId : null,
+        setupHint: square.setupHint,
       },
       billingModel: "one_time_room_packs",
     });
@@ -170,6 +171,7 @@ export const registerBillingRoutes = (app: Express, getDeps: () => BillingRouteD
         error: {
           code: "SQUARE_NOT_CONFIGURED",
           message:
+            square.setupHint ??
             "Square payments are not configured. Set SQUARE_ACCESS_TOKEN, SQUARE_LOCATION_ID, and SQUARE_ENVIRONMENT on the server.",
           details: [],
         },
@@ -243,7 +245,7 @@ export const registerBillingRoutes = (app: Express, getDeps: () => BillingRouteD
       res.status(503).json({
         error: {
           code: "SQUARE_NOT_CONFIGURED",
-          message: "Cannot confirm checkout until Square is configured.",
+          message: square.setupHint ?? "Cannot confirm checkout until Square is configured.",
           details: [],
         },
       });
@@ -292,7 +294,7 @@ export const registerBillingRoutes = (app: Express, getDeps: () => BillingRouteD
       res.status(503).json({
         error: {
           code: "SQUARE_NOT_CONFIGURED",
-          message: "Square payments are not configured on the server.",
+          message: square.setupHint ?? "Square payments are not configured on the server.",
           details: [],
         },
       });

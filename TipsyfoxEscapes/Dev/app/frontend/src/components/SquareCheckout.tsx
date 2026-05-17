@@ -133,7 +133,7 @@ export function SquareCheckout({ planId, planLabel, authToken, square, onNotice,
   if (!square?.applicationId) {
     return (
       <p className="muted pricing-square-hint" role="status">
-        In-card checkout needs <code>SQUARE_APPLICATION_ID</code> on the server. You can still use hosted Square checkout below.
+        In-card checkout needs <code>SQUARE_APPLICATION_ID</code> in Vercel environment variables. You can still use hosted Square checkout below.
       </p>
     );
   }

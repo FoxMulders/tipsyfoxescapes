@@ -3,7 +3,9 @@ import cors from "cors";
 import { promises as fs } from "fs";
 import path from "path";
 import crypto from "crypto";
-import "dotenv/config";
+import { loadEnv } from "./loadEnv.js";
+
+loadEnv();
 import { billingPlanById } from "./billing/catalog.js";
 import { registerBillingRoutes, registerSquareWebhook, type BillingRouteDeps } from "./billing/routes.js";
 import {
@@ -3284,6 +3286,10 @@ const loadSavedPlans = async (): Promise<void> => {
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, service: "escape-room-builder" });
 });
 
 app.get("/webhook", (req, res) => {
