@@ -3100,6 +3100,16 @@ label.checkbox-field {
   margin-top: 0.15rem;
 }
 
+.environment-type-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.environment-type-custom-input {
+  margin-top: 0;
+}
+
 .basement-items-selected-label {
   margin: 0 0 0.25rem;
   font-size: 0.82rem;

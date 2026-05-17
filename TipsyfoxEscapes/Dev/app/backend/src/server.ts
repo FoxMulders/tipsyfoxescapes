@@ -3760,8 +3760,7 @@ app.post("/api/planning/session", (req, res) => {
     !participantsTotal ||
     !sessionDurationMinutes ||
     !environmentType ||
-    !Array.isArray(availableItems) ||
-    availableItems.length === 0
+    !Array.isArray(availableItems)
   ) {
     res.status(400).json({
       error: {
@@ -3859,8 +3858,7 @@ app.patch("/api/planning/session/:sessionId/planning-input", (req, res) => {
     !participantsTotal ||
     !sessionDurationMinutes ||
     !environmentType ||
-    !Array.isArray(availableItems) ||
-    availableItems.length === 0
+    !Array.isArray(availableItems)
   ) {
     res.status(400).json({
       error: {

@@ -1272,28 +1272,108 @@ function getSuggestedPropOptionsForPlanning(envRaw: string, eventRaw: string): S
   return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
-/** Basement / rec-room escape props that are usually safe when staged intentionally (no live utilities). */
-const BASEMENT_ESCAPE_ITEM_PRESETS = [
-  "Plastic tote bins (stackable)",
-  "Pegboard with spare hooks",
-  "Folding work table",
-  "Foam brick or doorstop (safe)",
-  "Lockable metal cash box",
-  "Magnet strips / word magnets",
-  "String lights (battery)",
-  "Labeled decoy shipping crate",
-  "Foam pipe insulation tubes",
-  "Peel-and-stick floor arrows",
-  "Small dry-erase board",
-  "Stepladder (reach-only, marked zone)",
-  "Extension cord (coiled, unplugged demo)",
-  "Velcro tape / removable mounts",
-  "Buzzer in a hollow prop box",
-  "Fake furnace façade panel (theater prop)",
-  "Fake hot water heater shell (decoy box only)",
-  "Shelf bracket puzzle (non–load-bearing)",
-  "Rigged breaker-face prop (non-live, labeled)",
-] as const;
+/** Staging examples for the environment-fit details block (updates with environment + optional event). */
+function getStagingExampleParagraphs(envRaw: string, eventRaw: string): string[] {
+  const env = envRaw.trim().toLowerCase();
+  const event = eventRaw.trim().toLowerCase();
+  if (!env) {
+    return [
+      "Choose an environment above to see examples for your space. Fiction can stretch, but props and zones still have to work where you actually host.",
+    ];
+  }
+
+  const paragraphs: string[] = [];
+
+  if (/\bliving\b|lounge|\bden\b/.test(env)) {
+    paragraphs.push(
+      "A “library” mystery in a living room means a defined corner with a small shelf, rug, and lamp that reads as stacks—not pretending the whole house is a different building.",
+    );
+  } else if (/\brec\b|rumpus|game room|family room/.test(env)) {
+    paragraphs.push(
+      "A “command center” beat in a rec room might use the TV input, game shelf, and a cleared coffee table as stations—keep cables taped and heavy trophies secured.",
+    );
+  } else if (/\bgarage\b/.test(env)) {
+    paragraphs.push(
+      "A “workshop vault” in a garage means a lockable toolbox or pegboard zone you control—not asking players to use real power tools or climb unsupervised.",
+    );
+  } else if (/\bbasement\b/.test(env)) {
+    paragraphs.push(
+      "Basement fiction works best on folding tables, labeled totes, and theater utility panels—avoid live furnace or water-heater puzzles unless they are clearly fake props.",
+    );
+  } else if (/\bkitchen\b/.test(env)) {
+    paragraphs.push(
+      "Kitchen beats should use cool props, timers, and dry goods—no hot burners, tasting, or sharp knives in player hands during the run.",
+    );
+  } else if (/\bdining\b/.test(env)) {
+    paragraphs.push(
+      "Dining-room staging can use placemat order, LED candles, and china-cabinet sight lines through glass—secure anything fragile before groups arrive.",
+    );
+  } else if (/\boffice\b|\bstudy\b/.test(env)) {
+    paragraphs.push(
+      "An “indoor vault” beat in an office / study means a locking file drawer, fire-safe box, or labeled supply cabinet—not a poured concrete bank room.",
+    );
+  } else if (/\bclassroom\b|\bschool\b/.test(env)) {
+    paragraphs.push(
+      "A “library” set in a classroom is a taped-off reading nook with cubbies and a globe—not the entire campus; keep egress paths clear.",
+    );
+  } else if (/\bconference\b/.test(env)) {
+    paragraphs.push(
+      "Conference-room fiction maps to whiteboard grids, name plates, and AV credenza props—respect venue AV policies and do not factory-reset displays.",
+    );
+  } else if (/\bretail\b|\bpop-?up\b|\bstorefront\b|\bmall\b/.test(env)) {
+    paragraphs.push(
+      "Retail pop-up staging uses shelf facings, a kiosk tablet in guided mode, and mannequin poses—nothing that triggers real loss-prevention alarms.",
+    );
+  } else if (/\bbackyard\b|\bpatio\b|\bdeck\b/.test(env)) {
+    paragraphs.push(
+      "Backyard “vault” beats mean a weatherproof lockbox, shed, or trailer that plays as secure storage—you are not pouring a bank vault outdoors.",
+    );
+  } else if (/\bwarehouse\b|\bstudio\b|\bindustrial\b/.test(env)) {
+    paragraphs.push(
+      "Warehouse fiction uses rolling racks, clip lights, and labeled bays—brake carts, tape cord runs, and keep players off live industrial equipment.",
+    );
+  } else if (/\bparty room\b|\bvenue\b|\bbanquet\b|\bballroom\b/.test(env)) {
+    paragraphs.push(
+      "Party-venue runs stage fiction on folding tables, coat racks, and a sign-in table—balloons air-filled only and speakers volume-capped.",
+    );
+  } else {
+    paragraphs.push(
+      "Match fiction to zones you can actually control in this space—one strong corner or prop island often reads clearer than pretending the whole venue transformed.",
+    );
+  }
+
+  if (/\bhalloween\b/.test(event)) {
+    paragraphs.push(
+      "For Halloween, keep walkways lit and skip loose cobwebs on paths; spooky wording can live on one labeled prop zone instead of darkening the whole room.",
+    );
+  } else if (/\bchristmas\b|\bwinter holiday\b|\bholiday party\b/.test(event)) {
+    paragraphs.push(
+      "For a winter holiday party, reuse ornament counts and gift-wrap stations as puzzles—avoid open flames and keep tripping hazards off main routes.",
+    );
+  } else if (/\bcorporate\b|\bteam building\b/.test(event)) {
+    paragraphs.push(
+      "For corporate team building, favor clear roles per station and photo-friendly resets—avoid puzzles that require climbing furniture or embarrassing physical contact.",
+    );
+  } else if (/\bwedding\b/.test(event)) {
+    paragraphs.push(
+      "For a wedding reception activity, keep staging away from catering traffic and use quiet audio cues so the beat does not compete with speeches.",
+    );
+  } else if (/\bbirthday\b/.test(event)) {
+    paragraphs.push(
+      "For a birthday party, bias toward shorter chains and obvious win moments—stage props where parents can supervise younger guests easily.",
+    );
+  } else if (/\bschool\b|\bcamp\b/.test(event)) {
+    paragraphs.push(
+      "For school or camp programs, document egress, use blunt props only, and align fiction with the room you were assigned—not hallways you do not control.",
+    );
+  } else if (/\bcommercial\b|\bticketed\b|\bescape\b.*\broom\b|\bvenue\b/.test(event)) {
+    paragraphs.push(
+      "For a commercial escape venue, guests expect original flow—treat generator ideas as raw material and reset every prop pocket between paid groups.",
+    );
+  }
+
+  return paragraphs;
+}
 
 const UNSAFE_UTILITY_ITEM =
   /\b(real\s+)?(furnace|furnaces|hot[-\s]?water\s*(heater|heaters|tank|tanks)|water\s*heater|water\s*heaters|boiler|boilers|gas\s*line|propane\s*tank)\b/i;
@@ -1311,22 +1391,90 @@ function itemKey(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function AvailableItemsBasementField({
+function EnvironmentTypeField({
+  value,
+  onChange,
+  invalid,
+  id,
+  onEnvironmentCleared,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  invalid?: boolean;
+  id?: string;
+  /** Called when the host clears environment (e.g. to reset optional prop picks). */
+  onEnvironmentCleared?: () => void;
+}): ReactNode {
+  const matchedPreset = useMemo(
+    () => ENVIRONMENT_PRESETS.find((p) => itemKey(p) === itemKey(value)),
+    [value],
+  );
+  const selectValue = matchedPreset ?? (value.trim() ? ENVIRONMENT_CUSTOM_OPTION : "");
+
+  return (
+    <div className="environment-type-field">
+      <select
+        id={id}
+        className={`blueprint-input environment-type-select ${invalid ? "invalid-field" : ""}`}
+        value={selectValue}
+        onChange={(event) => {
+          const next = event.target.value;
+          if (!next) {
+            onChange("");
+            onEnvironmentCleared?.();
+          } else if (next === ENVIRONMENT_CUSTOM_OPTION) {
+            if (matchedPreset) onChange("");
+          } else {
+            onChange(next);
+          }
+        }}
+      >
+        <option value="">Choose environment…</option>
+        {ENVIRONMENT_PRESETS.map((entry) => (
+          <option key={entry} value={entry}>
+            {entry}
+          </option>
+        ))}
+        <option value={ENVIRONMENT_CUSTOM_OPTION}>Custom location…</option>
+      </select>
+      {selectValue === ENVIRONMENT_CUSTOM_OPTION ? (
+        <input
+          className={`blueprint-input environment-type-custom-input ${invalid ? "invalid-field" : ""}`}
+          type="text"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Describe your play space"
+          aria-label="Custom environment description"
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function AvailableItemsField({
   value,
   onChange,
   invalid,
   historyOptions,
   disabled,
+  environmentType,
+  eventType,
 }: {
   value: string;
   onChange: (next: string) => void;
   invalid: boolean;
   historyOptions: string[];
+  environmentType: string;
+  eventType: string;
   /** When false, props stay empty until the host picks a physical environment. */
   disabled?: boolean;
 }) {
   const chips = useMemo(() => parseItemChips(value), [value]);
-  const presetKeys = useMemo(() => new Set(BASEMENT_ESCAPE_ITEM_PRESETS.map((p) => itemKey(p))), []);
+  const presetLabels = useMemo(
+    () => getSuggestedPropOptionsForPlanning(environmentType, eventType).map((o) => o.label),
+    [environmentType, eventType],
+  );
+  const presetKeys = useMemo(() => new Set(presetLabels.map((p) => itemKey(p))), [presetLabels]);
   const customOnlyChips = useMemo(() => chips.filter((c) => !presetKeys.has(itemKey(c))), [chips, presetKeys]);
   const [customDraft, setCustomDraft] = useState("");
   const [customHint, setCustomHint] = useState("");
@@ -1345,7 +1493,7 @@ function AvailableItemsBasementField({
 
   useLayoutEffect(() => {
     syncSelectDom();
-  }, [syncSelectDom, value]);
+  }, [syncSelectDom, value, presetLabels]);
 
   const onMultiChange = (): void => {
     if (disabled) return;
@@ -1387,22 +1535,28 @@ function AvailableItemsBasementField({
       }`}
     >
       {disabled ? (
-        <p className="muted basement-items-gate-hint">Choose <strong>Environment</strong> above first—then basement prop presets unlock.</p>
+        <p className="muted basement-items-gate-hint">
+          Choose <strong>Environment</strong> above first—then optional prop suggestions for that space appear here.
+        </p>
+      ) : presetLabels.length === 0 ? (
+        <p className="muted basement-items-gate-hint">
+          No preset list for this wording yet—use <strong>Add custom</strong> for props that may be in your space.
+        </p>
       ) : null}
-      <label className="muted basement-items-dropdown-label" htmlFor="basement-items-multiselect">
-        Basement-style props (hold <kbd>Ctrl</kbd> / <kbd>⌘</kbd> to pick several)
+      <label className="muted basement-items-dropdown-label" htmlFor="available-items-multiselect">
+        Suggested props for this environment (optional — hold <kbd>Ctrl</kbd> / <kbd>⌘</kbd> to pick several)
       </label>
       <select
-        id="basement-items-multiselect"
+        id="available-items-multiselect"
         ref={selectRef}
         className={`basement-items-dropdown ${invalid ? "invalid-field" : ""}`}
         multiple
         size={8}
-        aria-label="Preset basement escape room props"
+        aria-label="Suggested props that may be available in your environment"
         disabled={disabled}
         onChange={onMultiChange}
       >
-        {BASEMENT_ESCAPE_ITEM_PRESETS.map((label) => (
+        {presetLabels.map((label) => (
           <option key={label} value={label}>
             {label}
           </option>
@@ -1906,7 +2060,7 @@ function CustomThemeCoachPanel({
       </p>
       {!coachPrereqsOk ? (
         <p className="theme-coach-locked-note" role="status">
-          Complete <strong>Room details</strong> on the previous step (environment, comma-separated items, timing, and headcounts),
+          Complete <strong>Room details</strong> on the previous step (environment, timing, and headcounts),
           then enter a <strong>theme name</strong> above. The coach unlocks once both are in place so it can use your real room
           context.
         </p>
@@ -2303,7 +2457,6 @@ export default function App() {
       if (!Number.isFinite(pt) || pt < 1 || pt > 99) return null;
       if (!Number.isFinite(sd) || sd < 10 || sd > 180) return null;
       if (!env) return null;
-      if (parsedItems.length === 0) return null;
       if (useCustomMainPuzzleCount && mainOverride === null) return null;
       if (useCustomMix && mixTriple === null) return null;
       return {
@@ -2332,7 +2485,7 @@ export default function App() {
       participantsTotal: participants,
       sessionDurationMinutes: duration,
       environmentType: env || "Not specified yet",
-      availableItems: parsedItems.length > 0 ? parsedItems : ["Not specified yet"],
+      availableItems: parsedItems,
       roomDifficulty,
       youthAddOnEnabled,
       youthAddOnGatesAdultFlow,
@@ -2477,7 +2630,7 @@ export default function App() {
     if (!body) {
       if (mode === "strict") {
         setError(
-          "Room details are incomplete or invalid (environment, comma-separated items, session length 10–180 minutes, headcounts 1–99). Use ← Back to Room details and fix the highlighted fields.",
+          "Room details are incomplete or invalid (environment, session length 10–180 minutes, headcounts 1–99). Use ← Back to Room details and fix the highlighted fields.",
         );
       }
       return false;
@@ -2527,14 +2680,6 @@ export default function App() {
     if (!Number.isFinite(pt) || pt < 1 || pt > 99) missing.push("participantsTotal");
     if (!Number.isFinite(sd) || sd < 10 || sd > 180) missing.push("sessionDurationMinutes");
     if (!environmentType.trim()) missing.push("environmentType");
-    if (
-      availableItems
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean).length === 0
-    ) {
-      missing.push("availableItems");
-    }
     return missing;
   };
 
@@ -2553,7 +2698,7 @@ export default function App() {
     if (!buildPlanningBody("strict")) {
       flagMissingFields(collectStrictPlanningMissing());
       setError(
-        "Complete room details on this step (players, duration, environment, and at least one available item as a comma-separated tag) before continuing.",
+        "Complete room details on this step (players, duration, and environment) before continuing. Available items are optional suggestions.",
       );
       scrollFirstInvalidRoomFieldIntoView();
       return;
@@ -2573,7 +2718,7 @@ export default function App() {
     if (!buildPlanningBody("strict")) {
       flagMissingFields(collectStrictPlanningMissing());
       setError(
-        "Complete room details (players, duration, environment, and at least one available item) before continuing to the puzzle builder.",
+        "Complete room details (players, duration, and environment) before continuing to the puzzle builder.",
       );
       setWizardStep("setup");
       setActivePanel("plan");
@@ -2603,7 +2748,7 @@ export default function App() {
     if (!buildPlanningBody("strict")) {
       flagMissingFields(collectStrictPlanningMissing());
       setError(
-        "Room details no longer pass validation (environment, comma-separated items, session length 10–180 minutes, headcounts 1–99). Fix the highlighted required fields below, then try Continue again.",
+        "Room details no longer pass validation (environment, session length 10–180 minutes, headcounts 1–99). Fix the highlighted required fields below, then try Continue again.",
       );
       if (wizardStep !== "setup") {
         setWizardStep("setup");
@@ -4580,18 +4725,15 @@ export default function App() {
         </div>
         <label className="planning-snap-field">
           <span>Environment</span>
-          <input
+          <EnvironmentTypeField
             id="planning-snap-environment"
-            className={`blueprint-input ${validationFlags.environmentType ? "invalid-field" : ""}`}
-            type="text"
             value={environmentType}
-            onChange={(event) => {
-              const v = event.target.value;
+            invalid={validationFlags.environmentType}
+            onChange={(v) => {
               setEnvironmentType(v);
-              if (!v.trim()) setAvailableItems("");
               setValidationFlags((current) => ({ ...current, environmentType: false }));
             }}
-            placeholder="Physical room or area"
+            onEnvironmentCleared={() => setAvailableItems("")}
           />
         </label>
         <label className="planning-snap-field">
@@ -4607,7 +4749,7 @@ export default function App() {
           />
         </label>
         <label className="planning-snap-field">
-          <span>Available items (comma-separated tags)</span>
+          <span>Available items (optional — things that may be on hand)</span>
           <textarea
             id="planning-snap-items"
             className={`planning-snap-textarea ${validationFlags.availableItems ? "invalid-field" : ""}`}
@@ -4620,8 +4762,8 @@ export default function App() {
             }}
             placeholder={
               environmentType.trim()
-                ? "e.g. combination lock, whiteboard, playing cards"
-                : "Set environment first, then list props"
+                ? "Optional: comma-separated props you might have (e.g. whiteboard, filing cabinet)"
+                : "Set environment first, then add optional prop tags"
             }
           />
         </label>
@@ -5561,25 +5703,16 @@ export default function App() {
                       Environment
                       <RequiredFieldMark />
                     </span>
-                    <input
-                      className={`blueprint-input ${validationFlags.environmentType ? "invalid-field" : ""}`}
-                      type="text"
-                      list="environment-type-suggestions"
+                    <EnvironmentTypeField
                       value={environmentType}
-                      onChange={(event) => {
-                        const v = event.target.value;
+                      invalid={validationFlags.environmentType}
+                      onChange={(v) => {
                         setEnvironmentType(v);
-                        if (!v.trim()) setAvailableItems("");
                         setValidationFlags((current) => ({ ...current, environmentType: false }));
                       }}
-                      placeholder="Type or pick a suggestion (list stays available after you choose)"
+                      onEnvironmentCleared={() => setAvailableItems("")}
                     />
                   </label>
-                  <datalist id="environment-type-suggestions">
-                    {dedupeStringsPreserveOrder([...ENVIRONMENT_PRESETS, ...(inputHistory.environmentType ?? [])]).map((entry) => (
-                      <option key={entry} value={entry} />
-                    ))}
-                  </datalist>
                   <label className="checkbox-field theme-env-fit-checkbox">
                     <input
                       type="checkbox"
@@ -5591,13 +5724,12 @@ export default function App() {
                     </span>
                   </label>
                   <details className="theme-env-fit-examples">
-                    <summary>Staging examples (library in a gym, vault in a backyard)</summary>
-                    <p className="muted">
-                      A <em>“library”</em> mystery in a <strong>school gym</strong> means a defined corner with shelves, rugs, and lamps that
-                      reads as stacks—not pretending the whole gym is a different building. An <em>“indoor vault”</em> beat in a{" "}
-                      <strong>backyard</strong> means a weatherproof lockbox, shed, or trailer that <em>plays</em> as a vault; you are not
-                      pouring a concrete bank vault outdoors.
-                    </p>
+                    <summary>Staging examples for your environment{eventType.trim() ? " and event" : ""}</summary>
+                    {getStagingExampleParagraphs(environmentType, eventType).map((paragraph, index) => (
+                      <p key={`staging-example-${index}`} className="muted">
+                        {paragraph}
+                      </p>
+                    ))}
                   </details>
                   <p className="muted theme-env-fit-hint">
                     When on, the server ranks themes toward your <strong>environment</strong> wording (indoor vs outdoor, school, garage,
@@ -5609,12 +5741,11 @@ export default function App() {
                       validationFlags.availableItems ? "blueprint-field-label blueprint-field-label--invalid" : "blueprint-field-label"
                     }
                   >
-                    <span className="blueprint-field-label-heading">
-                      Available items
-                      <RequiredFieldMark />
-                    </span>
-                    <AvailableItemsBasementField
+                    <span className="blueprint-field-label-heading">Available items (optional suggestions)</span>
+                    <AvailableItemsField
                       value={availableItems}
+                      environmentType={environmentType}
+                      eventType={eventType}
                       onChange={(next) => {
                         setAvailableItems(next);
                         setValidationFlags((current) => ({ ...current, availableItems: false }));
@@ -5626,14 +5757,15 @@ export default function App() {
                   </label>
                   {simpleRoomSetup ? (
                     <p className="muted">
-                      Pick basement-friendly props from the list (multi-select) or add safe custom lines. Real furnaces, hot water heaters,
-                      boilers, gas lines, and propane tanks are blocked—use <strong>Fake …</strong> props only. <strong>All options</strong>{" "}
-                      adds difficulty and junior add-on controls.
+                      Suggestions list props that <strong>may</strong> be in your space—you do not need to pick any to continue. Add safe
+                      custom lines if you like. Real furnaces, hot water heaters, boilers, gas lines, and propane tanks are blocked—use{" "}
+                      <strong>Fake …</strong> theater props only. <strong>All options</strong> adds difficulty and junior add-on controls.
                     </p>
                   ) : (
                     <p className="muted">
-                      The server uses these anchors for theme appendices, puzzle tie-ins, suggested additions, and export placement notes.
-                      High-risk utilities are blocked unless clearly labeled as non-functional theater props.
+                      Optional: tell the generator what might be on hand. When provided, these anchors feed theme appendices, puzzle
+                      tie-ins, suggested additions, and export placement notes. High-risk utilities are blocked unless clearly labeled as
+                      non-functional theater props.
                     </p>
                   )}
                   {!simpleRoomSetup ? (
