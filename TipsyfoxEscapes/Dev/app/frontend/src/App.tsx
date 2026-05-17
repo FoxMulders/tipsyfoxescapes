@@ -5327,7 +5327,7 @@ export default function App() {
             playersConcurrent={playersConcurrent}
             participantsTotal={participantsTotal}
             sessionDurationMinutes={sessionDurationMinutes}
-            environmentType={environmentType.trim() || "—"}
+            environmentType={environmentType}
             eventType={eventType}
             availableItems={availableItems}
             roomDifficulty={roomDifficulty}
@@ -5341,6 +5341,25 @@ export default function App() {
             mainPuzzleCount={mainTrackPuzzles.length}
             plannerTarget={plannerMainPuzzleTarget}
             sessionSyncing={planningSyncing}
+            setPlayersConcurrent={setPlayersConcurrent}
+            setParticipantsTotal={setParticipantsTotal}
+            setSessionDurationMinutes={setSessionDurationMinutes}
+            setEnvironmentType={setEnvironmentType}
+            setEventType={setEventType}
+            setAvailableItems={setAvailableItems}
+            setThemeMustMatchEnvironment={setThemeMustMatchEnvironment}
+            setRoomDifficulty={setRoomDifficulty}
+            setYouthAddOnEnabled={setYouthAddOnEnabled}
+            setYouthAddOnGatesAdultFlow={setYouthAddOnGatesAdultFlow}
+            setYouthAddOnAgeNote={setYouthAddOnAgeNote}
+            youthAddOnGatesAdultFlow={youthAddOnGatesAdultFlow}
+            youthAddOnAgeNote={youthAddOnAgeNote}
+            validationFlags={validationFlags}
+            clearValidation={(key) => setValidationFlags((current) => ({ ...current, [key]: false }))}
+            commercialVenueContext={commercialVenueContext}
+            eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
+            itemHistory={inputHistory.availableItems ?? []}
+            propPresetLabels={propPresetLabels}
           />
         </aside>
         <section className="stage-main">
