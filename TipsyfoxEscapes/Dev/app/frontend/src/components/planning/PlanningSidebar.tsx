@@ -288,12 +288,7 @@ export function PlanningSidebar(props: PlanningSidebarProps) {
   const [editMode, setEditMode] = useState(false);
 
   return (
-    <aside
-      className={cn(
-        "planning-snapshot-rail rounded-lg border border-slate-800/50 bg-card/40 p-4 backdrop-blur-md",
-      )}
-      aria-label="Plan snapshot"
-    >
+    <aside className="planning-snapshot-rail glass-panel" aria-label="Plan snapshot">
       <div className="mb-3 flex items-start justify-between gap-2">
         <button
           type="button"

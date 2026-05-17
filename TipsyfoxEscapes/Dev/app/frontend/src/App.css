@@ -60,6 +60,7 @@ body {
 
 .page-shell--layered > .hero,
 .page-shell--layered > section.hero,
+.page-shell--layered > .app-top-nav,
 .page-shell--layered > #control-deck-studio,
 .page-shell--layered > .stage-layout,
 .page-shell--layered > .stage-layout--hud,
@@ -240,6 +241,27 @@ body {
 
 .pricing-card--current {
   border-color: rgba(255, 213, 121, 0.4);
+}
+
+.pricing-card--interactive {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.pricing-card--interactive:hover:not(.pricing-card--selected) {
+  border-color: rgba(140, 174, 255, 0.42);
+}
+
+.pricing-card--selected {
+  border-color: rgba(72, 180, 175, 0.72);
+  box-shadow:
+    0 0 0 2px rgba(72, 180, 175, 0.32),
+    0 12px 28px rgba(0, 0, 0, 0.28);
+  background: rgba(10, 24, 28, 0.62);
+}
+
+.pricing-card-footer {
+  margin-top: 0.15rem;
 }
 
 .pricing-card-head h3 {
@@ -565,11 +587,8 @@ pre.code-inline {
 .planning-snapshot-rail {
   position: sticky;
   top: 0.85rem;
-  max-height: calc(100vh - 1.5rem);
-  overflow-x: hidden;
-  overflow-y: auto;
   padding: 1rem 1rem 1.1rem;
-  border-radius: 14px;
+  border-radius: 16px;
 }
 
 .planning-snapshot-rail-title {
@@ -631,9 +650,6 @@ pre.code-inline {
 .mission-panel.flow-shell {
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 1.25rem);
-  min-height: 0;
-  overflow: hidden;
   padding-top: 0.72rem;
   padding-bottom: 0.72rem;
 }
@@ -659,8 +675,6 @@ pre.code-inline {
 .flow-shell .flow-content {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   padding-right: 0.15rem;
 }
 
@@ -4325,4 +4339,256 @@ ul.auth-hero-para {
 
 .room-flowchart-error {
   margin: 0 0 0.5rem;
+}
+
+/* —— Top nav, builder workspace, room form card —— */
+.app-top-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  padding: 0.65rem 0.85rem;
+  border-radius: 14px;
+}
+
+.app-top-nav__inner {
+  display: grid;
+  gap: 0.65rem;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+@media (min-width: 900px) {
+  .app-top-nav__inner {
+    grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 1.4fr);
+  }
+}
+
+.app-top-nav__brand {
+  min-width: 0;
+}
+
+.app-top-nav__chip {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(187 70% 62%);
+}
+
+.app-top-nav__title {
+  margin: 0.1rem 0 0;
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+.app-top-nav__stats {
+  display: none;
+  gap: 0.45rem;
+}
+
+@media (min-width: 900px) {
+  .app-top-nav__stats {
+    display: flex;
+  }
+}
+
+.app-top-nav__stat {
+  display: grid;
+  gap: 0.05rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(72, 130, 140, 0.28);
+  background: rgba(8, 14, 22, 0.45);
+  min-width: 5.5rem;
+}
+
+.app-top-nav__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.app-top-nav__signed-in {
+  margin: 0;
+  max-width: 14rem;
+}
+
+.builder-workspace {
+  display: grid;
+  gap: var(--shell-panel-gap, 1rem);
+  min-width: 0;
+}
+
+.builder-workspace__main,
+.builder-workspace .stage-main {
+  min-width: 0;
+}
+
+.workspace-stepper {
+  top: 4.5rem;
+}
+
+.workspace-stepper .mission-flow-svg {
+  max-width: none;
+  width: 100%;
+}
+
+.room-details-form-card {
+  position: relative;
+  margin: 0 auto;
+  max-width: 42rem;
+  padding: 1.15rem 1.25rem 1.35rem;
+  border-radius: 14px;
+  border: 1px solid rgba(72, 130, 140, 0.42);
+  background: rgba(8, 16, 22, 0.72);
+  backdrop-filter: blur(14px) saturate(1.08);
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.room-details-form-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.room-details-form-card__header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.room-details-form-card__cta {
+  margin-top: 1.25rem;
+  padding-top: 0.25rem;
+}
+
+.puzzle-estimate-badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid hsl(187 92% 48% / 0.45);
+  background: hsl(187 92% 48% / 0.12);
+  box-shadow: 0 0 0 0 hsl(187 92% 48% / 0);
+}
+
+.puzzle-estimate-badge--pulse {
+  animation: puzzle-estimate-flash 0.55s ease;
+}
+
+@keyframes puzzle-estimate-flash {
+  0% {
+    box-shadow: 0 0 0 0 hsl(187 92% 48% / 0.55);
+    transform: scale(1);
+  }
+  40% {
+    box-shadow: 0 0 18px 2px hsl(187 92% 48% / 0.35);
+    transform: scale(1.03);
+  }
+  100% {
+    box-shadow: 0 0 0 0 hsl(187 92% 48% / 0);
+    transform: scale(1);
+  }
+}
+
+.puzzle-estimate-badge__label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.puzzle-estimate-badge__value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
+  color: hsl(187 92% 62%);
+}
+
+.puzzle-estimate-badge__junior {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.number-counter--invalid .number-counter-value {
+  color: var(--danger);
+}
+
+.mission-flow-node-num {
+  font-family: "Inter", "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  fill: rgba(232, 244, 242, 0.95);
+}
+
+.mission-flow-node--active .mission-flow-node-ring {
+  fill: hsl(187 92% 38% / 0.85);
+  stroke: hsl(187 92% 48%);
+}
+
+.mission-flow-node--active .mission-flow-node-halo {
+  stroke: hsl(187 92% 48% / 0.55);
+}
+
+.mission-flow-node--todo .mission-flow-node-ring {
+  stroke: rgba(88, 108, 148, 0.55);
+}
+
+.mission-flow-node--todo .mission-flow-node-num,
+.mission-flow-node--todo .mission-flow-node-label {
+  fill: rgba(140, 155, 175, 0.85);
+}
+
+.planning-snapshot-sheet .planning-snapshot-rail {
+  position: static;
+  max-height: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.footer-anti-screenshot {
+  margin: 0;
+  max-width: 58ch;
+  text-align: center;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.footer-copyright {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+}
+
+.global-site-footer {
+  margin-top: auto;
+}
+
+.page-shell--builder-protect .app-top-nav,
+.page-shell--builder-protect .builder-workspace {
+  transition: filter 0.2s ease, opacity 0.2s ease;
+}
+
+.page-shell--builder-protect.content-protect-hidden .builder-workspace,
+.page-shell--builder-protect.content-protect-hidden .app-top-nav {
+  filter: blur(14px);
+  opacity: 0.35;
+  user-select: none;
+}
+
+.page-shell--builder-protect.content-protect-flash .builder-workspace,
+.page-shell--builder-protect.content-protect-flash .app-top-nav {
+  animation: content-protect-flash 0.45s ease;
 }

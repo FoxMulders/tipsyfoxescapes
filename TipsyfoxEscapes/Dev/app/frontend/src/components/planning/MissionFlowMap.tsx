@@ -48,9 +48,9 @@ export function MissionFlowMap({
   };
 
   const segStroke = (done: boolean, active: boolean): string => {
-    if (active) return "rgba(0, 242, 255, 0.98)";
-    if (done) return "rgba(175, 228, 255, 1)";
-    return "rgba(88, 108, 148, 0.55)";
+    if (active) return "hsl(187 92% 48%)";
+    if (done) return "hsl(187 70% 62%)";
+    return "rgba(88, 108, 148, 0.45)";
   };
 
   const glowId = `missionFlowGlow-${reactId}`;
@@ -143,6 +143,9 @@ export function MissionFlowMap({
             >
               <circle r={nodeR + 3} className="mission-flow-node-halo" />
               <circle r={nodeR} className="mission-flow-node-ring" />
+              <text y={4} textAnchor="middle" className="mission-flow-node-num">
+                {i + 1}
+              </text>
               <text y={nodeR + 22} textAnchor="middle" className="mission-flow-node-label">
                 {label}
               </text>

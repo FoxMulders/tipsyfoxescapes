@@ -10,6 +10,27 @@ import {
   updatePendingOrder,
 } from "./pendingOrders.js";
 
+/** Infer SDK/API environment from Square application id prefix (production vs sandbox app). */
+export const inferSquareEnvironmentFromApplicationId = (
+  applicationId: string,
+): "sandbox" | "production" | null => {
+  const id = applicationId.trim().toLowerCase();
+  if (!id) return null;
+  if (id.startsWith("sandbox-")) return "sandbox";
+  if (/^sq0id[bp]-/.test(id)) return "production";
+  return null;
+};
+
+/** Web Payments SDK and server API must use the same Square environment as the credentials. */
+export const resolveSquareEnvironment = (
+  applicationId: string,
+  envFromConfig: string,
+): "sandbox" | "production" => {
+  const fromAppId = inferSquareEnvironmentFromApplicationId(applicationId);
+  if (fromAppId) return fromAppId;
+  return String(envFromConfig ?? "").trim().toLowerCase() === "production" ? "production" : "sandbox";
+};
+
 export type SquareConfig = {
   configured: boolean;
   environment: "sandbox" | "production";
@@ -44,7 +65,7 @@ export const readSquareConfig = (): SquareConfig => {
   const applicationId = String(process.env.SQUARE_APPLICATION_ID ?? "").trim();
   const locationId = String(process.env.SQUARE_LOCATION_ID ?? "").trim();
   const envRaw = String(process.env.SQUARE_ENVIRONMENT ?? "sandbox").trim().toLowerCase();
-  const environment = envRaw === "production" ? "production" : "sandbox";
+  const environment = resolveSquareEnvironment(applicationId, envRaw);
   const webhookSignatureKey = String(process.env.SQUARE_WEBHOOK_SIGNATURE_KEY ?? "").trim();
   const webhookNotificationUrl = String(process.env.SQUARE_WEBHOOK_NOTIFICATION_URL ?? "").trim();
   const appPublicUrl =

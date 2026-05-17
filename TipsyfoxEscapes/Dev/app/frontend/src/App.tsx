@@ -12,8 +12,13 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
+import { GlobalFooter } from "@/components/layout/GlobalFooter";
+import { PlanningSnapshotSheet } from "@/components/layout/PlanningSnapshotSheet";
+import { TopNavBar } from "@/components/layout/TopNavBar";
 import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
-import { PlanningSidebar } from "@/components/planning/PlanningSidebar";
+import { PricingPlanCard } from "@/components/PricingPlanCard";
+import { SquareCheckout } from "@/components/SquareCheckout";
+import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { RoomDetailsStep } from "@/components/planning/RoomDetailsStep";
 import type { VenueBuildType } from "../../shared/contracts";
 import { classifyApiCatchError, parseApiJson, unexpectedApiResponseMessage } from "./apiErrors.ts";
@@ -39,7 +44,6 @@ import {
 } from "./browserAi.ts";
 import { getOrCreateDeviceId } from "./deviceId.ts";
 import { RoomFlowchartPanel } from "./components/RoomFlowchartPanel.tsx";
-import { SquareCheckout } from "./components/SquareCheckout.tsx";
 
 const APP_BUILD_STAMP = typeof __APP_SEMVER__ !== "undefined" ? __APP_SEMVER__ : "0.0.0";
 
@@ -2287,6 +2291,7 @@ export default function App() {
   const [socialAuthProvider, setSocialAuthProvider] = useState<"google" | "facebook" | "github" | null>(null);
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
+  const [selectedBillingPlanId, setSelectedBillingPlanId] = useState<string | null>(null);
   const [upgradePromptOpen, setUpgradePromptOpen] = useState(false);
   const [upgradePromptMessage, setUpgradePromptMessage] = useState("");
   const [auditEntries, setAuditEntries] = useState<Array<{ ts?: string; action?: string; detail?: unknown }>>([]);
@@ -2299,6 +2304,7 @@ export default function App() {
   const [showExistingPuzzleForm, setShowExistingPuzzleForm] = useState<boolean>(false);
   const [validationFlags, setValidationFlags] = useState<Record<string, boolean>>({});
   const [appView, setAppView] = useState<"builder" | "account">("builder");
+  const [snapshotOpen, setSnapshotOpen] = useState(false);
   const lastPlanningAuthTokenRef = useRef(initialAuth.authToken);
   const pendingAuthSessionBootstrap = useRef(false);
   const planningSessionRecoveryInFlight = useRef(false);
@@ -2624,6 +2630,7 @@ export default function App() {
     if (!Number.isFinite(sd) || sd < 1) return 2;
     return sd >= 25 ? 3 : 2;
   }, [youthAddOnEnabled, sessionDurationMinutes]);
+  const estimatePulseKey = `${playersConcurrent}-${participantsTotal}-${sessionDurationMinutes}`;
   const mainTrackPuzzles = useMemo(() => puzzles.filter((p) => p.audienceTrack !== "youth_addon"), [puzzles]);
   const juniorTrackPuzzles = useMemo(() => puzzles.filter((p) => p.audienceTrack === "youth_addon"), [puzzles]);
   const juniorGatingPuzzles = useMemo(
@@ -3091,7 +3098,7 @@ export default function App() {
             ? {
                 applicationId: appId,
                 locationId,
-                environment: data.square?.environment === "production" ? "production" : "sandbox",
+                environment: resolveSquareWebEnvironment(appId, data.square?.environment),
               }
             : null,
         );
@@ -3103,6 +3110,23 @@ export default function App() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (billingPlans.length === 0) return;
+    setSelectedBillingPlanId((current) => {
+      if (current && billingPlans.some((plan) => plan.id === current)) return current;
+      return (
+        billingPlans.find((plan) => plan.purchasable && plan.highlight)?.id ??
+        billingPlans.find((plan) => plan.purchasable)?.id ??
+        null
+      );
+    });
+  }, [billingPlans]);
+
+  const selectedBillingPlan = useMemo(
+    () => billingPlans.find((plan) => plan.id === selectedBillingPlanId) ?? null,
+    [billingPlans, selectedBillingPlanId],
+  );
 
   useEffect(() => {
     if (!authToken) return;
@@ -5002,32 +5026,16 @@ export default function App() {
             </p>
             <div className="pricing-grid">
               {billingPlans.map((plan) => (
-                <article
+                <PricingPlanCard
                   key={plan.id}
-                  className={`pricing-card${plan.highlight ? " pricing-card--highlight" : ""}`}
-                >
-                  <header className="pricing-card-head">
-                    <h3>{plan.name}</h3>
-                    <p className="pricing-tagline muted">{plan.tagline}</p>
-                    <p className="pricing-price">{plan.priceLabel}</p>
-                    {plan.priceCents > 0 ? (
-                      <p className="muted pricing-pack-detail">
-                        +{plan.roomsToAdd} slot{plan.roomsToAdd === 1 ? "" : "s"} · +{plan.exportCreditsToAdd} export credit
-                        {plan.exportCreditsToAdd === 1 ? "" : "s"}
-                        {plan.perRoomPriceLabel ? ` · ${plan.perRoomPriceLabel}` : ""}
-                      </p>
-                    ) : null}
-                  </header>
-                  <ul className="pricing-features">
-                    {plan.features.map((feature) => (
-                      <li key={feature}>{feature}</li>
-                    ))}
-                  </ul>
-                  <PricingComparedTo text={plan.comparedTo ?? ""} />
-                  <p className="muted pricing-included">
-                    {plan.purchasable ? "Available after sign-in" : "Free to start"}
-                  </p>
-                </article>
+                  plan={plan}
+                  comparedToSlot={<PricingComparedTo text={plan.comparedTo ?? ""} />}
+                  footer={
+                    <p className="muted pricing-included">
+                      {plan.purchasable ? "Available after sign-in" : "Free to start"}
+                    </p>
+                  }
+                />
               ))}
             </div>
           </section>
@@ -5076,52 +5084,61 @@ export default function App() {
           used). Open <strong>Account</strong> to add slots or free space.
         </div>
       ) : null}
-      <section
-        id="control-deck-studio"
-        className="hero command-header glass-panel glass-panel--hero glass-panel--window"
-      >
-        <div className="hero-grid command-header-grid">
-          <div>
-            <p className="hero-chip">Control Deck</p>
-            <h1>{BRAND_NAME}</h1>
-            <p className="hero-tagline promo-lead">{BRAND_INTRO}</p>
-          </div>
-          <div className="hero-right">
-            <div className="mission-stats">
-              <div className="mission-stat">
-                <span className="muted">Theme</span>
-                <strong>{selectedTheme ? selectedTheme.name : "Not Selected"}</strong>
-              </div>
-              <div className="mission-stat">
-                <span className="muted">Puzzles</span>
-                <strong>{puzzles.length}</strong>
-              </div>
-              <p className="muted hero-signed-in">
-                Signed in as {authUser.name} ({authUser.email}) via {AUTH_PROVIDER_LABELS[authUser.provider]}
-              </p>
-              <button type="button" className="secondary-btn" onClick={signOut}>
-                Sign out
-              </button>
-            </div>
-            <div className="app-view-toggle" role="tablist" aria-label="Main views">
-              <button
-                type="button"
-                className={appView === "builder" ? "primary-btn" : "secondary-btn"}
-                onClick={() => setAppView("builder")}
-              >
-                Room builder
-              </button>
-              <button
-                type="button"
-                className={appView === "account" ? "primary-btn" : "secondary-btn"}
-                onClick={() => setAppView("account")}
-              >
-                Account
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
+      <TopNavBar
+        brandName={BRAND_NAME}
+        authName={authUser.name}
+        authEmail={authUser.email}
+        authProviderLabel={AUTH_PROVIDER_LABELS[authUser.provider]}
+        appView={appView}
+        onAppViewChange={setAppView}
+        onSignOut={signOut}
+        onOpenSnapshot={appView === "builder" ? () => setSnapshotOpen(true) : undefined}
+        showSnapshot={appView === "builder"}
+        themeName={selectedTheme?.name}
+        puzzleCount={puzzles.length}
+      />
+      <PlanningSnapshotSheet
+        open={snapshotOpen}
+        onOpenChange={setSnapshotOpen}
+        playersConcurrent={playersConcurrent}
+        participantsTotal={participantsTotal}
+        sessionDurationMinutes={sessionDurationMinutes}
+        environmentType={environmentType}
+        eventType={eventType}
+        availableItems={availableItems}
+        roomDifficulty={roomDifficulty}
+        themeMustMatchEnvironment={themeMustMatchEnvironment}
+        venueBuildType={venueBuildType}
+        youthAddOnEnabled={youthAddOnEnabled}
+        themeLabel={
+          themePath === "custom"
+            ? customThemeName.trim() || "Custom theme"
+            : selectedTheme?.name ?? (selectedThemeId ? "Theme selected" : "Not selected")
+        }
+        mainPuzzleCount={mainTrackPuzzles.length}
+        plannerTarget={plannerMainPuzzleTarget}
+        sessionSyncing={planningSyncing}
+        setPlayersConcurrent={setPlayersConcurrent}
+        setParticipantsTotal={setParticipantsTotal}
+        setSessionDurationMinutes={setSessionDurationMinutes}
+        setEnvironmentType={setEnvironmentType}
+        setEventType={setEventType}
+        setAvailableItems={setAvailableItems}
+        setThemeMustMatchEnvironment={setThemeMustMatchEnvironment}
+        setVenueBuildType={setVenueBuildType}
+        setRoomDifficulty={setRoomDifficulty}
+        setYouthAddOnEnabled={setYouthAddOnEnabled}
+        setYouthAddOnGatesAdultFlow={setYouthAddOnGatesAdultFlow}
+        setYouthAddOnAgeNote={setYouthAddOnAgeNote}
+        youthAddOnGatesAdultFlow={youthAddOnGatesAdultFlow}
+        youthAddOnAgeNote={youthAddOnAgeNote}
+        validationFlags={validationFlags}
+        clearValidation={(key) => setValidationFlags((current) => ({ ...current, [key]: false }))}
+        commercialVenueContext={commercialVenueContext}
+        eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
+        itemHistory={inputHistory.availableItems ?? []}
+        propPresetLabels={propPresetLabels}
+      />
       {appView === "account" ? (
         <div className="account-view-wrap">
           <section className="card mission-panel">
@@ -5166,18 +5183,10 @@ export default function App() {
                     "Square checkout is not configured yet. Set SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID in Vercel → Environment Variables (Production & Preview), then redeploy."}
                 </p>
               ) : null}
-              {squarePaymentsReady && authToken ? (
+              {squarePaymentsReady && authToken && selectedBillingPlan?.purchasable ? (
                 <SquareCheckout
-                  planId={
-                    billingPlans.find((plan) => plan.purchasable && plan.highlight)?.id ??
-                    billingPlans.find((plan) => plan.purchasable)?.id ??
-                    "single"
-                  }
-                  planLabel={
-                    billingPlans.find((plan) => plan.purchasable && plan.highlight)?.name ??
-                    billingPlans.find((plan) => plan.purchasable)?.name ??
-                    "Room pack"
-                  }
+                  planId={selectedBillingPlan.id}
+                  planLabel={selectedBillingPlan.name}
                   authToken={authToken}
                   square={squareWebConfig}
                   onNotice={(message) => {
@@ -5190,51 +5199,40 @@ export default function App() {
               <div className="pricing-grid">
                 {billingPlans.map((plan) => {
                   const isCurrent = plan.id === "free" ? authUser.billingTier === "trial" : false;
+                  const isSelected = plan.id === selectedBillingPlanId;
                   return (
-                    <article
+                    <PricingPlanCard
                       key={plan.id}
-                      className={`pricing-card${plan.highlight ? " pricing-card--highlight" : ""}${isCurrent ? " pricing-card--current" : ""}`}
-                    >
-                      <header className="pricing-card-head">
-                        <h3>{plan.name}</h3>
-                        <p className="pricing-tagline muted">{plan.tagline}</p>
-                        <p className="pricing-price">{plan.priceLabel}</p>
-                        {plan.priceCents > 0 ? (
-                          <p className="muted pricing-pack-detail">
-                            +{plan.roomsToAdd} slot{plan.roomsToAdd === 1 ? "" : "s"} · +{plan.exportCreditsToAdd} export
-                            credit{plan.exportCreditsToAdd === 1 ? "" : "s"}
-                            {plan.perRoomPriceLabel ? ` · ${plan.perRoomPriceLabel}` : ""}
+                      plan={plan}
+                      selected={isSelected}
+                      isCurrent={isCurrent}
+                      interactive={plan.purchasable}
+                      onSelect={plan.purchasable ? setSelectedBillingPlanId : undefined}
+                      comparedToSlot={<PricingComparedTo text={plan.comparedTo ?? ""} />}
+                      footer={
+                        plan.purchasable ? (
+                          <button
+                            type="button"
+                            className={isSelected || plan.highlight ? "primary-btn" : "secondary-btn"}
+                            disabled={!squarePaymentsReady || checkoutPlanId === plan.id}
+                            aria-busy={checkoutPlanId === plan.id}
+                            onClick={() => void handlePurchasePlan(plan.id)}
+                          >
+                            {checkoutPlanId === plan.id
+                              ? "Opening Square…"
+                              : plan.id === "single"
+                                ? `Buy one room — ${plan.priceLabel}`
+                                : authUser.billingTier === "pack"
+                                  ? `Add ${plan.name}`
+                                  : `Upgrade — ${plan.priceLabel}`}
+                          </button>
+                        ) : (
+                          <p className="muted pricing-included">
+                            {authUser.billingTier === "trial" ? "Your current plan" : "Included baseline"}
                           </p>
-                        ) : null}
-                      </header>
-                      <ul className="pricing-features">
-                        {plan.features.map((feature) => (
-                          <li key={feature}>{feature}</li>
-                        ))}
-                      </ul>
-                      <PricingComparedTo text={plan.comparedTo ?? ""} />
-                      {plan.purchasable ? (
-                        <button
-                          type="button"
-                          className={plan.highlight ? "primary-btn" : "secondary-btn"}
-                          disabled={!squarePaymentsReady || checkoutPlanId === plan.id}
-                          aria-busy={checkoutPlanId === plan.id}
-                          onClick={() => void handlePurchasePlan(plan.id)}
-                        >
-                          {checkoutPlanId === plan.id
-                            ? "Opening Square…"
-                            : plan.id === "single"
-                              ? `Buy one room — ${plan.priceLabel}`
-                              : authUser.billingTier === "pack"
-                                ? `Add ${plan.name}`
-                                : `Upgrade — ${plan.priceLabel}`}
-                        </button>
-                      ) : (
-                        <p className="muted pricing-included">
-                          {authUser.billingTier === "trial" ? "Your current plan" : "Included baseline"}
-                        </p>
-                      )}
-                    </article>
+                        )
+                      }
+                    />
                   );
                 })}
               </div>
@@ -5383,53 +5381,10 @@ export default function App() {
       ) : null}
       {appView === "builder" ? (
       <>
-      <div className="stage-layout stage-layout--hud">
-        <aside className="stage-sidebar">
-          <PlanningSidebar
-            playersConcurrent={playersConcurrent}
-            participantsTotal={participantsTotal}
-            sessionDurationMinutes={sessionDurationMinutes}
-            environmentType={environmentType}
-            eventType={eventType}
-            availableItems={availableItems}
-            roomDifficulty={roomDifficulty}
-            themeMustMatchEnvironment={themeMustMatchEnvironment}
-            venueBuildType={venueBuildType}
-            youthAddOnEnabled={youthAddOnEnabled}
-            themeLabel={
-              themePath === "custom"
-                ? customThemeName.trim() || "Custom theme"
-                : selectedTheme?.name ?? (selectedThemeId ? "Theme selected" : "Not selected")
-            }
-            mainPuzzleCount={mainTrackPuzzles.length}
-            plannerTarget={plannerMainPuzzleTarget}
-            sessionSyncing={planningSyncing}
-            setPlayersConcurrent={setPlayersConcurrent}
-            setParticipantsTotal={setParticipantsTotal}
-            setSessionDurationMinutes={setSessionDurationMinutes}
-            setEnvironmentType={setEnvironmentType}
-            setEventType={setEventType}
-            setAvailableItems={setAvailableItems}
-            setThemeMustMatchEnvironment={setThemeMustMatchEnvironment}
-            setVenueBuildType={setVenueBuildType}
-            setRoomDifficulty={setRoomDifficulty}
-            setYouthAddOnEnabled={setYouthAddOnEnabled}
-            setYouthAddOnGatesAdultFlow={setYouthAddOnGatesAdultFlow}
-            setYouthAddOnAgeNote={setYouthAddOnAgeNote}
-            youthAddOnGatesAdultFlow={youthAddOnGatesAdultFlow}
-            youthAddOnAgeNote={youthAddOnAgeNote}
-            validationFlags={validationFlags}
-            clearValidation={(key) => setValidationFlags((current) => ({ ...current, [key]: false }))}
-            commercialVenueContext={commercialVenueContext}
-            eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
-            itemHistory={inputHistory.availableItems ?? []}
-            propPresetLabels={propPresetLabels}
-          />
-        </aside>
+      <div className="builder-workspace">
         <section className="stage-main">
           <section className="card mission-panel flow-shell glass-panel">
-            <div id="flow-shell-error-anchor" className="flow-shell-map-bar" aria-live="polite">
-              <p className="muted flow-map-label">Mission map</p>
+            <div id="flow-shell-error-anchor" className="flow-shell-map-bar workspace-stepper" aria-live="polite">
               <MissionFlowMap
                 stepLabels={missionStepLabels}
                 activeIndex={wizardIndex}
@@ -5442,8 +5397,12 @@ export default function App() {
             <div className="flow-controls">
               <div className="flow-controls-top">
                 <div>
-                  <p className="muted">Step {wizardIndex + 1} of {wizardSteps.length}</p>
-                  {flowWizardStep === "setup" ? null : <p><strong>{wizardLabel}</strong></p>}
+                  {flowWizardStep === "setup" ? null : (
+                    <>
+                      <p className="muted">Step {wizardIndex + 1} of {wizardSteps.length}</p>
+                      <p><strong>{wizardLabel}</strong></p>
+                    </>
+                  )}
                   {flowMutedHelper ? <p className="muted">{flowMutedHelper}</p> : null}
                 </div>
                 {showBackInFlowHeader && canGoWizardBack ? (
@@ -5485,20 +5444,9 @@ export default function App() {
                 eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
                 itemHistory={inputHistory.availableItems ?? []}
                 propPresetLabels={propPresetLabels}
-                puzzleEstimateHud={
-                  <p className="puzzle-estimate-hud glass-hud-strip mx-auto max-w-xl" role="status">
-                    Estimated main-track puzzle count:{" "}
-                    <strong>
-                      <RollingPuzzleEstimate target={plannerMainPuzzleTarget} />
-                    </strong>
-                    {youthAddOnEnabled && juniorAddOnPuzzleSlots > 0 ? (
-                      <>
-                        {" "}
-                        · Junior add-on: <strong>+{juniorAddOnPuzzleSlots}</strong> puzzles
-                      </>
-                    ) : null}
-                  </p>
-                }
+                plannerMainPuzzleTarget={plannerMainPuzzleTarget}
+                juniorAddOnPuzzleSlots={juniorAddOnPuzzleSlots}
+                estimatePulseKey={estimatePulseKey}
                 onContinue={() => void proceedFromSetupToThemes()}
                 onOpenInspiration={() => setInspirationOpen(true)}
               />
@@ -6858,22 +6806,28 @@ export default function App() {
               <div className="pricing-grid pricing-grid--compact">
                 {billingPlans
                   .filter((plan) => plan.purchasable)
-                  .map((plan) => (
-                    <article key={plan.id} className={`pricing-card${plan.highlight ? " pricing-card--highlight" : ""}`}>
-                      <header className="pricing-card-head">
-                        <h3>{plan.name}</h3>
-                        <p className="pricing-price">{plan.priceLabel}</p>
-                      </header>
-                      <button
-                        type="button"
-                        className={plan.highlight ? "primary-btn" : "secondary-btn"}
-                        disabled={!squarePaymentsReady || checkoutPlanId === plan.id}
-                        onClick={() => void handlePurchasePlan(plan.id)}
-                      >
-                        {checkoutPlanId === plan.id ? "Opening Square…" : `Buy — ${plan.priceLabel}`}
-                      </button>
-                    </article>
-                  ))}
+                  .map((plan) => {
+                    const isSelected = plan.id === selectedBillingPlanId;
+                    return (
+                      <PricingPlanCard
+                        key={plan.id}
+                        plan={plan}
+                        selected={isSelected}
+                        interactive
+                        onSelect={setSelectedBillingPlanId}
+                        footer={
+                          <button
+                            type="button"
+                            className={isSelected || plan.highlight ? "primary-btn" : "secondary-btn"}
+                            disabled={!squarePaymentsReady || checkoutPlanId === plan.id}
+                            onClick={() => void handlePurchasePlan(plan.id)}
+                          >
+                            {checkoutPlanId === plan.id ? "Opening Square…" : `Buy — ${plan.priceLabel}`}
+                          </button>
+                        }
+                      />
+                    );
+                  })}
               </div>
             ) : null}
             <div className="idle-session-actions">
@@ -6964,28 +6918,8 @@ export default function App() {
       ) : null}
       </>
       ) : null}
-      <div className="page-footer-block">
-        <footer className="site-footer">
-          <a href="/faq.html" target="_blank" rel="noreferrer">FAQ</a>
-          <a href="/terms-of-service.html" target="_blank" rel="noreferrer">Terms of Service</a>
-          <a href="/how-to.html" target="_blank" rel="noreferrer">How To Use</a>
-          <a href="/contact.html" target="_blank" rel="noreferrer">Contact Us</a>
-          <a href="/privacy.html" target="_blank" rel="noreferrer">Privacy</a>
-          <a href="/disclaimer.html" target="_blank" rel="noreferrer">Disclaimer</a>
-        </footer>
-        <div className="footer-logo-wrap">
-          <img src="/tipsy-fox-logo.JPEG" alt="The Tipsy Fox logo" className="footer-logo" />
-          <p className="footer-build-stamp">Build: {APP_BUILD_STAMP}</p>
-        </div>
-        {appView === "builder" ? (
-          <p className="footer-content-policy muted">
-            In-app plans and puzzle copy are for your private planning. Do not redistribute screen recordings or scraped text; use{" "}
-            <strong>Export</strong> when you intend to share a sanitized artifact. Browsers cannot fully block screenshots—this is a
-            policy plus light on-page discouragement.
-          </p>
-        ) : null}
-      </div>
-    </main>
+      <GlobalFooter buildStamp={APP_BUILD_STAMP} showBuilderPolicy={appView === "builder"} />
+      </main>
     </>
   );
 }

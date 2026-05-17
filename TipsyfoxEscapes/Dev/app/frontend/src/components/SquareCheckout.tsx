@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 
 type SquarePaymentsConfig = {
   applicationId: string;
@@ -38,22 +39,31 @@ const squareScriptUrl = (env: "sandbox" | "production"): string =>
     : "https://sandbox.web.squarecdn.com/v1/square.js";
 
 let squareScriptPromise: Promise<void> | null = null;
+let squareScriptLoadedEnv: "sandbox" | "production" | null = null;
 
 const loadSquareScript = (env: "sandbox" | "production"): Promise<void> => {
-  if (window.Square) return Promise.resolve();
-  if (squareScriptPromise) return squareScriptPromise;
+  if (window.Square && squareScriptLoadedEnv === env) return Promise.resolve();
+
+  const existing = document.querySelector<HTMLScriptElement>('script[data-square-sdk="true"]');
+  if (existing && squareScriptLoadedEnv !== env) {
+    existing.remove();
+    squareScriptPromise = null;
+    squareScriptLoadedEnv = null;
+    delete window.Square;
+  }
+
+  if (squareScriptPromise && squareScriptLoadedEnv === env) return squareScriptPromise;
+
   squareScriptPromise = new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[data-square-sdk="true"]');
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Square SDK failed to load.")), { once: true });
-      return;
-    }
     const script = document.createElement("script");
     script.src = squareScriptUrl(env);
     script.async = true;
     script.dataset.squareSdk = "true";
-    script.onload = () => resolve();
+    script.dataset.squareEnv = env;
+    script.onload = () => {
+      squareScriptLoadedEnv = env;
+      resolve();
+    };
     script.onerror = () => reject(new Error("Square SDK failed to load."));
     document.head.appendChild(script);
   });
@@ -78,7 +88,8 @@ export function SquareCheckout({ planId, planLabel, authToken, square, onNotice,
     setSdkReady(false);
     void (async () => {
       try {
-        await loadSquareScript(square.environment);
+        const sdkEnvironment = resolveSquareWebEnvironment(square.applicationId, square.environment);
+        await loadSquareScript(sdkEnvironment);
         if (cancelled || !window.Square) return;
         const payments = window.Square.payments(square.applicationId, square.locationId);
         const card = await payments.card();
