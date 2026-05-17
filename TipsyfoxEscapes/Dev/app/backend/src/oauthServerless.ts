@@ -211,9 +211,33 @@ const createAuthTokenForUser = async (user: StoredUser): Promise<string> => {
   return authToken;
 };
 
-const readQuery = (req: IncomingMessage): URLSearchParams => {
+type OAuthRequest = IncomingMessage & {
+  query?: Record<string, string | string[] | undefined>;
+};
+
+/** Merge Vercel `req.query` with the URL query string (some handlers only populate one). */
+const readQuery = (req: OAuthRequest): URLSearchParams => {
   const url = new URL(req.url ?? "/", "http://localhost");
-  return url.searchParams;
+  const params = url.searchParams;
+  const q = req.query;
+  if (q && typeof q === "object") {
+    for (const [key, value] of Object.entries(q)) {
+      if (value === undefined || params.has(key)) continue;
+      const scalar = Array.isArray(value) ? value[0] : value;
+      if (scalar !== undefined && scalar !== null) params.set(key, String(scalar));
+    }
+  }
+  return params;
+};
+
+export const resolveOAuthProvider = (req: OAuthRequest, providerRaw: string): string => {
+  const fromArg = String(providerRaw ?? "").trim().toLowerCase();
+  if (fromArg) return fromArg;
+  const fromQuery = String(req.query?.provider ?? "").trim().toLowerCase();
+  if (fromQuery) return fromQuery;
+  const path = String(req.url ?? "").split("?")[0] || "";
+  const match = path.match(/\/oauth\/(google|facebook|github)\//i);
+  return match?.[1]?.toLowerCase() ?? "";
 };
 
 const providerEnabled = (provider: OAuthProvider): boolean => {
@@ -303,6 +327,7 @@ export const handleOAuthStart = async (
       redirect(res, `https://www.facebook.com/v20.0/dialog/oauth?${params.toString()}`);
       return;
     }
+    params.set("response_type", "code");
     params.set("scope", "read:user user:email");
     redirect(res, `https://github.com/login/oauth/authorize?${params.toString()}`);
   } catch (err) {
@@ -320,10 +345,12 @@ export const handleOAuthCallback = async (
   res: ServerResponse,
   providerRaw: string,
 ): Promise<void> => {
-  const provider = String(providerRaw ?? "").toLowerCase();
+  const provider = resolveOAuthProvider(req, providerRaw);
   const query = readQuery(req);
   const code = String(query.get("code") ?? "");
   const state = String(query.get("state") ?? "");
+  const oauthError = String(query.get("error") ?? "").trim();
+  const oauthErrorDescription = String(query.get("error_description") ?? "").trim();
 
   if (!isAllowedProvider(provider)) {
     res.statusCode = 400;
@@ -339,10 +366,31 @@ export const handleOAuthCallback = async (
   }
 
   const stateData = verifyOAuthState(state, provider);
-  if (!code || !stateData) {
+  if (!stateData) {
     res.statusCode = 400;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.end(JSON.stringify({ error: { code: "OAUTH_CALLBACK_INVALID", message: "Invalid or expired OAuth callback state.", details: [] } }));
+    res.end(
+      JSON.stringify({
+        error: {
+          code: "OAUTH_CALLBACK_INVALID",
+          message: state
+            ? "Invalid or expired OAuth callback state."
+            : "Missing OAuth state. Start sign-in again from the app.",
+          details: oauthError ? [oauthError] : [],
+        },
+      }),
+    );
+    return;
+  }
+  if (!code) {
+    const message =
+      oauthErrorDescription ||
+      (oauthError === "redirect_uri_mismatch"
+        ? `GitHub redirect URI must exactly match ${String(process.env.AUTH_CALLBACK_BASE_URL ?? "").replace(/\/$/, "")}/api/auth/oauth/github/callback`
+        : oauthError
+          ? `${provider} sign-in failed (${oauthError}).`
+          : "Authorization was not completed. Try signing in again.");
+    redirectOAuthStartFailure(res, stateData.returnTo, oauthError || "access_denied", message);
     return;
   }
 

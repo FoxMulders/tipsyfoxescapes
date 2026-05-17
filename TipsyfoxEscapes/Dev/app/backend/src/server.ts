@@ -3588,6 +3588,7 @@ app.get("/api/auth/oauth/:provider/start", (req, res) => {
       res.redirect(302, `https://www.facebook.com/v20.0/dialog/oauth?${params.toString()}`);
       return;
     }
+    params.set("response_type", "code");
     params.set("scope", "read:user user:email");
     res.redirect(302, `https://github.com/login/oauth/authorize?${params.toString()}`);
   } catch (err) {
@@ -3605,11 +3606,31 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
   const provider = String(req.params.provider ?? "").toLowerCase() as "google" | "facebook" | "github";
   const code = String(req.query.code ?? "");
   const state = String(req.query.state ?? "");
+  const oauthError = String(req.query.error ?? "").trim();
+  const oauthErrorDescription = String(req.query.error_description ?? "").trim();
   const stateData = verifyOAuthState(state, provider);
-  if (!code || !stateData) {
+  if (!stateData) {
     res.status(400).json({
-      error: { code: "OAUTH_CALLBACK_INVALID", message: "Invalid or expired OAuth callback state.", details: [] },
+      error: {
+        code: "OAUTH_CALLBACK_INVALID",
+        message: state
+          ? "Invalid or expired OAuth callback state."
+          : "Missing OAuth state. Start sign-in again from the app.",
+        details: oauthError ? [oauthError] : [],
+      },
     });
+    return;
+  }
+  if (!code) {
+    const callbackBase = String(process.env.AUTH_CALLBACK_BASE_URL ?? "").replace(/\/$/, "");
+    const message =
+      oauthErrorDescription ||
+      (oauthError === "redirect_uri_mismatch"
+        ? `GitHub redirect URI must exactly match ${callbackBase}/api/auth/oauth/github/callback`
+        : oauthError
+          ? `${provider} sign-in failed (${oauthError}).`
+          : "Authorization was not completed. Try signing in again.");
+    redirectOAuthStartFailure(res, stateData.returnTo, oauthError || "access_denied", message);
     return;
   }
 

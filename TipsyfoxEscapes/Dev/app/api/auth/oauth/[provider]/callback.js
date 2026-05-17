@@ -13,6 +13,8 @@ module.exports = async function handler(req, res) {
     return;
   }
   const oauth = requireFromHere(oauthBundlePath);
-  const provider = String(req.query?.provider ?? "").toLowerCase();
+  const pathOnly = String(req.url ?? "").split("?")[0] || "";
+  const fromPath = pathOnly.match(/\/oauth\/(google|facebook|github)\//i)?.[1]?.toLowerCase() ?? "";
+  const provider = String(req.query?.provider ?? fromPath ?? "").toLowerCase();
   return oauth.handleOAuthCallback(req, res, provider);
 };
