@@ -2511,6 +2511,39 @@ label.checkbox-field {
   line-height: 1.45;
 }
 
+.puzzle-qa-callout {
+  margin: 0.65rem 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 152, 80, 0.45);
+  background: rgba(48, 28, 12, 0.45);
+}
+
+.puzzle-qa-callout__title {
+  margin: 0 0 0.35rem;
+  font-size: 0.92rem;
+}
+
+.puzzle-qa-callout__lead {
+  margin: 0 0 0.45rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.puzzle-qa-callout__list {
+  margin: 0;
+}
+
+.puzzle-qa-issue--error {
+  font-weight: 600;
+  color: #ffab91;
+}
+
+.puzzle-qa-issue--warn {
+  font-weight: 600;
+  color: #ffe082;
+}
+
 .theme-description-textarea {
   width: 100%;
   resize: vertical;
@@ -2676,6 +2709,15 @@ label.checkbox-field {
 
 .mission-flow-map--header .mission-flow-svg {
   max-width: none;
+}
+
+.mission-flow-chevron {
+  filter: drop-shadow(0 0 4px hsl(187 92% 48% / 0.35));
+}
+
+.mission-flow-path--active + .mission-flow-chevron,
+.mission-flow-segment:has(.mission-flow-path--active) .mission-flow-chevron {
+  filter: drop-shadow(0 0 6px hsl(187 92% 48% / 0.55));
 }
 
 .mission-flow-svg {
@@ -4351,16 +4393,152 @@ ul.auth-hero-para {
 }
 
 .app-top-nav__inner {
-  display: grid;
-  gap: 0.65rem;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  grid-template-columns: minmax(0, 1fr) auto;
+  justify-content: space-between;
+  gap: 0.65rem;
 }
 
-@media (min-width: 900px) {
-  .app-top-nav__inner {
-    grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 1.4fr);
+.app-top-nav__utility {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.app-top-nav__plan-tier {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid hsl(187 92% 48% / 0.45);
+  background: hsl(187 92% 48% / 0.12);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(187 70% 72%);
+}
+
+.app-top-nav__plan-menu {
+  position: relative;
+}
+
+.app-top-nav__plan-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  list-style: none;
+  cursor: pointer;
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid rgba(72, 130, 140, 0.42);
+  background: rgba(8, 14, 22, 0.55);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: inherit;
+}
+
+.app-top-nav__plan-menu-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.app-top-nav__plan-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 50;
+  min-width: 14rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+}
+
+.app-top-nav__plan-menu-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0 0 0.45rem;
+}
+
+.form-field-panel {
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(30, 45, 70, 0.95);
+  background: rgba(6, 12, 20, 0.72);
+}
+
+.target-interface-cards {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+@media (min-width: 520px) {
+  .target-interface-cards {
+    grid-template-columns: 1fr 1fr;
   }
+}
+
+.target-interface-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid rgba(50, 70, 110, 0.75);
+  background: rgba(8, 14, 24, 0.65);
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.target-interface-card:hover {
+  border-color: hsl(187 92% 48% / 0.45);
+}
+
+.target-interface-card--selected {
+  border-color: hsl(187 92% 48%);
+  box-shadow: 0 0 0 1px hsl(187 92% 48% / 0.35), 0 0 18px hsl(187 92% 48% / 0.15);
+  background: hsl(187 92% 48% / 0.1);
+}
+
+.target-interface-card__title {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.target-interface-card__desc {
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.export-live-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin: 1rem 0 1.15rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid hsl(187 92% 48% / 0.35);
+  background: rgba(8, 18, 28, 0.75);
+}
+
+.export-live-actions__primary {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mission-panel.flow-shell {
+  overflow: visible;
+}
+
+.flow-shell .flow-content {
+  overflow: visible;
 }
 
 .app-top-nav__brand {

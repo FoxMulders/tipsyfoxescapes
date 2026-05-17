@@ -43,7 +43,7 @@ export function PuzzleEstimateBadge({ target, juniorAddOnSlots = 0, pulseKey }: 
       role="status"
       aria-live="polite"
     >
-      <span className="puzzle-estimate-badge__label">Main-track puzzles</span>
+      <span className="puzzle-estimate-badge__label">Live Session Metrics</span>
       <span className="puzzle-estimate-badge__value">
         <RollingEstimateNum target={target} />
       </span>

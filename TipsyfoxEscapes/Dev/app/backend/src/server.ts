@@ -6,7 +6,10 @@ import crypto from "crypto";
 import { loadEnv } from "./loadEnv.js";
 
 loadEnv();
-import { billingPlanById } from "./billing/catalog.js";
+import { billingPlanById, type BillingPlanId } from "./billing/catalog.js";
+import { registerLiveRoutes } from "./liveGame.js";
+import type { TargetInterface } from "../../shared/contracts.js";
+import { targetInterfaceToOperatingMode, type OperatingMode } from "../../shared/liveContracts.js";
 import { registerBillingRoutes, registerSquareWebhook, type BillingRouteDeps } from "./billing/routes.js";
 import {
   CURATED_TRIAL_THEME_ORDER,
@@ -20,6 +23,7 @@ import { buildOAuthCallbackUrl, resolveAuthCallbackBaseUrl } from "./oauthCallba
 import { exchangeOAuthCode } from "./oauthTokenExchange.js";
 import { createOAuthState, verifyOAuthState } from "./oauthState.js";
 import { createVercelDiskSyncMiddleware } from "./vercelDiskSync.js";
+import { allPuzzlesPassedPuzzleQa, applyPuzzleQaGate, type PuzzleQaReport } from "./puzzleQa.js";
 import {
   loadAuthTokens,
   loadPlanningSessions,
@@ -60,6 +64,8 @@ type Puzzle = {
     buildSteps: string[];
     arduinoCode: string;
   };
+  /** Puzzle QA department report (links scrubbed; copy/diagram checks). */
+  puzzleQa?: PuzzleQaReport;
 };
 
 const refPlayfulTechnology = (title: string): PuzzleReferenceLink => ({
@@ -169,6 +175,8 @@ type SessionState = {
     themeMustMatchEnvironment: boolean;
     /** Commercial empty shell vs. existing furnished space (home, office, rec room). */
     venueBuildType: VenueBuildType;
+    /** Explicit home vs venue live-ops path (Step 1). */
+    targetInterface: TargetInterface;
   };
   /** Custom-theme coach transcript; only exposed via authed session APIs for the session owner. */
   themeCoachChat: ThemeCoachStoredMessage[];
@@ -186,12 +194,17 @@ type SessionState = {
   /** Must-address gaps (missing locks, clue surface, Arduino bench, etc.). */
   suggestedAdditionsRequired: string[];
   currentStoryPlan?: StoryPlan;
+  /** Home host vs retail venue live-ops mode (derived from plan tier when unset). */
+  operatingMode?: OperatingMode;
 };
 
 const EMPTY_ROOM_INSTALL_HEADING = "## What to install in your empty room";
 
 const parseVenueBuildType = (value: unknown, fallback: VenueBuildType = "prebuilt_space"): VenueBuildType =>
   value === "professional_empty" || value === "prebuilt_space" ? value : fallback;
+
+const parseTargetInterface = (value: unknown, fallback: TargetInterface = "home_party"): TargetInterface =>
+  value === "home_party" || value === "commercial_venue" ? value : fallback;
 
 const isProfessionalEmptyVenue = (session: SessionState): boolean =>
   session.planningInput.venueBuildType === "professional_empty";
@@ -223,12 +236,14 @@ const normalizeSessionPlanningInput = (
       puzzleMixElectronic: null,
       themeMustMatchEnvironment: false,
       venueBuildType: "prebuilt_space",
+      targetInterface: "home_party",
     };
   }
   return {
     ...raw,
     venueBuildType: parseVenueBuildType(raw.venueBuildType),
     themeMustMatchEnvironment: Boolean(raw.themeMustMatchEnvironment),
+    targetInterface: parseTargetInterface(raw.targetInterface),
   };
 };
 
@@ -320,6 +335,8 @@ type StoredUser = {
   exportCreditsRemaining: number;
   /** Set when a trial account completes their one-time export. */
   trialUsedAt?: string | null;
+  /** Highest commercial pack purchased (studio/venue unlock GM console). */
+  lastPurchasedPlanId?: BillingPlanId;
 };
 type PublicUser = {
   id: string;
@@ -338,6 +355,9 @@ type PublicUser = {
   canSaveRooms: boolean;
   /** Extra save slots from shared org/team pools (same bonus applies to every listed member). */
   orgPoolBonusSlots: number;
+  commercialTier: "free" | "home" | "studio" | "venue";
+  hasGmConsole: boolean;
+  operatingModeDefault: OperatingMode;
 };
 type SavedPlan = {
   planId: string;
@@ -601,6 +621,46 @@ const hasFullCatalogAccessUser = (user: StoredUser | undefined): boolean => {
   return user.roomAllowance > FREE_TIER_ROOM_ALLOWANCE;
 };
 
+const PLAN_TIER_RANK: Record<BillingPlanId, number> = {
+  free: 0,
+  single: 1,
+  home_host: 2,
+  studio: 3,
+  venue: 4,
+};
+
+const commercialTierForUser = (user: StoredUser): PublicUser["commercialTier"] => {
+  if (user.isAdmin) return "venue";
+  const planId = user.lastPurchasedPlanId;
+  if (planId === "venue") return "venue";
+  if (planId === "studio") return "studio";
+  if (planId === "home_host" || planId === "single") return "home";
+  return user.roomAllowance > FREE_TIER_ROOM_ALLOWANCE ? "home" : "free";
+};
+
+const hasGmConsoleForUser = (user: StoredUser): boolean =>
+  user.isAdmin || user.lastPurchasedPlanId === "studio" || user.lastPurchasedPlanId === "venue";
+
+const operatingModeDefaultForUser = (user: StoredUser): OperatingMode =>
+  hasGmConsoleForUser(user) ? "venue" : "home";
+
+const deriveSessionOperatingMode = (session: SessionState, req?: express.Request): OperatingMode => {
+  const ti = session.planningInput.targetInterface;
+  if (ti === "home_party" || ti === "commercial_venue") {
+    return targetInterfaceToOperatingMode(ti);
+  }
+  if (session.operatingMode === "home" || session.operatingMode === "venue") return session.operatingMode;
+  const userId = req ? readAuthUserId(req) : undefined;
+  if (userId) {
+    const user = getStoredUserById(userId);
+    if (user) return operatingModeDefaultForUser(user);
+  }
+  const et = (session.planningInput.eventType ?? "").toLowerCase();
+  if (/\b(commercial|ticketed|venue|escape room)\b/.test(et)) return "venue";
+  if (session.planningInput.venueBuildType === "professional_empty") return "venue";
+  return "home";
+};
+
 const toPublicUser = (user: StoredUser): PublicUser => {
   const savedRoomCount = savedPlanCountForUser(user.id);
   const cap = effectiveRoomAllowance(user);
@@ -628,6 +688,9 @@ const toPublicUser = (user: StoredUser): PublicUser => {
     trialUsed: Boolean(user.trialUsedAt),
     trialRemaining: isTrialTierUser(user) && !user.trialUsedAt,
     canSaveRooms: user.isAdmin || cap > 0,
+    commercialTier: commercialTierForUser(user),
+    hasGmConsole: hasGmConsoleForUser(user),
+    operatingModeDefault: operatingModeDefaultForUser(user),
   };
 };
 
@@ -660,6 +723,7 @@ const persistUsers = async (): Promise<void> => {
     roomAllowance: user.roomAllowance,
     exportCreditsRemaining: user.exportCreditsRemaining,
     trialUsedAt: user.trialUsedAt ?? null,
+    lastPurchasedPlanId: user.lastPurchasedPlanId ?? null,
   }));
   const { writeJsonBlob } = await import("./kvJsonStore.js");
   await writeJsonBlob("users.json", rows);
@@ -718,6 +782,13 @@ const loadUsers = async (): Promise<void> => {
         roomAllowance: Math.min(MAX_ROOM_ALLOWANCE, Math.floor(roomAllowance)),
         exportCreditsRemaining,
         trialUsedAt,
+        lastPurchasedPlanId:
+          row.lastPurchasedPlanId === "studio" ||
+          row.lastPurchasedPlanId === "venue" ||
+          row.lastPurchasedPlanId === "home_host" ||
+          row.lastPurchasedPlanId === "single"
+            ? row.lastPurchasedPlanId
+            : undefined,
       };
       usersByEmail.set(email, user);
     }
@@ -1036,64 +1107,12 @@ const withThemeFitReasons = (puzzles: Puzzle[], theme?: Theme, session?: Session
     themeFitReason: deriveThemeFitReason(puzzle, theme, session),
   }));
 
-/** Text used to decide whether a third-party reference link is actually about this puzzle. */
-const puzzleFullTextForRefs = (puzzle: Puzzle): string =>
-  `${puzzle.title} ${puzzle.objective} ${puzzle.howItWorks} ${(puzzle.solveSteps ?? []).join(" ")} ${puzzle.themeFitReason ?? ""}`.toLowerCase();
+/** Puzzle QA gate: scrub reference links and attach per-puzzle QA report (see QA/departments/puzzle_qa.md). */
+const withPuzzleQaForTheme = (puzzles: Puzzle[], themeName: string): Puzzle[] =>
+  applyPuzzleQaGate(puzzles, { themeName: themeName.trim() || "Selected theme" });
 
-/** Drop generic channel/home links unless the puzzle copy clearly points at that resource. */
-const referenceLinkBelongsToPuzzle = (puzzle: Puzzle, link: PuzzleReferenceLink): boolean => {
-  const corpus = puzzleFullTextForRefs(puzzle);
-  const title = (link.title ?? "").trim().toLowerCase();
-  const urlRaw = (link.url ?? "").trim();
-  if (!urlRaw) return false;
-  let host = "";
-  let path = "";
-  try {
-    const u = new URL(urlRaw);
-    host = u.hostname.replace(/^www\./, "").toLowerCase();
-    path = u.pathname.toLowerCase();
-  } catch {
-    return false;
-  }
-  if (host === "youtu.be") {
-    return path.length > 1;
-  }
-  if (host.includes("youtube.com")) {
-    if (path.startsWith("/watch") || path.startsWith("/embed") || path.startsWith("/shorts/")) return true;
-    const words = title.split(/\s+/).filter((w) => w.length >= 4);
-    if (words.some((w) => corpus.includes(w))) return true;
-    const handle = path.match(/^\/@([^/]+)/);
-    if (handle && corpus.includes(handle[1].toLowerCase())) return true;
-    return false;
-  }
-  if (!title.trim() && path.split("/").filter(Boolean).length <= 1) return false;
-  if (title.length >= 5) {
-    const chunk = title.slice(0, 28);
-    if (corpus.includes(chunk)) return true;
-    const words = title.split(/\s+/).filter((w) => w.length >= 5);
-    if (words.some((w) => corpus.includes(w))) return true;
-  }
-  const slug = path.split("/").filter(Boolean).pop() ?? "";
-  if (slug.length >= 5 && corpus.includes(slug.replace(/-/g, " "))) return true;
-  return true;
-};
-
-/** Dedupe each puzzle's own reference links only (no global list injected under every card). */
-const withNormalizedReferenceLinks = (puzzles: Puzzle[]): Puzzle[] =>
-  puzzles.map((puzzle) => {
-    const links = (puzzle.referenceLinks ?? []).filter((link) => referenceLinkBelongsToPuzzle(puzzle, link));
-    if (links.length === 0) return { ...puzzle, referenceLinks: [] };
-    const out: PuzzleReferenceLink[] = [];
-    const seen = new Set<string>();
-    for (const link of links) {
-      const k = `${link.url}|${link.affiliateUrl ?? ""}|${link.title}`;
-      if (seen.has(k)) continue;
-      seen.add(k);
-      out.push(link);
-      if (out.length >= 8) break;
-    }
-    return { ...puzzle, referenceLinks: out };
-  });
+const withPuzzleQaForSession = (session: SessionState, puzzles: Puzzle[]): Puzzle[] =>
+  withPuzzleQaForTheme(puzzles, session.selectedTheme?.name ?? "Selected theme");
 
 const applyTrialExportRedaction = (lines: string[], redact: boolean): string[] => {
   if (!redact) return lines;
@@ -3877,7 +3896,11 @@ app.post("/api/planning/session", (req, res) => {
   const newSessionId = `sess_${nextSessionId++}`;
   const ownerId = readAuthUserId(req);
   if (ownerId) sessionUserOwners.set(newSessionId, ownerId);
+  const bodyMode = (req.body as { operatingMode?: unknown })?.operatingMode;
+  const initialOperatingMode: OperatingMode | undefined =
+    bodyMode === "home" || bodyMode === "venue" ? bodyMode : undefined;
   sessions.set(newSessionId, {
+    operatingMode: initialOperatingMode,
     planningInput: {
       playersConcurrent: Number(playersConcurrent),
       participantsTotal: Number(participantsTotal),
@@ -3920,6 +3943,7 @@ app.post("/api/planning/session", (req, res) => {
         false,
       ),
       venueBuildType: parseVenueBuildType((req.body as { venueBuildType?: unknown }).venueBuildType),
+      targetInterface: parseTargetInterface((req.body as { targetInterface?: unknown }).targetInterface),
     },
     themeCoachChat: [],
     customThemes: [],
@@ -3932,9 +3956,12 @@ app.post("/api/planning/session", (req, res) => {
     suggestedAdditions: [],
     suggestedAdditionsRequired: [],
   });
+  const created = sessions.get(newSessionId)!;
+  created.operatingMode = deriveSessionOperatingMode(created, req);
   res.status(201).json({
     sessionId: newSessionId,
     createdAt: new Date().toISOString(),
+    operatingMode: created.operatingMode,
   });
 });
 
@@ -4020,8 +4047,13 @@ app.patch("/api/planning/session/:sessionId/planning-input", (req, res) => {
       "venueBuildType" in bodyRaw
         ? parseVenueBuildType(bodyRaw.venueBuildType, session.planningInput.venueBuildType)
         : session.planningInput.venueBuildType,
+    targetInterface:
+      "targetInterface" in bodyRaw
+        ? parseTargetInterface(bodyRaw.targetInterface, session.planningInput.targetInterface)
+        : session.planningInput.targetInterface,
   };
-  res.json({ ok: true });
+  session.operatingMode = deriveSessionOperatingMode(session, req);
+  res.json({ ok: true, operatingMode: session.operatingMode });
 });
 
 app.get("/api/planning/session/:sessionId/theme-coach", (req, res) => {
@@ -4395,14 +4427,14 @@ app.post("/api/puzzles/generate", (req, res) => {
   const uniqueGenerated = Array.from(new Map(generated.map((puzzle) => [puzzle.id, puzzle])).values());
   const venueAdjusted = applyVenueBuildTypeToPuzzleCopy(uniqueGenerated, session);
   const generatedWithReasons = withThemeFitReasons(venueAdjusted, session.selectedTheme, session);
-  let generatedForResponse = withNormalizedReferenceLinks(generatedWithReasons);
+  let generatedForResponse = withPuzzleQaForSession(session, generatedWithReasons);
   generatedForResponse = breakDuplicateSavedRoomPuzzleSet(
     session.selectedTheme.id,
     generatedForResponse,
     session.selectedTheme,
   );
   generatedForResponse = withThemeFitReasons(generatedForResponse, session.selectedTheme, session);
-  generatedForResponse = withNormalizedReferenceLinks(generatedForResponse);
+  generatedForResponse = withPuzzleQaForSession(session, generatedForResponse);
   generatedForResponse = annotatePuzzlesWithInventoryAnchors(session, generatedForResponse);
   generatedForResponse.forEach((puzzle) => session.seenPuzzleIds.add(puzzle.id));
   session.currentPuzzles = generatedForResponse;
@@ -4419,6 +4451,7 @@ app.post("/api/puzzles/generate", (req, res) => {
   res.json({
     puzzles: generatedForResponse,
     compatibilityPassed,
+    puzzleQaPassed: allPuzzlesPassedPuzzleQa(generatedForResponse),
     storyPlan: session.currentStoryPlan,
     suggestedAdditions: session.suggestedAdditions,
     suggestedAdditionsRequired: session.suggestedAdditionsRequired,
@@ -4497,7 +4530,7 @@ app.post("/api/puzzles/:puzzleId/replace", (req, res) => {
   }
   session.currentPuzzles = applyVenueBuildTypeToPuzzleCopy(session.currentPuzzles, session);
   session.currentPuzzles = withThemeFitReasons(session.currentPuzzles, session.selectedTheme, session);
-  session.currentPuzzles = withNormalizedReferenceLinks(session.currentPuzzles);
+  session.currentPuzzles = withPuzzleQaForSession(session, session.currentPuzzles);
   session.currentPuzzles = annotatePuzzlesWithInventoryAnchors(session, session.currentPuzzles);
   const replaceLists = buildSuggestedAdditionLists(session, session.currentPuzzles);
   session.suggestedAdditionsRequired = replaceLists.required;
@@ -4511,6 +4544,7 @@ app.post("/api/puzzles/:puzzleId/replace", (req, res) => {
   );
   res.json({
     replacedPuzzleId: puzzleId,
+    puzzleQaPassed: allPuzzlesPassedPuzzleQa(session.currentPuzzles),
     newPuzzle: mergedReplacement,
     compatibilityPassed,
     storyPlan: session.currentStoryPlan,
@@ -4550,7 +4584,7 @@ app.post("/api/puzzles/:puzzleId/reject", (req, res) => {
   session.currentPuzzles = session.currentPuzzles.filter((puzzle) => puzzle.id !== puzzleId);
   if (session.selectedTheme) {
     session.currentPuzzles = withThemeFitReasons(session.currentPuzzles, session.selectedTheme, session);
-    session.currentPuzzles = withNormalizedReferenceLinks(session.currentPuzzles);
+    session.currentPuzzles = withPuzzleQaForSession(session, session.currentPuzzles);
     session.currentPuzzles = annotatePuzzlesWithInventoryAnchors(session, session.currentPuzzles);
     const rejectLists = buildSuggestedAdditionLists(session, session.currentPuzzles);
     session.suggestedAdditionsRequired = rejectLists.required;
@@ -4649,7 +4683,7 @@ app.post("/api/puzzles/fill-slot", (req, res) => {
     session.selectedTheme,
   );
   session.currentPuzzles = withThemeFitReasons(session.currentPuzzles, session.selectedTheme, session);
-  session.currentPuzzles = withNormalizedReferenceLinks(session.currentPuzzles);
+  session.currentPuzzles = withPuzzleQaForSession(session, session.currentPuzzles);
   session.currentPuzzles = annotatePuzzlesWithInventoryAnchors(session, session.currentPuzzles);
   const fillLists = buildSuggestedAdditionLists(session, session.currentPuzzles);
   session.suggestedAdditionsRequired = fillLists.required;
@@ -4694,7 +4728,7 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
     Boolean(billingUser?.isAdmin) || (hasCatalog && creditsBefore > 0) || signedInFreeTier;
   const redactElectronicBuild = !allowFullElectronics;
   session.currentPuzzles = withThemeFitReasons(session.currentPuzzles, session.selectedTheme, session);
-  session.currentPuzzles = withNormalizedReferenceLinks(session.currentPuzzles);
+  session.currentPuzzles = withPuzzleQaForSession(session, session.currentPuzzles);
   session.currentPuzzles = annotatePuzzlesWithInventoryAnchors(session, session.currentPuzzles);
   const exportFlowPathKind = getRecommendedFlowPathKind(session);
   const exportFlowPathLabel =
@@ -4902,6 +4936,8 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
   if (billingUser && isTrialTierUser(billingUser)) {
     trialConsumed = await consumeTrialIfNeeded(billingUser);
   }
+  const operatingMode = deriveSessionOperatingMode(session, req);
+  session.operatingMode = operatingMode;
   res.json({
     planId: `plan_${sessionId}`,
     format,
@@ -4911,6 +4947,9 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
     exportCreditsRemaining: billingUser ? billingUser.exportCreditsRemaining : 0,
     trialConsumed,
     user: billingUser ? toPublicUser(billingUser) : undefined,
+    operatingMode,
+    hasGmConsole: operatingMode === "venue" && (billingUser ? hasGmConsoleForUser(billingUser) : false),
+    sessionId,
   });
 });
 
@@ -5058,6 +5097,7 @@ const rehydrateLiveSessionFromSavedPlan = (plan: SavedPlan, ownerUserId: string)
       typeof raw.puzzleMixElectronic === "number" && Number.isFinite(raw.puzzleMixElectronic) ? raw.puzzleMixElectronic : null,
     themeMustMatchEnvironment: Boolean(raw.themeMustMatchEnvironment),
     venueBuildType: parseVenueBuildType(raw.venueBuildType),
+    targetInterface: parseTargetInterface(raw.targetInterface),
   };
   const selectedTheme = d.themes.find((t) => t.id === d.selectedThemeId);
   const session: SessionState = {
@@ -5075,7 +5115,7 @@ const rehydrateLiveSessionFromSavedPlan = (plan: SavedPlan, ownerUserId: string)
       }),
     ),
     seenPuzzleIds: new Set(d.puzzles.map((p) => p.id)),
-    currentPuzzles: withNormalizedReferenceLinks(d.puzzles.map((p) => ({ ...p }))),
+    currentPuzzles: withPuzzleQaForTheme(d.puzzles.map((p) => ({ ...p })), d.themeName ?? selectedTheme?.name ?? "Saved plan"),
     suggestedAdditions: [...(d.suggestedAdditions ?? [])],
     suggestedAdditionsRequired: [...(d.suggestedAdditionsRequired ?? [])],
     currentStoryPlan: d.storyPlan ?? undefined,
@@ -5177,6 +5217,11 @@ const applyPlanTopUp = (
   if (!plan || plan.roomsToAdd <= 0) return null;
   user.roomAllowance = Math.min(MAX_ROOM_ALLOWANCE, user.roomAllowance + plan.roomsToAdd);
   user.exportCreditsRemaining = Math.min(500_000, user.exportCreditsRemaining + plan.exportCreditsToAdd);
+  const pid = plan.id as BillingPlanId;
+  const prev = user.lastPurchasedPlanId;
+  if (!prev || PLAN_TIER_RANK[pid] > PLAN_TIER_RANK[prev]) {
+    user.lastPurchasedPlanId = pid;
+  }
   return { roomsAdded: plan.roomsToAdd, exportCreditsAdded: plan.exportCreditsToAdd };
 };
 
@@ -5230,6 +5275,14 @@ const finishBootstrap = async (): Promise<void> => {
     toPublicUser: (user) => toPublicUser(user as StoredUser),
   };
   registerBillingRoutes(app, () => billingRouteDeps!);
+  registerLiveRoutes(app, {
+    resolvePlanningSession: (sessionId) => sessions.get(sessionId),
+    deriveOperatingMode: (session) => deriveSessionOperatingMode(session as SessionState),
+    hasGmConsoleAccess: (req) => {
+      const user = readAuthUser(req);
+      return Boolean(user && hasGmConsoleForUser(user));
+    },
+  });
 };
 
 const loadDeferredStorage = async (): Promise<void> => {

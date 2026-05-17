@@ -86,38 +86,52 @@ const JUNIOR_STORY_HOOKS: JuniorStoryHook[] = [
   },
 ];
 
-const scoreHook = (hook: JuniorStoryHook, corpus: string): number => {
+const scoreTheme = (hook: JuniorStoryHook, themeCorpus: string): number => {
   let score = 0;
   for (const kw of hook.themeKeywords) {
-    if (corpus.includes(kw)) score += 3;
-  }
-  for (const kw of hook.envKeywords) {
-    if (kw === "any") continue;
-    if (corpus.includes(kw)) score += 2;
+    if (themeCorpus.includes(kw)) score += 3;
   }
   return score;
 };
 
-/** Theme/environment-aligned junior hooks; drops zero-score ideas unless we need filler. */
+const scoreEnvironment = (hook: JuniorStoryHook, envCorpus: string): number => {
+  let score = 0;
+  for (const kw of hook.envKeywords) {
+    if (kw === "any") continue;
+    if (envCorpus.includes(kw)) score += 2;
+  }
+  return score;
+};
+
+/** Theme-first junior hooks; environment re-skin is secondary (Story Editor QA). */
 export const filterJuniorStoryHooks = (
   themeName: string,
   environmentType: string,
   availableItems: string,
   limit = 6,
 ): JuniorStoryHook[] => {
-  const corpus = `${themeName} ${environmentType} ${availableItems}`.toLowerCase();
-  const ranked = JUNIOR_STORY_HOOKS.map((hook) => ({ hook, score: scoreHook(hook, corpus) }))
-    .filter((row) => row.score > 0)
-    .sort((a, b) => b.score - a.score || a.hook.title.localeCompare(b.hook.title));
+  const themeCorpus = `${themeName}`.toLowerCase();
+  const envCorpus = `${environmentType} ${availableItems}`.toLowerCase();
+  const ranked = JUNIOR_STORY_HOOKS.map((hook) => ({
+    hook,
+    themeScore: scoreTheme(hook, themeCorpus),
+    envScore: scoreEnvironment(hook, envCorpus),
+  }))
+    .filter((row) => row.themeScore >= 3 && row.themeScore >= row.envScore)
+    .sort(
+      (a, b) =>
+        b.themeScore - a.themeScore ||
+        b.envScore - a.envScore ||
+        a.hook.title.localeCompare(b.hook.title),
+    );
 
   const picked = ranked.slice(0, limit).map((row) => row.hook);
   if (picked.length >= Math.min(4, limit)) return picked;
 
-  const fallback = JUNIOR_STORY_HOOKS.filter((hook) => hook.themeKeywords.some((kw) => corpus.includes(kw))).slice(
-    0,
-    limit,
-  );
-  if (fallback.length >= 4) return fallback;
+  const themeOnly = JUNIOR_STORY_HOOKS.filter((hook) => scoreTheme(hook, themeCorpus) >= 3)
+    .sort((a, b) => scoreTheme(b, themeCorpus) - scoreTheme(a, themeCorpus))
+    .slice(0, limit);
+  if (themeOnly.length >= 2) return themeOnly;
 
-  return JUNIOR_STORY_HOOKS.slice(0, limit);
+  return JUNIOR_STORY_HOOKS.filter((hook) => scoreTheme(hook, themeCorpus) > 0).slice(0, limit);
 };

@@ -106,6 +106,20 @@ export function MissionFlowMap({
                 strokeLinecap="round"
                 filter={active ? `url(#${glowId})` : undefined}
               />
+              {(() => {
+                const x0 = xs[i] ?? 0;
+                const x1 = xs[i + 1] ?? 0;
+                const mid = (x0 + x1) / 2;
+                const chev = 5;
+                const fill = active ? "hsl(187 92% 48%)" : done ? "hsl(187 70% 62%)" : "rgba(88, 108, 148, 0.55)";
+                return (
+                  <polygon
+                    points={`${mid - chev},${nodeY - chev} ${mid + chev},${nodeY} ${mid - chev},${nodeY + chev}`}
+                    className="mission-flow-chevron"
+                    fill={fill}
+                  />
+                );
+              })()}
             </g>
           );
         })}

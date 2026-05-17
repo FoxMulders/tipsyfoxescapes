@@ -6,6 +6,9 @@ export type RoomDifficulty = "easy" | "medium" | "hard";
 /** Commercial empty shell vs. an existing lived-in / furnished space. */
 export type VenueBuildType = "professional_empty" | "prebuilt_space";
 
+/** Host-facing run interface chosen at planning (maps to live `operatingMode`). */
+export type TargetInterface = "home_party" | "commercial_venue";
+
 export interface PlanningInput {
   playersConcurrent: number;
   participantsTotal: number;
@@ -23,6 +26,8 @@ export interface PlanningInput {
   themeMustMatchEnvironment?: boolean;
   /** Professional empty room (install from scratch) vs. prebuilt home/office/rec space. */
   venueBuildType?: VenueBuildType;
+  /** Explicit home vs venue live-ops path; persisted on the planning session. */
+  targetInterface?: TargetInterface;
 }
 
 export interface Theme {

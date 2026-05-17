@@ -6,8 +6,9 @@ import { EnvironmentSelect } from "@/components/planning/EnvironmentSelect";
 import { FieldHint } from "@/components/planning/FieldHint";
 import { NumberCounter } from "@/components/planning/NumberCounter";
 import { PuzzleEstimateBadge } from "@/components/planning/PuzzleEstimateBadge";
+import { TargetInterfaceField } from "@/components/planning/TargetInterfaceField";
 import { VenueBuildTypeField } from "@/components/planning/VenueBuildTypeField";
-import type { VenueBuildType } from "../../../../shared/contracts";
+import type { TargetInterface, VenueBuildType } from "../../../../shared/contracts";
 
 type RoomDetailsStepProps = {
   playersConcurrent: string;
@@ -26,6 +27,8 @@ type RoomDetailsStepProps = {
   setThemeMustMatchEnvironment: (v: boolean) => void;
   venueBuildType: VenueBuildType;
   setVenueBuildType: (v: VenueBuildType) => void;
+  targetInterface: TargetInterface;
+  setTargetInterface: (v: TargetInterface) => void;
   roomDifficulty: "easy" | "medium" | "hard";
   setRoomDifficulty: (v: "easy" | "medium" | "hard") => void;
   youthAddOnEnabled: boolean;
@@ -82,6 +85,9 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             environmentType={props.environmentType}
           />
 
+          <TargetInterfaceField value={props.targetInterface} onChange={props.setTargetInterface} />
+
+          <div className="form-field-panel">
           <FieldHint label="Players at one time" required invalid={invalid("playersConcurrent")}>
             <NumberCounter
               value={props.playersConcurrent}
@@ -95,8 +101,10 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
               aria-label="Players at one time"
             />
           </FieldHint>
+          </div>
 
-          <FieldHint label="Total participants" required invalid={invalid("participantsTotal")}>
+          <div className="form-field-panel">
+            <FieldHint label="Total participants" required invalid={invalid("participantsTotal")}>
             <NumberCounter
               value={props.participantsTotal}
               onChange={(v) => {
@@ -108,9 +116,11 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
               invalid={invalid("participantsTotal")}
               aria-label="Total participants"
             />
-          </FieldHint>
+            </FieldHint>
+          </div>
 
-          <FieldHint label="Session duration (minutes)" required invalid={invalid("sessionDurationMinutes")}>
+          <div className="form-field-panel">
+            <FieldHint label="Session duration (minutes)" required invalid={invalid("sessionDurationMinutes")}>
             <NumberCounter
               value={props.sessionDurationMinutes}
               onChange={(v) => {
@@ -123,9 +133,10 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
               invalid={invalid("sessionDurationMinutes")}
               aria-label="Session duration in minutes"
             />
-          </FieldHint>
+            </FieldHint>
+          </div>
 
-          <div className="space-y-2">
+          <div className="form-field-panel space-y-4">
             <FieldHint
               label="Event context"
               htmlFor="event-context-input"
@@ -153,6 +164,7 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             ) : null}
           </div>
 
+          <div className="form-field-panel">
           <FieldHint
             label="Environment"
             required
@@ -173,8 +185,10 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
               onEnvironmentCleared={() => props.setAvailableItems("")}
             />
           </FieldHint>
+          </div>
 
-          <FieldHint
+          <div className="form-field-panel">
+            <FieldHint
             label={
               props.venueBuildType === "professional_empty" ? "Planned installs & props" : "Available items & props"
             }
@@ -197,6 +211,7 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
               }}
             />
           </FieldHint>
+          </div>
 
           <div className="flex items-start gap-2">
             <input

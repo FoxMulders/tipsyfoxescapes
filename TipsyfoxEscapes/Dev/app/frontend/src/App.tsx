@@ -69,6 +69,10 @@ type Puzzle = {
   referenceLinks: PuzzleReferenceLink[];
   solveSteps: string[];
   difficulty: "easy" | "medium" | "hard";
+  puzzleQa?: {
+    passed: boolean;
+    issues: Array<{ code: string; severity: "error" | "warn"; field: string; message: string }>;
+  };
   stageHint?: string;
   audienceTrack?: "main" | "youth_addon";
   gatesAdultProgression?: boolean;
@@ -580,6 +584,27 @@ function PuzzleWindowCard({
       <p className="inline-space">
         <strong>Why this fits the theme:</strong> {themeFit}
       </p>
+      {puzzle.puzzleQa && !puzzle.puzzleQa.passed ? (
+        <div className="puzzle-qa-callout" role="note">
+          <p className="puzzle-qa-callout__title">
+            <strong>Puzzle QA</strong> — review before you build
+          </p>
+          <p className="muted puzzle-qa-callout__lead">
+            Story Editor QA covers narrative alignment; Puzzle QA checks this card’s links, copy, and electronics. Fix or use{" "}
+            <strong>Generate another</strong>.
+          </p>
+          <ul className="list-compact puzzle-qa-callout__list">
+            {puzzle.puzzleQa.issues.map((issue) => (
+              <li key={`${issue.code}-${issue.field}`}>
+                <span className={issue.severity === "error" ? "puzzle-qa-issue--error" : "puzzle-qa-issue--warn"}>
+                  {issue.severity === "error" ? "Must fix" : "Note"}
+                </span>{" "}
+                {issue.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <PuzzleReferenceAttributions links={puzzle.referenceLinks ?? []} />
       {puzzle.category === "electronic" && puzzle.electronicDetails?.arduinoCode?.trim() ? (
         <div className="arduino-snippet-peek">
@@ -669,10 +694,10 @@ function JuniorTrackEnvironmentIdeas({
   const envLabel = environmentType.trim() || "your room environment";
   return (
     <details className="junior-env-inspiration">
-      <summary>Environment-first story hooks (junior-friendly)</summary>
+      <summary>Junior story hooks (theme-first)</summary>
       <p className="muted junior-env-inspiration-lead">
-        Hooks below are filtered for <strong>{themeLabel}</strong> in <strong>{envLabel}</strong>. Re-skin furniture you already
-        have—keep sight-lines and safety rules identical to the real room.
+        Hooks below are ranked for <strong>{themeLabel}</strong>, then re-skinned for <strong>{envLabel}</strong>. Keep
+        sight-lines and safety rules identical to your real room—only the fiction changes.
       </p>
       <ul className="list-compact junior-env-inspiration-list">
         {hooks.map((hook) => (
