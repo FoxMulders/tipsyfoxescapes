@@ -4940,9 +4940,9 @@ export default function App() {
             <a href="/privacy.html" target="_blank" rel="noreferrer">Privacy</a>
             <a href="/disclaimer.html" target="_blank" rel="noreferrer">Disclaimer</a>
           </footer>
-          <p className="footer-build-stamp">Build: {APP_BUILD_STAMP}</p>
           <div className="footer-logo-wrap">
             <img src="/tipsy-fox-logo.JPEG" alt="The Tipsy Fox logo" className="footer-logo" />
+            <p className="footer-build-stamp">Build: {APP_BUILD_STAMP}</p>
           </div>
         </div>
       </main>
@@ -7098,9 +7098,9 @@ export default function App() {
           <a href="/privacy.html" target="_blank" rel="noreferrer">Privacy</a>
           <a href="/disclaimer.html" target="_blank" rel="noreferrer">Disclaimer</a>
         </footer>
-        <p className="footer-build-stamp">Build: {APP_BUILD_STAMP}</p>
         <div className="footer-logo-wrap">
           <img src="/tipsy-fox-logo.JPEG" alt="The Tipsy Fox logo" className="footer-logo" />
+          <p className="footer-build-stamp">Build: {APP_BUILD_STAMP}</p>
         </div>
         {appView === "builder" ? (
           <p className="footer-content-policy muted">

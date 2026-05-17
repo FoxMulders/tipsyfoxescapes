@@ -22,6 +22,7 @@ import {
   persistPlanningSessions,
 } from "./runtimePersistence.js";
 import { handleFacebookWebhookVerify } from "./oauthServerless.js";
+import { handleGitHubWebhook } from "./githubWebhook.js";
 
 type PuzzleReferenceLink = {
   title: string;
@@ -275,6 +276,10 @@ registerSquareWebhook(app, () => {
     throw new Error("Billing routes are not initialized yet.");
   }
   return billingRouteDeps;
+});
+
+app.post("/api/webhooks/github", express.raw({ type: "application/json" }), (req, res) => {
+  void handleGitHubWebhook(req, res);
 });
 
 // Parse JSON request bodies for API endpoints.

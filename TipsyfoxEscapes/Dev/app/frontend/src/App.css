@@ -1741,6 +1741,8 @@ a:hover {
 
 .footer-logo-wrap {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
   margin: 0.15rem 0 0;
   width: 100%;
@@ -1769,7 +1771,7 @@ a:hover {
 }
 
 .footer-build-stamp {
-  margin: 0.35rem 0 0;
+  margin: 0.5rem 0 0;
   font-size: 0.78rem;
   color: var(--muted);
   text-align: center;
@@ -1825,10 +1827,12 @@ a:hover {
 }
 
 .auth-layout--compact {
-  max-width: 1080px;
+  width: 100%;
+  max-width: min(1400px, 100%);
   margin-inline: auto;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
   align-items: start;
+  gap: 1.15rem;
 }
 
 .auth-layout > .hero.auth-hero,
@@ -1852,6 +1856,9 @@ a:hover {
   min-height: unset;
   height: auto;
   padding: 1.1rem 1.15rem;
+  justify-self: end;
+  width: 100%;
+  max-width: 280px;
 }
 
 .auth-layout--compact .auth-panel-head {
@@ -2477,6 +2484,7 @@ label.checkbox-field {
   .auth-layout--compact > .card.auth-card.auth-panel {
     max-width: min(100%, 22rem);
     margin-inline: auto;
+    justify-self: center;
   }
 
   .auth-layout--compact .social-auth-grid {

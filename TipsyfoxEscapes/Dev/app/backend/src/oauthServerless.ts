@@ -3,7 +3,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { FREE_TIER_ROOM_ALLOWANCE, isTrialTierUser } from "./billing/trial.js";
 import { ensureDataDir, getDataDir } from "./dataDir.js";
+import { handleGitHubWebhook } from "./githubWebhook.js";
 import { createOAuthState, verifyOAuthState } from "./oauthState.js";
+
+export { handleGitHubWebhook };
 import { loadAuthTokens, persistAuthTokens } from "./runtimePersistence.js";
 
 export type OAuthProvider = "google" | "facebook" | "github";

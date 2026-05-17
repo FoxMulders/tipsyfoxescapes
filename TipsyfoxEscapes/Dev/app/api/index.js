@@ -110,6 +110,18 @@ module.exports = async function handler(req, res) {
       return;
     }
   }
+  if (pathname === "/api/webhooks/github" || pathname === "/api/webhooks/github/") {
+    try {
+      const oauth = loadOAuthHandler();
+      return oauth.handleGitHubWebhook(req, res);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.statusCode = message.includes("not built") ? 503 : 500;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(JSON.stringify({ error: { code: "WEBHOOK_HANDLER_FAILED", message } }));
+      return;
+    }
+  }
   const oauthRoute = matchOAuthRoute(pathname);
   if (oauthRoute) {
     try {
