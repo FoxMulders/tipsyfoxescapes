@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { GlobalFooter } from "@/components/layout/GlobalFooter";
 import { PlanningSnapshotSheet } from "@/components/layout/PlanningSnapshotSheet";
@@ -20,14 +21,13 @@ import { PricingPlanCard } from "@/components/PricingPlanCard";
 import { SquareCheckout } from "@/components/SquareCheckout";
 import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { RoomDetailsStep } from "@/components/planning/RoomDetailsStep";
-import type { VenueBuildType } from "../../shared/contracts";
+import type { TargetInterface, VenueBuildType } from "../../shared/contracts";
 import { classifyApiCatchError, parseApiJson, unexpectedApiResponseMessage } from "./apiErrors.ts";
 import { filterJuniorStoryHooks } from "./juniorStoryHooks.ts";
 import {
   isInvalidPlanningSessionResponse,
   planningSessionRecoveryNotice,
 } from "./planningSession.ts";
-import { installContentProtection } from "./contentProtection.ts";
 import {
   customThemeCoachSynthesize,
   customThemeCoachTurn,
@@ -44,6 +44,13 @@ import {
 } from "./browserAi.ts";
 import { getOrCreateDeviceId } from "./deviceId.ts";
 import { RoomFlowchartPanel } from "./components/RoomFlowchartPanel.tsx";
+import { HomePostExportModal } from "@/components/live/HomePostExportModal";
+import { initLiveSession } from "@/live/api";
+import {
+  operatingModeToTargetInterface,
+  targetInterfaceToOperatingMode,
+  type OperatingMode,
+} from "../../shared/liveContracts";
 
 const APP_BUILD_STAMP = typeof __APP_SEMVER__ !== "undefined" ? __APP_SEMVER__ : "0.0.0";
 
@@ -153,6 +160,16 @@ type AuthUser = {
   trialUsed: boolean;
   trialRemaining: boolean;
   canSaveRooms: boolean;
+  commercialTier: "free" | "home" | "studio" | "venue";
+  hasGmConsole: boolean;
+  operatingModeDefault: OperatingMode;
+};
+
+const formatBillingTierLabel = (tier: AuthUser["billingTier"]): string => {
+  if (tier === "admin") return "Admin";
+  if (tier === "pack") return "Room pack";
+  if (tier === "trial") return "Free trial";
+  return "Free";
 };
 
 const AUTH_PROVIDER_LABELS: Record<AuthUser["provider"], string> = {
@@ -231,6 +248,18 @@ const normalizeAuthUser = (raw: unknown): AuthUser | null => {
   let orgPoolBonusSlots = Number(o.orgPoolBonusSlots);
   if (!Number.isFinite(orgPoolBonusSlots) || orgPoolBonusSlots < 0) orgPoolBonusSlots = 0;
   orgPoolBonusSlots = Math.floor(orgPoolBonusSlots);
+  let commercialTier = o.commercialTier as AuthUser["commercialTier"];
+  if (commercialTier !== "free" && commercialTier !== "home" && commercialTier !== "studio" && commercialTier !== "venue") {
+    commercialTier = isAdmin ? "venue" : hasFullCatalog ? "home" : "free";
+  }
+  let hasGmConsole = Boolean(o.hasGmConsole);
+  if (o.hasGmConsole === undefined) {
+    hasGmConsole = isAdmin || commercialTier === "studio" || commercialTier === "venue";
+  }
+  let operatingModeDefault = o.operatingModeDefault as OperatingMode;
+  if (operatingModeDefault !== "home" && operatingModeDefault !== "venue") {
+    operatingModeDefault = hasGmConsole ? "venue" : "home";
+  }
   return {
     id: o.id,
     name: o.name,
@@ -247,6 +276,9 @@ const normalizeAuthUser = (raw: unknown): AuthUser | null => {
     trialUsed,
     trialRemaining,
     canSaveRooms,
+    commercialTier,
+    hasGmConsole,
+    operatingModeDefault,
   };
 };
 type SavedPlanSummary = {
@@ -2216,6 +2248,7 @@ export default function App() {
   const [environmentType, setEnvironmentType] = useState<string>("");
   const [themeMustMatchEnvironment, setThemeMustMatchEnvironment] = useState<boolean>(false);
   const [venueBuildType, setVenueBuildType] = useState<VenueBuildType>("prebuilt_space");
+  const [targetInterface, setTargetInterface] = useState<TargetInterface>("home_party");
   const [availableItems, setAvailableItems] = useState<string>("");
   const [useCustomMainPuzzleCount, setUseCustomMainPuzzleCount] = useState(false);
   const [customMainPuzzleCountStr, setCustomMainPuzzleCountStr] = useState("");
@@ -2244,6 +2277,9 @@ export default function App() {
   type ExportReadFormat = "markdown" | "plaintext" | "html";
   const [exportReadFormat, setExportReadFormat] = useState<ExportReadFormat>("markdown");
   const [exportBusy, setExportBusy] = useState(false);
+  const [postExportOpen, setPostExportOpen] = useState(false);
+  const [liveOperatingMode, setLiveOperatingMode] = useState<OperatingMode>("home");
+  const [liveHasGmConsole, setLiveHasGmConsole] = useState(false);
   const [briefPolishBusy, setBriefPolishBusy] = useState<boolean>(false);
   const [arduinoPreviewPuzzleId, setArduinoPreviewPuzzleId] = useState<string | null>(null);
   const [inspirationOpen, setInspirationOpen] = useState<boolean>(false);
@@ -2341,6 +2377,15 @@ export default function App() {
     [themes, selectedThemeId],
   );
   const commercialVenueContext = useMemo(() => isCommercialVenueEventContext(eventType), [eventType]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    setTargetInterface(operatingModeToTargetInterface(authUser.operatingModeDefault));
+  }, [authUser?.id, authUser?.operatingModeDefault]);
+
+  useEffect(() => {
+    setLiveOperatingMode(targetInterfaceToOperatingMode(targetInterface));
+  }, [targetInterface]);
   const propPresetLabels = useMemo(
     () => getSuggestedPropOptionsForPlanning(environmentType, eventType).map((o) => o.label),
     [environmentType, eventType],
@@ -2386,6 +2431,7 @@ export default function App() {
     eventType,
     themeMustMatchEnvironment,
     venueBuildType,
+    targetInterface,
     useCustomMainPuzzleCount,
     customMainPuzzleCountStr,
     useCustomMix,
@@ -2495,6 +2541,7 @@ export default function App() {
     puzzleMixElectronic: number | null;
     themeMustMatchEnvironment: boolean;
     venueBuildType: VenueBuildType;
+    targetInterface: TargetInterface;
   };
 
   const buildPlanningBody = (mode: "draft" | "strict"): PlanningApiBody | null => {
@@ -2546,6 +2593,7 @@ export default function App() {
         puzzleMixElectronic: mixTriple?.electronic ?? null,
         themeMustMatchEnvironment,
         venueBuildType,
+        targetInterface,
       };
     }
     const players = Number.isFinite(pc) && pc > 0 ? Math.min(99, Math.max(1, Math.trunc(pc))) : 4;
@@ -2568,6 +2616,7 @@ export default function App() {
       puzzleMixElectronic: mixTriple?.electronic ?? null,
       themeMustMatchEnvironment,
       venueBuildType,
+      targetInterface,
     };
   };
 
@@ -3601,11 +3650,6 @@ export default function App() {
     return createSession(undefined, { seedThemes: true });
   };
 
-  useLayoutEffect(() => {
-    if (appView !== "builder") return;
-    return installContentProtection(builderShellRef.current);
-  }, [appView]);
-
   /** New auth token → fresh planning session; same token with empty sessionId (e.g. reload) → create once. */
   useEffect(() => {
     if (!authUser || !authToken) {
@@ -4343,6 +4387,8 @@ export default function App() {
         exportRedacted?: boolean;
         exportCreditConsumed?: boolean;
         trialConsumed?: boolean;
+        operatingMode?: OperatingMode;
+        hasGmConsole?: boolean;
         user?: AuthUser;
         error?: { message?: string; code?: string };
       };
@@ -4384,6 +4430,19 @@ export default function App() {
           "This export omitted full electronic build packs because consumable export credits are at zero. Add credits via activation or webhook.",
         );
       }
+      const exportMode: OperatingMode =
+        data.operatingMode === "venue" || data.operatingMode === "home"
+          ? data.operatingMode
+          : targetInterfaceToOperatingMode(targetInterface);
+      const gmAccess = Boolean(data.hasGmConsole ?? authUser?.hasGmConsole);
+      setLiveOperatingMode(exportMode);
+      setLiveHasGmConsole(gmAccess);
+      try {
+        await initLiveSession(activeSessionId, exportMode);
+      } catch {
+        /* live init is best-effort */
+      }
+      setPostExportOpen(true);
     } catch (err) {
       setError(classifyApiCatchError(err));
     } finally {
@@ -4598,6 +4657,8 @@ export default function App() {
       setThemeMustMatchEnvironment(Boolean(payload.planningInput.themeMustMatchEnvironment));
       const vbt = payload.planningInput.venueBuildType;
       setVenueBuildType(vbt === "professional_empty" ? "professional_empty" : "prebuilt_space");
+      const ti = payload.planningInput.targetInterface;
+      setTargetInterface(ti === "commercial_venue" ? "commercial_venue" : "home_party");
       setAvailableItems(payload.planningInput.availableItems.join(", "));
       const mo = payload.planningInput.mainTrackPuzzleCountOverride;
       setUseCustomMainPuzzleCount(typeof mo === "number" && Number.isFinite(mo));
@@ -5040,7 +5101,8 @@ export default function App() {
             </div>
           </section>
         ) : null}
-        <div className="page-footer-block">
+        <GlobalFooter buildStamp={APP_BUILD_STAMP} />
+        <motion-safe className="page-footer-block page-footer-block--removed" hidden>
           <footer className="site-footer">
             <a href="/faq.html" target="_blank" rel="noreferrer">FAQ</a>
             <a href="/terms-of-service.html" target="_blank" rel="noreferrer">Terms of Service</a>
@@ -5065,7 +5127,7 @@ export default function App() {
       {/* Main application layout and interactive sections. */}
       <main
         ref={builderShellRef}
-        className={`page-shell page-shell--layered${appView === "builder" ? " page-shell--builder-protect" : ""}`}
+        className="page-shell page-shell--layered"
       >
       {authUser.billingTier === "trial" && appView === "builder" ? (
         <div className="slot-utilization-warning trial-active-banner" role="status">
@@ -5089,11 +5151,12 @@ export default function App() {
         authName={authUser.name}
         authEmail={authUser.email}
         authProviderLabel={AUTH_PROVIDER_LABELS[authUser.provider]}
+        billingTierLabel={formatBillingTierLabel(authUser.billingTier)}
+        planStatusDetail={`${authUser.roomsRemaining} of ${authUser.roomAllowance} save slots · ${authUser.exportCreditsRemaining} export credits`}
         appView={appView}
         onAppViewChange={setAppView}
         onSignOut={signOut}
         onOpenSnapshot={appView === "builder" ? () => setSnapshotOpen(true) : undefined}
-        showSnapshot={appView === "builder"}
         themeName={selectedTheme?.name}
         puzzleCount={puzzles.length}
       />
@@ -5430,6 +5493,8 @@ export default function App() {
                 setThemeMustMatchEnvironment={setThemeMustMatchEnvironment}
                 venueBuildType={venueBuildType}
                 setVenueBuildType={setVenueBuildType}
+                targetInterface={targetInterface}
+                setTargetInterface={setTargetInterface}
                 roomDifficulty={roomDifficulty}
                 setRoomDifficulty={setRoomDifficulty}
                 youthAddOnEnabled={youthAddOnEnabled}
@@ -6550,6 +6615,33 @@ export default function App() {
                   </button>
                 ) : null}
               </div>
+              {sessionId ? (
+                <div className="export-live-actions" role="group" aria-label="Run your game">
+                  {targetInterface === "commercial_venue" ? (
+                    <Link
+                      to={`/gm/${sessionId}`}
+                      className="primary-btn export-live-actions__primary"
+                      onClick={() => void initLiveSession(sessionId, "venue")}
+                    >
+                      Deploy to Live Gamemaster Console
+                    </Link>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        disabled={!exportContent}
+                        onClick={() => downloadExportFile("md")}
+                      >
+                        Print / Download Runbook
+                      </button>
+                      <Link to={`/room/${sessionId}/player-display`} className="primary-btn">
+                        Launch Player Screen
+                      </Link>
+                    </>
+                  )}
+                </div>
+              ) : null}
               {exportContent && exportWasRedacted ? (
                 <p className="muted export-trial-note">
                   This export omitted electronic wiring lists, diagrams, build steps, and Arduino sketches (use a paid room pack with export
@@ -6918,7 +7010,18 @@ export default function App() {
       ) : null}
       </>
       ) : null}
-      <GlobalFooter buildStamp={APP_BUILD_STAMP} showBuilderPolicy={appView === "builder"} />
+      {sessionId ? (
+        <HomePostExportModal
+          open={postExportOpen}
+          onClose={() => setPostExportOpen(false)}
+          sessionId={sessionId}
+          operatingMode={liveOperatingMode}
+          hasGmConsole={liveHasGmConsole}
+          planName={selectedTheme?.name ?? ""}
+          onDownloadRunbook={() => downloadExportFile("md")}
+        />
+      ) : null}
+      <GlobalFooter buildStamp={APP_BUILD_STAMP} />
       </main>
     </>
   );

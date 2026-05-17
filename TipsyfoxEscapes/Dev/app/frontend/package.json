@@ -1,6 +1,6 @@
 {
   "name": "escape-room-builder-frontend",
-  "version": "1.0.26",
+  "version": "1.0.29",
   "private": true,
   "type": "module",
   "engines": {
@@ -34,6 +34,7 @@
     "mermaid": "^11.12.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-router-dom": "^7.6.2",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.0"
