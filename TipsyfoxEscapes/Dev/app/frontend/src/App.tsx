@@ -4852,7 +4852,7 @@ export default function App() {
         <AppAtmosphere />
         <main className="page-shell page-shell--layered">
         {error ? <p className="error-banner auth-page-error">{error}</p> : null}
-        <div className="auth-layout auth-layout--compact">
+        <div className="auth-layout auth-layout--compact auth-layout--login">
           <section id="auth-hero-panel" className="hero auth-hero auth-hero--planning glass-panel">
             <div className="hero-grid">
               <div>

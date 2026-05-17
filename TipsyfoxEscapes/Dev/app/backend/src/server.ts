@@ -567,21 +567,23 @@ const persistUsers = async (): Promise<void> => {
     exportCreditsRemaining: user.exportCreditsRemaining,
     trialUsedAt: user.trialUsedAt ?? null,
   }));
-  await fs.mkdir(path.dirname(usersPath), { recursive: true });
-  await fs.writeFile(usersPath, JSON.stringify(rows, null, 2), "utf8");
+  const { writeJsonBlob } = await import("./kvJsonStore.js");
+  await writeJsonBlob("users.json", rows);
 };
 
 const loadUsers = async (): Promise<void> => {
   try {
-    const raw = await fs.readFile(usersPath, "utf8");
-    const rows = JSON.parse(raw) as Array<
+    const { readJsonBlob } = await import("./kvJsonStore.js");
+    const rows = (await readJsonBlob<
+      Array<
       Partial<StoredUser> & {
         subscriptionActive?: boolean;
         subscriptionExpiresAt?: string | null;
         freeTrialRoomConsumed?: boolean;
         trialUsedAt?: string | null;
       }
-    >;
+    >
+    >("users.json")) ?? [];
     usersByEmail.clear();
     let maxNum = 0;
     for (const row of rows) {
@@ -3324,7 +3326,13 @@ app.get("/health", (_req, res) => {
 });
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, service: "escape-room-builder" });
+  void import("./kvJsonStore.js").then(({ isKvConfigured }) => {
+    res.json({
+      ok: true,
+      service: "escape-room-builder",
+      authStore: process.env.VERCEL ? (isKvConfigured() ? "kv" : "ephemeral") : "local",
+    });
+  });
 });
 
 app.get("/version", (_req, res) => {
@@ -5113,6 +5121,13 @@ export async function bootstrap(): Promise<void> {
     const onVercel = Boolean(process.env.VERCEL);
 
     if (onVercel) {
+      const { isKvConfigured } = await import("./kvJsonStore.js");
+      if (!isKvConfigured()) {
+        // eslint-disable-next-line no-console
+        console.error(
+          "[bootstrap] VERCEL without KV_REST_API_URL/KV_REST_API_TOKEN: auth tokens and users will not persist across serverless instances. Link Upstash Redis (Vercel KV) to this project.",
+        );
+      }
       await Promise.all([loadUsers(), loadAuthTokens(authTokens)]);
       await finishBootstrap();
       void loadDeferredStorage().catch((err) => {

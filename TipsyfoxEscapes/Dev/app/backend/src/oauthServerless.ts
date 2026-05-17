@@ -9,6 +9,7 @@ import { exchangeOAuthCode } from "./oauthTokenExchange.js";
 import { createOAuthState, verifyOAuthState } from "./oauthState.js";
 
 export { handleGitHubWebhook };
+import { readJsonBlob, writeJsonBlob } from "./kvJsonStore.js";
 import { loadAuthTokens, persistAuthTokens } from "./runtimePersistence.js";
 
 export type OAuthProvider = "google" | "facebook" | "github";
@@ -98,14 +99,13 @@ const persistUsers = async (): Promise<void> => {
     exportCreditsRemaining: user.exportCreditsRemaining,
     trialUsedAt: user.trialUsedAt ?? null,
   }));
-  await fs.mkdir(path.dirname(usersPath()), { recursive: true });
-  await fs.writeFile(usersPath(), JSON.stringify(rows, null, 2), "utf8");
+  await writeJsonBlob("users.json", rows);
 };
 
 const loadUsers = async (): Promise<void> => {
   try {
-    const raw = await fs.readFile(usersPath(), "utf8");
-    const rows = JSON.parse(raw) as Array<Partial<StoredUser> & { id?: string; email?: string }>;
+    const rows =
+      (await readJsonBlob<Array<Partial<StoredUser> & { id?: string; email?: string }>>("users.json")) ?? [];
     usersByEmail.clear();
     let maxNum = 0;
     for (const row of rows) {
