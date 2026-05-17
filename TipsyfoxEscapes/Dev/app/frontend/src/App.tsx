@@ -310,6 +310,7 @@ type SavedPlanPayload = {
     puzzleMixElectronic?: number | null;
     themeMustMatchEnvironment?: boolean;
     venueBuildType?: VenueBuildType;
+    targetInterface?: TargetInterface;
   };
   themes: Theme[];
   selectedThemeId: string;
@@ -5102,20 +5103,6 @@ export default function App() {
           </section>
         ) : null}
         <GlobalFooter buildStamp={APP_BUILD_STAMP} />
-        <motion-safe className="page-footer-block page-footer-block--removed" hidden>
-          <footer className="site-footer">
-            <a href="/faq.html" target="_blank" rel="noreferrer">FAQ</a>
-            <a href="/terms-of-service.html" target="_blank" rel="noreferrer">Terms of Service</a>
-            <a href="/how-to.html" target="_blank" rel="noreferrer">How To Use</a>
-            <a href="/contact.html" target="_blank" rel="noreferrer">Contact Us</a>
-            <a href="/privacy.html" target="_blank" rel="noreferrer">Privacy</a>
-            <a href="/disclaimer.html" target="_blank" rel="noreferrer">Disclaimer</a>
-          </footer>
-          <div className="footer-logo-wrap">
-            <img src="/tipsy-fox-logo.JPEG" alt="The Tipsy Fox logo" className="footer-logo" />
-            <p className="footer-build-stamp">Build: {APP_BUILD_STAMP}</p>
-          </div>
-        </div>
       </main>
       </>
     );
