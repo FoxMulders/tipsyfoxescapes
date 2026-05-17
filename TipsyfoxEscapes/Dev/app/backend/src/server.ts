@@ -3280,6 +3280,10 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/webhook", (req, res) => {
+  handleFacebookWebhookVerify(req, res);
+});
+
 app.get("/api/webhooks/facebook", (req, res) => {
   handleFacebookWebhookVerify(req, res);
 });

@@ -93,7 +93,12 @@ const matchOAuthRoute = (pathname) => {
 module.exports = async function handler(req, res) {
   normalizeApiUrl(req);
   const pathname = pathnameFromReq(req);
-  if (pathname === "/api/webhooks/facebook" || pathname === "/api/webhooks/facebook/") {
+  if (
+    pathname === "/webhook" ||
+    pathname === "/webhook/" ||
+    pathname === "/api/webhooks/facebook" ||
+    pathname === "/api/webhooks/facebook/"
+  ) {
     try {
       const oauth = loadOAuthHandler();
       return oauth.handleFacebookWebhookVerify(req, res);

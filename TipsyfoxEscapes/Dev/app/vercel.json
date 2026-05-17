@@ -9,6 +9,7 @@
     "OAUTH_GOOGLE_ENABLED": "1"
   },
   "rewrites": [
+    { "source": "/webhook", "destination": "/api/webhook" },
     { "source": "/api/(.*)", "destination": "/api?path=$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
@@ -20,6 +21,10 @@
       "maxDuration": 30,
       "memory": 1024,
       "includeFiles": "api/*.cjs"
+    },
+    "api/webhook.js": {
+      "maxDuration": 10,
+      "includeFiles": "api/oauth.cjs"
     }
   }
 }
