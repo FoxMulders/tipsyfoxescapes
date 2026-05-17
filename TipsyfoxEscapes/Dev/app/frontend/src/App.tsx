@@ -4764,7 +4764,7 @@ export default function App() {
           <span className="live-build-date">Build: {APP_BUILD_STAMP}</span>
         </div>
         {error ? <p className="error-banner auth-page-error">{error}</p> : null}
-        <div className="auth-layout">
+        <div className="auth-layout auth-layout--compact">
           <section id="auth-hero-panel" className="hero auth-hero auth-hero--planning glass-panel">
             <div className="hero-grid">
               <div>
@@ -4873,7 +4873,7 @@ export default function App() {
               aria-busy={socialAuthProvider === "google"}
               onClick={() => handleSocialAuth("google")}
             >
-              {socialAuthProvider === "google" ? "Redirecting to Google…" : "Continue with Google"}
+              {socialAuthProvider === "google" ? "Redirecting…" : "Google"}
             </button>
             <button
               type="button"
@@ -4882,7 +4882,7 @@ export default function App() {
               aria-busy={socialAuthProvider === "facebook"}
               onClick={() => handleSocialAuth("facebook")}
             >
-              {socialAuthProvider === "facebook" ? "Redirecting to Facebook…" : "Continue with Facebook"}
+              {socialAuthProvider === "facebook" ? "Redirecting…" : "Facebook"}
             </button>
             <button
               type="button"
@@ -4891,7 +4891,7 @@ export default function App() {
               aria-busy={socialAuthProvider === "github"}
               onClick={() => handleSocialAuth("github")}
             >
-              {socialAuthProvider === "github" ? "Redirecting to GitHub…" : "Continue with GitHub"}
+              {socialAuthProvider === "github" ? "Redirecting…" : "GitHub"}
             </button>
           </nav>
         </section>
