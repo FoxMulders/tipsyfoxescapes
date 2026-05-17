@@ -1830,9 +1830,13 @@ a:hover {
   width: 100%;
   max-width: min(1400px, 100%);
   margin-inline: auto;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 260px);
   align-items: start;
   gap: 1.15rem;
+}
+
+.auth-layout--compact > .hero.auth-hero {
+  grid-column: 1;
 }
 
 .auth-layout > .hero.auth-hero,
@@ -1847,18 +1851,19 @@ a:hover {
   flex-direction: column;
 }
 
-.auth-layout--compact > .hero.auth-hero {
+.auth-layout--compact > .hero.auth-hero.auth-hero--planning {
   min-height: min(420px, 62vh);
   padding: 1.35rem 1.25rem;
 }
 
 .auth-layout--compact > .card.auth-card.auth-panel {
+  grid-column: 2;
   min-height: unset;
   height: auto;
   padding: 1.1rem 1.15rem;
   justify-self: end;
   width: 100%;
-  max-width: 280px;
+  max-width: 260px;
 }
 
 .auth-layout--compact .auth-panel-head {
