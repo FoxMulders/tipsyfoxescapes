@@ -4759,10 +4759,6 @@ export default function App() {
       <>
         <AppAtmosphere />
         <main className="page-shell page-shell--layered">
-        <div className="live-build-banner">
-          LIVE BUILD CHECK: If you can read this, you are on the updated app.
-          <span className="live-build-date">Build: {APP_BUILD_STAMP}</span>
-        </div>
         {error ? <p className="error-banner auth-page-error">{error}</p> : null}
         <div className="auth-layout auth-layout--compact">
           <section id="auth-hero-panel" className="hero auth-hero auth-hero--planning glass-panel">
@@ -4959,10 +4955,6 @@ export default function App() {
       <AppAtmosphere />
       {/* Main application layout and interactive sections. */}
       <main className={`page-shell page-shell--layered${appView === "builder" ? " page-shell--builder-protect" : ""}`}>
-      <div className="live-build-banner">
-        LIVE BUILD CHECK: If you can read this, you are on the updated app.
-        <span className="live-build-date">Build: {APP_BUILD_STAMP}</span>
-      </div>
       {authUser.billingTier === "trial" && appView === "builder" ? (
         <div className="slot-utilization-warning trial-active-banner" role="status">
           <strong>Free trial:</strong> the same three curated themes load every time. You get one full export; saving to your account

@@ -119,26 +119,6 @@ body {
   }
 }
 
-.live-build-banner {
-  margin: 0;
-  padding: 0.55rem 0.8rem;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 213, 121, 0.58);
-  background: rgba(112, 19, 28, 0.58);
-  color: #ffe6be;
-  font-weight: 700;
-  text-align: center;
-  letter-spacing: 0.01em;
-}
-
-.live-build-date {
-  display: block;
-  margin-top: 0.35rem;
-  font-weight: 500;
-  font-size: 0.78rem;
-  color: rgba(255, 243, 220, 0.88);
-}
-
 .promo-lead {
   margin-top: 0.65rem;
   max-width: 52ch;
