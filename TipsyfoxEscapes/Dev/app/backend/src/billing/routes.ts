@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import express from "express";
-import { billingPlanById, toPublicBillingPlans } from "./catalog.js";
+import { billingPlanById, formatPlanPrice, quotePlanCheckout, toPublicBillingPlans } from "./catalog.js";
+import { getPendingOrder } from "./pendingOrders.js";
 import {
   completePendingOrderFromWebhook,
   createSquareCheckout,
@@ -22,6 +23,7 @@ export type BillingRouteDeps = {
   applyPlanTopUp: (
     user: { roomAllowance: number; exportCreditsRemaining: number },
     planId: string,
+    options?: { layoutRoomCount?: number },
   ) => { roomsAdded: number; exportCreditsAdded: number } | null;
   persistUsers: () => Promise<void>;
   appendBillingAudit: (entry: {
@@ -49,7 +51,10 @@ const fulfillCheckout = async (
   const user = deps.findUserById(fulfillment.userId);
   if (!user) return null;
 
-  const topUp = deps.applyPlanTopUp(user, fulfillment.planId);
+  const pending = await getPendingOrder(fulfillment.pendingOrderId);
+  const topUp = deps.applyPlanTopUp(user, fulfillment.planId, {
+    layoutRoomCount: pending?.layoutRoomCount,
+  });
   if (!topUp) return null;
 
   await deps.persistUsers();
@@ -158,11 +163,26 @@ export const registerBillingRoutes = (app: Express, getDeps: () => BillingRouteD
       return;
     }
 
-    const planId = String((req.body as { planId?: string })?.planId ?? "").trim();
+    const body = req.body as { planId?: string; layoutRoomCount?: unknown };
+    const planId = String(body?.planId ?? "").trim();
     const plan = billingPlanById(planId);
     if (!plan || !plan.purchasable) {
       res.status(400).json({ error: { code: "INVALID_PLAN", message: "Unknown or non-purchasable plan.", details: [] } });
       return;
+    }
+    let layoutRoomCount: number | undefined;
+    if (body?.layoutRoomCount !== undefined && body.layoutRoomCount !== null) {
+      const parsed = typeof body.layoutRoomCount === "number" ? body.layoutRoomCount : Number(body.layoutRoomCount);
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        res.status(400).json({
+          error: { code: "VALIDATION_ERROR", message: "layoutRoomCount must be a positive number.", details: [] },
+        });
+        return;
+      }
+      layoutRoomCount = Math.floor(parsed);
+    }
+    if (plan.scalableRoomPricing && !layoutRoomCount) {
+      layoutRoomCount = plan.scalableRoomPricing.includedLayoutRooms;
     }
 
     const square = readSquareConfig();
@@ -180,15 +200,23 @@ export const registerBillingRoutes = (app: Express, getDeps: () => BillingRouteD
     }
 
     try {
+      const quote = quotePlanCheckout(plan, layoutRoomCount);
       const checkout = await createSquareCheckout({
         userId: user.id,
         email: user.email,
         plan,
+        layoutRoomCount,
       });
       res.json({
         checkoutUrl: checkout.checkoutUrl,
         pendingOrderId: checkout.pendingOrderId,
-        plan: { id: plan.id, name: plan.name, priceLabel: toPublicBillingPlans().find((p) => p.id === plan.id)?.priceLabel },
+        layoutRoomCount: layoutRoomCount ?? null,
+        priceCents: quote.totalCents,
+        plan: {
+          id: plan.id,
+          name: plan.name,
+          priceLabel: formatPlanPrice(plan, layoutRoomCount),
+        },
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not start Square checkout.";

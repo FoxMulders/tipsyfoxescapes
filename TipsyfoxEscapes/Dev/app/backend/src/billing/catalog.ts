@@ -2,6 +2,12 @@
  * Public catalog: value-driven subscriptions and passes.
  * Prices in USD cents — UI and Square checkout read from this file.
  */
+import {
+  calculateEscapePlanPrice,
+  DEFAULT_INCLUDED_LAYOUT_ROOMS,
+  DEFAULT_PER_ADDITIONAL_ROOM_CENTS,
+} from "../../../shared/escapePlanPricing.js";
+
 export type BillingPlanId =
   | "free"
   | "casual_hobbyist"
@@ -15,6 +21,12 @@ export type LegacyBillingPlanId = "single" | "home_host" | "studio" | "venue";
 export type BillingInterval = "free" | "one_time" | "monthly" | "annual" | "enterprise";
 
 export type TierLane = "home" | "operator" | "enterprise";
+
+export type ScalableRoomPricing = {
+  includedLayoutRooms: number;
+  perAdditionalRoomCents: number;
+  exportCreditsPerRoom?: number;
+};
 
 export type BillingPlanDefinition = {
   id: BillingPlanId;
@@ -36,6 +48,8 @@ export type BillingPlanDefinition = {
   valueFocus: string;
   purchasable: boolean;
   highlight?: boolean;
+  /** Per-layout-room escalation at checkout (Creative Studio). */
+  scalableRoomPricing?: ScalableRoomPricing;
   /** @deprecated Use valueFocus in UI */
   comparedTo?: string;
 };
@@ -45,6 +59,32 @@ const LEGACY_PLAN_ALIASES: Record<string, BillingPlanId> = {
   home_host: "home_enthusiast",
   studio: "creative_studio",
   venue: "venue_blueprint",
+};
+
+/** Legacy enterprise tier — retained for purchased plan resolution, hidden from public catalog. */
+const VENUE_BLUEPRINT_LEGACY: BillingPlanDefinition = {
+  id: "venue_blueprint",
+  name: "The Venue Blueprint",
+  tagline: "Enterprise fleet management for multi-room operators",
+  priceCents: 24900,
+  currency: "USD",
+  priceSubtitle: "From $249/month · custom enterprise pricing available",
+  billingInterval: "enterprise",
+  tierLane: "enterprise",
+  roomsToAdd: 25,
+  exportCreditsToAdd: 25,
+  purchasable: false,
+  valueHeadline: "Unlimited saved rooms · fleet-scale live ops",
+  valueFocus: "Multi-room fleet management, leaderboards, and real-time display mapping for corporate teams.",
+  features: [
+    "Unlimited saved rooms (fair-use policy)",
+    "Multi-room fleet management — active session ID per room",
+    "Interactive reset checklists for staff",
+    "Real-time SSE display mapping across rooms",
+    "Public leaderboards for corporate & competitive teams",
+    "Full Gamemaster Live Console suite + priority onboarding",
+  ],
+  comparedTo: "",
 };
 
 export const BILLING_PLANS: BillingPlanDefinition[] = [
@@ -122,16 +162,23 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
     tagline: "Recurring operator rights for small venues and repeat builders",
     priceCents: 14900,
     currency: "USD",
-    priceSubtitle: "$149/month · or $1,200/year (save ~33%)",
+    priceSubtitle: "$149/month base · +$39 per additional layout room",
     billingInterval: "monthly",
     tierLane: "operator",
-    roomsToAdd: 5,
-    exportCreditsToAdd: 10,
+    roomsToAdd: 1,
+    exportCreditsToAdd: 2,
     purchasable: true,
-    valueHeadline: "5 concurrent live rooms · white-label staff run sheets",
-    valueFocus: "Commercial operator rights with Gamemaster Live Console — timer, clues, and basic reporting.",
+    highlight: true,
+    scalableRoomPricing: {
+      includedLayoutRooms: DEFAULT_INCLUDED_LAYOUT_ROOMS,
+      perAdditionalRoomCents: DEFAULT_PER_ADDITIONAL_ROOM_CENTS,
+      exportCreditsPerRoom: 2,
+    },
+    valueHeadline: "Scalable layout rooms · white-label staff run sheets",
+    valueFocus: "Commercial operator rights with Gamemaster Live Console — add layout rooms as your venue grows.",
     features: [
-      "5 concurrent active live rooms",
+      "1 layout room included — add unlimited layout configurations at checkout",
+      "+$39/month per additional layout room (priced in real time)",
       "Full commercial operator rights",
       "100% white-labeled staff run sheets",
       "Gamemaster Live Console: timer controls, clue box, basic reporting",
@@ -140,31 +187,11 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
     ],
     comparedTo: "",
   },
-  {
-    id: "venue_blueprint",
-    name: "The Venue Blueprint",
-    tagline: "Enterprise fleet management for multi-room operators",
-    priceCents: 24900,
-    currency: "USD",
-    priceSubtitle: "From $249/month · custom enterprise pricing available",
-    billingInterval: "enterprise",
-    tierLane: "enterprise",
-    roomsToAdd: 25,
-    exportCreditsToAdd: 25,
-    purchasable: false,
-    valueHeadline: "Unlimited saved rooms · fleet-scale live ops",
-    valueFocus: "Multi-room fleet management, leaderboards, and real-time display mapping for corporate teams.",
-    features: [
-      "Unlimited saved rooms (fair-use policy)",
-      "Multi-room fleet management — active session ID per room",
-      "Interactive reset checklists for staff",
-      "Real-time SSE display mapping across rooms",
-      "Public leaderboards for corporate & competitive teams",
-      "Full Gamemaster Live Console suite + priority onboarding",
-    ],
-    comparedTo: "",
-  },
+  VENUE_BLUEPRINT_LEGACY,
 ];
+
+export const isPublicCatalogPlan = (plan: BillingPlanDefinition): boolean =>
+  plan.id !== "venue_blueprint" && plan.tierLane !== "enterprise";
 
 export const resolveBillingPlanId = (id: string): BillingPlanId | undefined => {
   const normalized = LEGACY_PLAN_ALIASES[id] ?? id;
@@ -177,17 +204,55 @@ export const billingPlanById = (id: string): BillingPlanDefinition | undefined =
   return BILLING_PLANS.find((p) => p.id === resolved);
 };
 
-export const formatPlanPrice = (plan: BillingPlanDefinition): string => {
+export const quotePlanCheckout = (
+  plan: BillingPlanDefinition,
+  layoutRoomCount?: number,
+): { totalCents: number; roomsToAdd: number; exportCreditsToAdd: number } => {
+  if (plan.scalableRoomPricing && layoutRoomCount && layoutRoomCount > 0) {
+    const quote = calculateEscapePlanPrice(layoutRoomCount, {
+      basePriceCents: plan.priceCents,
+      includedLayoutRooms: plan.scalableRoomPricing.includedLayoutRooms,
+      perAdditionalRoomCents: plan.scalableRoomPricing.perAdditionalRoomCents,
+      exportCreditsPerRoom: plan.scalableRoomPricing.exportCreditsPerRoom,
+    });
+    return {
+      totalCents: quote.totalCents,
+      roomsToAdd: quote.roomsToAdd,
+      exportCreditsToAdd: quote.exportCreditsToAdd,
+    };
+  }
+  return {
+    totalCents: plan.priceCents,
+    roomsToAdd: plan.roomsToAdd,
+    exportCreditsToAdd: plan.exportCreditsToAdd,
+  };
+};
+
+export const formatPlanPrice = (plan: BillingPlanDefinition, layoutRoomCount?: number): string => {
   if (plan.billingInterval === "enterprise" && !plan.purchasable) {
     return "Custom";
   }
   if (plan.priceCents <= 0) return "Free";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: plan.currency }).format(
-    plan.priceCents / 100,
-  );
+  if (plan.scalableRoomPricing) {
+    const quote = quotePlanCheckout(plan, layoutRoomCount ?? plan.scalableRoomPricing.includedLayoutRooms);
+    const formatted = new Intl.NumberFormat("en-US", { style: "currency", currency: plan.currency }).format(
+      quote.totalCents / 100,
+    );
+    if ((layoutRoomCount ?? 1) <= plan.scalableRoomPricing.includedLayoutRooms) {
+      return `From ${formatted}/mo`;
+    }
+    return `${formatted}/mo`;
+  }
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: plan.currency }).format(plan.priceCents / 100);
 };
 
-export const perRoomPriceLabel = (_plan: BillingPlanDefinition): string | null => null;
+export const perRoomPriceLabel = (plan: BillingPlanDefinition): string | null => {
+  if (!plan.scalableRoomPricing) return null;
+  const perRoom = new Intl.NumberFormat("en-US", { style: "currency", currency: plan.currency }).format(
+    plan.scalableRoomPricing.perAdditionalRoomCents / 100,
+  );
+  return `+${perRoom}/mo per additional layout room`;
+};
 
 export type PublicBillingPlan = BillingPlanDefinition & {
   priceLabel: string;
@@ -195,7 +260,7 @@ export type PublicBillingPlan = BillingPlanDefinition & {
 };
 
 export const toPublicBillingPlans = (): PublicBillingPlan[] =>
-  BILLING_PLANS.map((plan) => ({
+  BILLING_PLANS.filter(isPublicCatalogPlan).map((plan) => ({
     ...plan,
     priceLabel: formatPlanPrice(plan),
     perRoomPriceLabel: perRoomPriceLabel(plan),

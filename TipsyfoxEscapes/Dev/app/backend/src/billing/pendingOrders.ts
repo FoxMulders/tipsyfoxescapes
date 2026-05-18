@@ -12,6 +12,9 @@ export type PendingCheckoutOrder = {
   completedAt?: string;
   squarePaymentLinkId?: string;
   squareOrderId?: string;
+  /** Scalable operator checkout — layout rooms purchased. */
+  layoutRoomCount?: number;
+  priceCentsCharged?: number;
 };
 
 type PendingOrdersFile = { orders: PendingCheckoutOrder[] };
@@ -42,6 +45,8 @@ export const createPendingOrder = async (input: {
   userId: string;
   email: string;
   planId: string;
+  layoutRoomCount?: number;
+  priceCentsCharged?: number;
 }): Promise<PendingCheckoutOrder> => {
   const orders = await load();
   const order: PendingCheckoutOrder = {
@@ -51,6 +56,8 @@ export const createPendingOrder = async (input: {
     planId: input.planId,
     status: "pending",
     createdAt: new Date().toISOString(),
+    ...(input.layoutRoomCount && input.layoutRoomCount > 0 ? { layoutRoomCount: input.layoutRoomCount } : {}),
+    ...(input.priceCentsCharged && input.priceCentsCharged > 0 ? { priceCentsCharged: input.priceCentsCharged } : {}),
   };
   orders.push(order);
   cache = orders;

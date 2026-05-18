@@ -33,7 +33,6 @@ type PricingPlanCardProps = {
 const tierLaneLabel = (lane?: string): string | null => {
   if (lane === "home") return "Home hosting";
   if (lane === "operator") return "Operator subscription";
-  if (lane === "enterprise") return "Enterprise";
   return null;
 };
 
@@ -62,7 +61,6 @@ export function PricingPlanCard({
   const className = cn(
     "pricing-card",
     plan.tierLane === "operator" && "pricing-card--operator",
-    plan.tierLane === "enterprise" && "pricing-card--enterprise",
     plan.highlight && "pricing-card--highlight",
     isCurrent && "pricing-card--current",
     selected && "pricing-card--selected",
@@ -78,6 +76,7 @@ export function PricingPlanCard({
         <p className="pricing-price">{plan.priceLabel}</p>
         {plan.priceSubtitle ? <p className="pricing-price-sub muted">{plan.priceSubtitle}</p> : null}
         {plan.valueHeadline ? <p className="pricing-value-headline">{plan.valueHeadline}</p> : null}
+        {plan.perRoomPriceLabel ? <p className="pricing-per-room muted">{plan.perRoomPriceLabel}</p> : null}
       </header>
       <ul className="pricing-features">
         {plan.features.map((feature) => (

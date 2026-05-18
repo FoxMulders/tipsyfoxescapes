@@ -396,7 +396,7 @@ export function GmConsolePage() {
             <ul>
               <li>Map display 1 to GM console (this device).</li>
               <li>Map display 2 to the player URL above — wait for &quot;Player display ready&quot;.</li>
-              <li>Multi-room fleet requires enterprise provisioning on Venue Blueprint.</li>
+              <li>Multi-room fleet is included with Creative Studio — add layout rooms under Account → Plans.</li>
             </ul>
           </details>
         </section>

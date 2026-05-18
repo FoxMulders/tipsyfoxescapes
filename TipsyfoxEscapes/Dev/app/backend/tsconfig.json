@@ -9,6 +9,6 @@
     "forceConsistentCasingInFileNames": true,
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "index.ts"]
+  "include": ["src/**/*.ts", "index.ts", "../shared/escapePlanPricing.ts"]
 }
 

@@ -6,7 +6,7 @@ import crypto from "crypto";
 import { loadEnv } from "./loadEnv.js";
 
 loadEnv();
-import { billingPlanById, resolveBillingPlanId, type BillingPlanId } from "./billing/catalog.js";
+import { billingPlanById, quotePlanCheckout, resolveBillingPlanId, type BillingPlanId } from "./billing/catalog.js";
 import { countActiveVenueLiveSessions, registerLiveRoutes } from "./liveGame.js";
 import { fleetActivationError, liveOpsFrozenError } from "./enterpriseGate.js";
 import type { TargetInterface } from "../../shared/contracts.js";
@@ -5553,18 +5553,21 @@ app.delete("/api/debug/skip-history", (req, res) => {
 const applyPlanTopUp = (
   user: StoredUser,
   planId: string,
+  options?: { layoutRoomCount?: number },
 ): { roomsAdded: number; exportCreditsAdded: number } | null => {
   const plan = billingPlanById(planId);
-  if (!plan || !plan.purchasable || plan.roomsToAdd <= 0) return null;
-  user.roomAllowance = Math.min(MAX_ROOM_ALLOWANCE, user.roomAllowance + plan.roomsToAdd);
-  user.exportCreditsRemaining = Math.min(500_000, user.exportCreditsRemaining + plan.exportCreditsToAdd);
+  if (!plan || !plan.purchasable) return null;
+  const quote = quotePlanCheckout(plan, options?.layoutRoomCount);
+  if (quote.roomsToAdd <= 0) return null;
+  user.roomAllowance = Math.min(MAX_ROOM_ALLOWANCE, user.roomAllowance + quote.roomsToAdd);
+  user.exportCreditsRemaining = Math.min(500_000, user.exportCreditsRemaining + quote.exportCreditsToAdd);
   const pid = plan.id;
   const prevResolved = user.lastPurchasedPlanId ? resolveBillingPlanId(user.lastPurchasedPlanId) : undefined;
   const prevRank = prevResolved ? PLAN_TIER_RANK[prevResolved] : -1;
   if (PLAN_TIER_RANK[pid] > prevRank) {
     user.lastPurchasedPlanId = pid;
   }
-  return { roomsAdded: plan.roomsToAdd, exportCreditsAdded: plan.exportCreditsToAdd };
+  return { roomsAdded: quote.roomsToAdd, exportCreditsAdded: quote.exportCreditsToAdd };
 };
 
 const port = process.env.PORT || 3001;
@@ -5611,7 +5614,7 @@ const finishBootstrap = async (): Promise<void> => {
       return user ? { id: user.id, email: user.email, isAdmin: user.isAdmin } : null;
     },
     findUserById: (userId) => getStoredUserById(userId) ?? null,
-    applyPlanTopUp: (user, planId) => applyPlanTopUp(user as StoredUser, planId),
+    applyPlanTopUp: (user, planId, options) => applyPlanTopUp(user as StoredUser, planId, options),
     persistUsers,
     appendBillingAudit,
     toPublicUser: (user) => toPublicUser(user as StoredUser),

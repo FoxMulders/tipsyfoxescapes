@@ -24,6 +24,14 @@ import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
 import { RoomDetailsStep } from "@/components/planning/RoomDetailsStep";
 import { ThemeCuratedCard } from "@/components/planning/ThemeCuratedCard";
+import { VenueEscapePlanBuilder } from "@/components/planning/VenueEscapePlanBuilder";
+import {
+  calculateEscapePlanPrice,
+  createEscapePlanRoom,
+  formatCentsUsd,
+  SCALABLE_OPERATOR_PLAN_ID,
+  type EscapePlanRoomProfile,
+} from "../../shared/escapePlanPricing";
 import type { PropFabricationKind } from "@/components/planning/PropFabricationSection";
 import type { TargetInterface, VenueBuildType } from "../../shared/contracts";
 import { classifyApiCatchError, parseApiJson, unexpectedApiResponseMessage } from "./apiErrors.ts";
@@ -231,6 +239,11 @@ type BillingPlan = {
   comparedTo: string;
   purchasable: boolean;
   highlight?: boolean;
+  scalableRoomPricing?: {
+    includedLayoutRooms: number;
+    perAdditionalRoomCents: number;
+    exportCreditsPerRoom?: number;
+  };
 };
 
 const PricingValueFocus = ({ text }: { text: string }) => {
@@ -243,10 +256,12 @@ const PricingValueFocus = ({ text }: { text: string }) => {
   );
 };
 
-const pricingCtaLabel = (plan: BillingPlan, busy: boolean): string => {
+const pricingCtaLabel = (plan: BillingPlan, busy: boolean, checkoutTotalCents?: number): string => {
   if (busy) return "Opening Square…";
-  if (plan.id === "venue_blueprint") return "Contact sales";
-  if (plan.billingInterval === "monthly") return `Subscribe — ${plan.priceLabel}/mo`;
+  if (plan.billingInterval === "monthly" && checkoutTotalCents && checkoutTotalCents > plan.priceCents) {
+    return `Subscribe — ${formatCentsUsd(checkoutTotalCents)}/mo`;
+  }
+  if (plan.billingInterval === "monthly") return `Subscribe — ${plan.priceLabel}`;
   if (plan.billingInterval === "one_time" && plan.id === "home_enthusiast") return `Buy — ${plan.priceLabel}`;
   if (plan.id === "casual_hobbyist") return `Get event pass — ${plan.priceLabel}`;
   return `Choose ${plan.name}`;
@@ -2479,6 +2494,9 @@ export default function App() {
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
   const [selectedBillingPlanId, setSelectedBillingPlanId] = useState<string | null>(null);
+  const initialEscapePlanRoomRef = useRef(createEscapePlanRoom(1));
+  const [escapePlanRooms, setEscapePlanRooms] = useState<EscapePlanRoomProfile[]>([initialEscapePlanRoomRef.current]);
+  const [activeEscapePlanRoomId, setActiveEscapePlanRoomId] = useState<string>(initialEscapePlanRoomRef.current.id);
   const [upgradePromptOpen, setUpgradePromptOpen] = useState(false);
   const [upgradePromptMessage, setUpgradePromptMessage] = useState("");
   const [auditEntries, setAuditEntries] = useState<Array<{ ts?: string; action?: string; detail?: unknown }>>([]);
@@ -2647,7 +2665,7 @@ export default function App() {
   customThemeCoachMessagesRef.current = customThemeCoachMessages;
 
   const themePlanningContextLine = useMemo(() => {
-    const env = environmentType.trim() || "environment TBD";
+    const env = environmentType.trim() || "environment not set";
     return `${playersConcurrent} at once · ${participantsTotal} total · ${sessionDurationMinutes} min · ${env}`;
   }, [playersConcurrent, participantsTotal, sessionDurationMinutes, environmentType]);
 
@@ -2993,8 +3011,14 @@ export default function App() {
     setValidationFlags((current) => ({
       ...current,
       participantsTotal: false,
+      playersConcurrent: false,
       headcountOrder: false,
     }));
+    const pt = Number(next);
+    const pc = Number(playersConcurrent);
+    if (Number.isFinite(pt) && Number.isFinite(pc) && pt > 0 && pc > pt) {
+      setPlayersConcurrent(String(Math.min(99, Math.max(1, Math.trunc(pt)))));
+    }
   };
 
   const scrollFirstInvalidRoomFieldIntoView = (): void => {
@@ -3359,7 +3383,8 @@ export default function App() {
             setupHint?: string | null;
           };
         };
-        setBillingPlans(Array.isArray(data.plans) ? data.plans : []);
+        const plans = Array.isArray(data.plans) ? data.plans : [];
+        setBillingPlans(plans.filter((plan) => plan.tierLane !== "enterprise"));
         setSquarePaymentsReady(Boolean(data.square?.configured));
         setSquareSetupHint(
           data.square?.configured ? null : String(data.square?.setupHint ?? "").trim() || null,
@@ -3400,6 +3425,18 @@ export default function App() {
     () => billingPlans.find((plan) => plan.id === selectedBillingPlanId) ?? null,
     [billingPlans, selectedBillingPlanId],
   );
+
+  const operatorPlanQuote = useMemo(() => {
+    if (!selectedBillingPlan?.scalableRoomPricing) return null;
+    return calculateEscapePlanPrice(escapePlanRooms.length, {
+      basePriceCents: selectedBillingPlan.priceCents,
+      includedLayoutRooms: selectedBillingPlan.scalableRoomPricing.includedLayoutRooms,
+      perAdditionalRoomCents: selectedBillingPlan.scalableRoomPricing.perAdditionalRoomCents,
+      exportCreditsPerRoom: selectedBillingPlan.scalableRoomPricing.exportCreditsPerRoom,
+    });
+  }, [selectedBillingPlan, escapePlanRooms.length]);
+
+  const showEscapePlanBuilder = selectedBillingPlanId === SCALABLE_OPERATOR_PLAN_ID;
 
   useEffect(() => {
     if (!authToken) return;
@@ -3466,11 +3503,17 @@ export default function App() {
     setError("");
     setBillingNotice("");
     setCheckoutPlanId(planId);
+    const plan = billingPlans.find((entry) => entry.id === planId);
+    const layoutRoomCount =
+      plan?.scalableRoomPricing && planId === SCALABLE_OPERATOR_PLAN_ID ? escapePlanRooms.length : undefined;
     try {
       const response = await fetch(`${API_BASE}/api/billing/checkout`, {
         method: "POST",
         headers: withAuthHeaders(),
-        body: JSON.stringify({ planId }),
+        body: JSON.stringify({
+          planId,
+          ...(layoutRoomCount ? { layoutRoomCount } : {}),
+        }),
       });
       const data = (await response.json()) as { checkoutUrl?: string; error?: { message?: string } };
       if (!response.ok || !data.checkoutUrl) {
@@ -3972,7 +4015,7 @@ export default function App() {
     const params = new URLSearchParams(location.search);
     if (params.get("enterprise") === "onboarding") {
       toast.message(
-        "Venue Blueprint multi-room fleet sync requires enterprise provisioning. Contact sales to complete your onboarding pipeline.",
+        "Multi-room fleet sync is now managed through Creative Studio layout-room pricing. Open Account → Plans to add rooms.",
         { duration: 8000 },
       );
     }
@@ -5563,8 +5606,9 @@ export default function App() {
               <h2 className="subscription-title">Plans &amp; subscriptions</h2>
               <p className="muted pricing-lead">
                 <strong>Home hosting</strong> plans unlock saved rooms, runbooks, and player screens.{" "}
-                <strong>Operator subscriptions</strong> add the Gamemaster Live Console, white-label staff sheets, multi-room
-                sync, and leaderboards. Pick <strong>Home Party</strong> or <strong>Commercial Venue</strong> in Room details
+                <strong>Operator subscriptions</strong> add the Gamemaster Live Console, white-label staff sheets, scalable
+                layout rooms (+$39/mo each beyond the first), and leaderboards. Pick <strong>Home Party</strong> or{" "}
+                <strong>Commercial Venue</strong> in Room details
                 to match how you run each build. Checkout is powered by <strong>Square</strong>.
               </p>
               {!squarePaymentsReady ? (
@@ -5576,7 +5620,11 @@ export default function App() {
               {squarePaymentsReady && authToken && selectedBillingPlan?.purchasable ? (
                 <SquareCheckout
                   planId={selectedBillingPlan.id}
-                  planLabel={selectedBillingPlan.name}
+                  planLabel={
+                    operatorPlanQuote
+                      ? `${selectedBillingPlan.name} — ${formatCentsUsd(operatorPlanQuote.totalCents)}/mo`
+                      : selectedBillingPlan.name
+                  }
                   authToken={authToken}
                   square={squareWebConfig}
                   onNotice={(message) => {
@@ -5584,6 +5632,18 @@ export default function App() {
                     setError("");
                   }}
                   onError={(message) => setError(message)}
+                />
+              ) : null}
+              {showEscapePlanBuilder && selectedBillingPlan?.scalableRoomPricing ? (
+                <VenueEscapePlanBuilder
+                  rooms={escapePlanRooms}
+                  activeRoomId={activeEscapePlanRoomId}
+                  onRoomsChange={setEscapePlanRooms}
+                  onActiveRoomChange={setActiveEscapePlanRoomId}
+                  basePriceCents={selectedBillingPlan.priceCents}
+                  includedLayoutRooms={selectedBillingPlan.scalableRoomPricing.includedLayoutRooms}
+                  perAdditionalRoomCents={selectedBillingPlan.scalableRoomPricing.perAdditionalRoomCents}
+                  planName={selectedBillingPlan.name}
                 />
               ) : null}
               <div className="pricing-grid">
@@ -5600,11 +5660,7 @@ export default function App() {
                       onSelect={plan.purchasable ? setSelectedBillingPlanId : undefined}
                       comparedToSlot={<PricingValueFocus text={plan.comparedTo ?? ""} />}
                       footer={
-                        plan.id === "venue_blueprint" ? (
-                          <a className="secondary-btn pricing-card-cta" href="mailto:support@tipsyfoxescapes.ca">
-                            Contact sales
-                          </a>
-                        ) : plan.purchasable ? (
+                        plan.purchasable ? (
                           <button
                             type="button"
                             className={isSelected || plan.highlight ? "primary-btn" : "secondary-btn"}
@@ -5612,7 +5668,11 @@ export default function App() {
                             aria-busy={checkoutPlanId === plan.id}
                             onClick={() => void handlePurchasePlan(plan.id)}
                           >
-                            {pricingCtaLabel(plan, checkoutPlanId === plan.id)}
+                            {pricingCtaLabel(
+                              plan,
+                              checkoutPlanId === plan.id,
+                              plan.id === SCALABLE_OPERATOR_PLAN_ID ? operatorPlanQuote?.totalCents : undefined,
+                            )}
                           </button>
                         ) : (
                           <p className="muted pricing-included">
@@ -7253,7 +7313,11 @@ export default function App() {
                             disabled={!squarePaymentsReady || checkoutPlanId === plan.id}
                             onClick={() => void handlePurchasePlan(plan.id)}
                           >
-                            {pricingCtaLabel(plan, checkoutPlanId === plan.id)}
+                            {pricingCtaLabel(
+                              plan,
+                              checkoutPlanId === plan.id,
+                              plan.id === SCALABLE_OPERATOR_PLAN_ID ? operatorPlanQuote?.totalCents : undefined,
+                            )}
                           </button>
                         }
                       />

@@ -19,12 +19,12 @@ export function MissionFlowMap({
   const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const n = stepLabels.length;
   const compact = n >= 6;
-  const segW = compact ? 52 : n <= 5 ? 88 : 68;
-  const w = Math.max(420, 48 + (n - 1) * segW);
+  const segW = compact ? 46 : n <= 5 ? 76 : 60;
+  const w = Math.max(360, 44 + (n - 1) * segW);
   const useFork = youthAddOnEnabled && forkSegmentIndex !== null && forkSegmentIndex >= 0 && forkSegmentIndex < n - 1;
-  const h = useFork ? 72 : 60;
-  const nodeY = useFork ? 30 : 26;
-  const nodeR = compact ? 6.5 : 7.5;
+  const h = useFork ? 58 : 48;
+  const nodeY = useFork ? 24 : 20;
+  const nodeR = compact ? 5.5 : 6.25;
   const lineEndInset = nodeR + 4;
   const xs = stepLabels.map((_, i) => 40 + i * ((w - 80) / Math.max(1, n - 1)));
 
@@ -67,7 +67,7 @@ export function MissionFlowMap({
       data-testid="mission-flow-map"
     >
       <svg
-        className="mission-flow-svg mission-flow-svg--compact block w-full max-h-[4.25rem] overflow-visible"
+        className="mission-flow-svg mission-flow-svg--compact block w-full max-h-[3.25rem] overflow-visible"
         viewBox={`0 0 ${w} ${h}`}
         preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"

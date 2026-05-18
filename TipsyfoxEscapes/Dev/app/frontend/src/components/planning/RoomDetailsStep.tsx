@@ -98,7 +98,7 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
           </div>
         </header>
 
-        <div className="mx-auto max-w-xl space-y-4" id="room-details-blueprint-form">
+        <div className="room-details-blueprint-form" id="room-details-blueprint-form">
           <div className="form-field-panel form-field-panel--primary">
             <TargetInterfaceField value={props.targetInterface} onChange={props.setTargetInterface} />
           </div>

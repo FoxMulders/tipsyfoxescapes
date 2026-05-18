@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { SquareClient, SquareEnvironment, WebhooksHelper } from "square";
 import type { BillingPlanDefinition } from "./catalog.js";
-import { billingPlanById } from "./catalog.js";
+import { billingPlanById, quotePlanCheckout } from "./catalog.js";
 import {
   createPendingOrder,
   getPendingOrder,
@@ -107,6 +107,7 @@ export const createSquareCheckout = async (input: {
   userId: string;
   email: string;
   plan: BillingPlanDefinition;
+  layoutRoomCount?: number;
 }): Promise<{ checkoutUrl: string; pendingOrderId: string }> => {
   const cfg = readSquareConfig();
   if (!cfg.configured) {
@@ -116,27 +117,35 @@ export const createSquareCheckout = async (input: {
     throw new Error("This plan cannot be purchased.");
   }
 
+  const quote = quotePlanCheckout(input.plan, input.layoutRoomCount);
+  const layoutRooms = input.layoutRoomCount && input.layoutRoomCount > 0 ? Math.floor(input.layoutRoomCount) : undefined;
   const pending = await createPendingOrder({
     userId: input.userId,
     email: input.email,
     planId: input.plan.id,
+    layoutRoomCount: layoutRooms,
+    priceCentsCharged: quote.totalCents,
   });
   const referenceId = squareReferenceForOrder(pending.id);
   const client = squareClient();
   const idempotencyKey = crypto.randomUUID();
+  const lineItemName =
+    layoutRooms && layoutRooms > 1
+      ? `${input.plan.name} (${layoutRooms} layout rooms)`
+      : input.plan.name;
 
   const response = await client.checkout.paymentLinks.create({
     idempotencyKey,
-    description: `Tipsy Fox Escapes — ${input.plan.name}`,
+    description: `Tipsy Fox Escapes — ${lineItemName}`,
     order: {
       locationId: cfg.locationId,
       referenceId,
       lineItems: [
         {
-          name: input.plan.name,
+          name: lineItemName,
           quantity: "1",
           basePriceMoney: {
-            amount: BigInt(input.plan.priceCents),
+            amount: BigInt(quote.totalCents),
             currency: input.plan.currency,
           },
         },
