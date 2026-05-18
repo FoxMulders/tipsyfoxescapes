@@ -361,3 +361,123 @@
   font-size: 0.75rem;
   color: inherit;
 }
+
+.gm-connectivity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.gm-connectivity__dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.gm-connectivity--connected {
+  color: hsl(142 70% 48%);
+}
+
+.gm-connectivity--degraded {
+  color: hsl(38 90% 55%);
+}
+
+.gm-connectivity--offline {
+  color: hsl(0 75% 58%);
+}
+
+.gm-player-ready-badge {
+  margin-left: 0.65rem;
+  font-size: 0.72rem;
+  color: hsl(142 70% 55%);
+}
+
+.gm-player-ready-badge--pending {
+  color: hsl(38 85% 58%);
+}
+
+.gm-console-banner {
+  padding: 0.65rem 0.9rem;
+  border-radius: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.88rem;
+}
+
+.gm-console-banner--warn {
+  border: 1px solid hsl(38 70% 40% / 0.5);
+  background: hsl(38 50% 14% / 0.45);
+  color: hsl(38 90% 78%);
+}
+
+.gm-console-hint {
+  font-size: 0.85rem;
+  color: hsl(215 18% 62%);
+  margin: 0 0 0.75rem;
+}
+
+.gm-screen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.gm-custom-media-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  margin-top: 0.75rem;
+}
+
+.gm-stage-select {
+  display: block;
+  margin-top: 0.25rem;
+  width: 100%;
+  border-radius: 0.4rem;
+  border: 1px solid hsl(217 28% 28% / 0.7);
+  background: hsl(217 28% 10%);
+  color: inherit;
+  padding: 0.35rem 0.5rem;
+}
+
+.player-display-clue--overlay {
+  font-size: clamp(1.5rem, 4vw, 2.75rem);
+  text-align: center;
+  padding: 2rem 1.5rem;
+  margin: 1rem auto;
+  max-width: 48rem;
+}
+
+.player-display-end {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+.player-display-end-label {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  margin: 0 0 0.5rem;
+}
+
+.player-display-end-time {
+  font-size: 1.25rem;
+  opacity: 0.8;
+}
+
+.player-display-custom-media {
+  text-align: center;
+  padding: 3rem 1.5rem;
+}
+
+.player-display-custom-media-label {
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  margin: 0 0 0.5rem;
+}
+
+.player-display-custom-media-hint {
+  opacity: 0.65;
+}

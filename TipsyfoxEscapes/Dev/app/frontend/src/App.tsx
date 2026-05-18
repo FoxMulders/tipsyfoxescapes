@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { GlobalFooter } from "@/components/layout/GlobalFooter";
 import { PlanningSnapshotSheet } from "@/components/layout/PlanningSnapshotSheet";
@@ -22,14 +22,22 @@ import { SquareCheckout } from "@/components/SquareCheckout";
 import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
 import { RoomDetailsStep } from "@/components/planning/RoomDetailsStep";
+import { ThemeCuratedCard } from "@/components/planning/ThemeCuratedCard";
 import type { PropFabricationKind } from "@/components/planning/PropFabricationSection";
 import type { TargetInterface, VenueBuildType } from "../../shared/contracts";
 import { classifyApiCatchError, parseApiJson, unexpectedApiResponseMessage } from "./apiErrors.ts";
 import { filterJuniorStoryHooks } from "./juniorStoryHooks.ts";
 import {
+  fetchPlanningSessionHealth,
   isInvalidPlanningSessionResponse,
   planningSessionRecoveryNotice,
+  renewPlanningSessionLease,
 } from "./planningSession.ts";
+import {
+  clearPersistedPlanningSession,
+  loadPersistedPlanningSession,
+  persistPlanningSessionId,
+} from "./planningSessionStore.ts";
 import {
   customThemeCoachSynthesize,
   customThemeCoachTurn,
@@ -85,7 +93,15 @@ type Puzzle = {
     buildSteps: string[];
     arduinoCode: string;
   };
+  /** Server preview gate — high-level label only until export credit is reserved. */
+  previewLabel?: string;
+  locked?: boolean;
 };
+
+const isPuzzlePreviewLocked = (puzzle: Puzzle): boolean => Boolean(puzzle.locked);
+
+const puzzleCardHeading = (puzzle: Puzzle, puzzleNumber: number): string =>
+  puzzle.previewLabel?.trim() || `Puzzle ${puzzleNumber}: ${puzzle.title}`;
 
 function TrialBlur({ active, label, children }: { active: boolean; label: string; children: ReactNode }) {
   if (!active) return <>{children}</>;
@@ -169,6 +185,12 @@ type AuthUser = {
   commercialTier: "free" | "home" | "studio" | "venue";
   hasGmConsole: boolean;
   operatingModeDefault: OperatingMode;
+  role: "admin" | "user";
+  tierType: string;
+  lifecycleStatus: "active" | "delinquent" | "canceled";
+  subscriptionInactive: boolean;
+  readOnlyMode: boolean;
+  canExportRunbook: boolean;
 };
 
 const formatBillingTierLabel = (tier: AuthUser["billingTier"]): string => {
@@ -278,6 +300,17 @@ const normalizeAuthUser = (raw: unknown): AuthUser | null => {
   if (operatingModeDefault !== "home" && operatingModeDefault !== "venue") {
     operatingModeDefault = hasGmConsole ? "venue" : "home";
   }
+  const role: AuthUser["role"] = o.role === "admin" || isAdmin ? "admin" : "user";
+  const lifecycleStatus =
+    o.lifecycleStatus === "delinquent" || o.lifecycleStatus === "canceled" ? o.lifecycleStatus : "active";
+  const subscriptionInactive = Boolean(o.subscriptionInactive) || lifecycleStatus === "delinquent";
+  const readOnlyMode = Boolean(o.readOnlyMode) || lifecycleStatus === "delinquent" || lifecycleStatus === "canceled";
+  let canExportRunbook = Boolean(o.canExportRunbook);
+  if (o.canExportRunbook === undefined) {
+    canExportRunbook = isAdmin || (hasFullCatalog && exportCreditsRemaining > 0) || (billingTier === "trial" && trialRemaining);
+  }
+  if (subscriptionInactive || lifecycleStatus === "canceled") canExportRunbook = false;
+  const tierType = typeof o.tierType === "string" ? o.tierType : billingTier;
   return {
     id: o.id,
     name: o.name,
@@ -295,8 +328,14 @@ const normalizeAuthUser = (raw: unknown): AuthUser | null => {
     trialRemaining,
     canSaveRooms,
     commercialTier,
-    hasGmConsole,
+    hasGmConsole: subscriptionInactive ? false : hasGmConsole,
     operatingModeDefault,
+    role,
+    tierType,
+    lifecycleStatus,
+    subscriptionInactive,
+    readOnlyMode,
+    canExportRunbook,
   };
 };
 type SavedPlanSummary = {
@@ -541,8 +580,10 @@ function PuzzleWindowCard({
   replaceBusy: boolean;
   rejectBusy: boolean;
 }) {
+  const previewLocked = isPuzzlePreviewLocked(puzzle);
   const themeFit = puzzle.themeFitReason ?? deriveThemeFitFallback(selectedThemeName, selectedThemeDescription, puzzle);
   const titleId = `puzzle-win-${puzzle.id}-title`;
+  const heading = puzzleCardHeading(puzzle, puzzleNumber);
   return (
     <article className="glass-panel puzzle-window" aria-labelledby={titleId}>
       <header className="puzzle-window-toolbar">
@@ -551,7 +592,7 @@ function PuzzleWindowCard({
         </span>
         <div className="puzzle-window-toolbar-main">
           <h4 id={titleId} className="puzzle-output-title">
-            {puzzle.title}
+            {heading}
           </h4>
           <p className="puzzle-type-field">
             <span className="puzzle-field-label">Type</span>
@@ -571,6 +612,13 @@ function PuzzleWindowCard({
         </button>
       </header>
       <div className="puzzle-window-body">
+      {previewLocked ? (
+        <p className="muted puzzle-preview-locked-note" role="note">
+          {puzzle.previewLabel ?? heading}. Full objectives, wiring, and build steps unlock after your export credit is reserved at
+          puzzle generation.
+        </p>
+      ) : (
+        <>
       <p className="puzzle-meta-line">
         <span className="puzzle-field-label puzzle-field-label--inline">Difficulty</span>
         <span className="puzzle-difficulty-label">{formatDifficultyLabel(puzzle.difficulty)}</span>
@@ -683,6 +731,8 @@ function PuzzleWindowCard({
           </TrialBlur>
         </div>
       ) : null}
+        </>
+      )}
       </div>
       <footer className="puzzle-window-footer">
         <button type="button" className="secondary-btn" disabled={replaceBusy || rejectBusy} onClick={() => onReplace(puzzle.id)}>
@@ -1737,16 +1787,26 @@ function exportMarkdownToPlainText(md: string): string {
 function wrapExportAsHtmlDocument(runbookInnerHtml: string): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Escape Room Plan</title>
 <style>
-body{font-family:system-ui,Segoe UI,sans-serif;background:#0a0c12;color:#e8eeff;margin:1rem 1.25rem 2rem;line-height:1.45;max-width:52rem;}
-.runbook-h1{font-size:1.45rem;margin:0.5rem 0 0.35rem;}
-.runbook-h2{font-size:1.12rem;margin:1.1rem 0 0.35rem;}
-.runbook-h3{font-size:1rem;margin:0.85rem 0 0.25rem;}
+body{font-family:system-ui,Segoe UI,sans-serif;background:#fff;color:#111;margin:1rem 1.25rem 2rem;line-height:1.45;max-width:48rem;}
+.runbook-h1{font-size:1.45rem;margin:0.5rem 0 0.35rem;page-break-after:avoid;}
+.runbook-h2{font-size:1.12rem;margin:1.1rem 0 0.35rem;page-break-after:avoid;border-bottom:1px solid #cbd5e1;padding-bottom:0.2rem;}
+.runbook-h3{font-size:1rem;margin:0.85rem 0 0.25rem;page-break-after:avoid;}
+.runbook-h4{font-size:0.95rem;margin:0.75rem 0 0.2rem;}
 .runbook-p{margin:0.35rem 0;}
 .runbook-ul{margin:0.25rem 0 0.5rem;padding-left:1.2rem;}
-.runbook-pre{white-space:pre-wrap;background:#121826;padding:0.75rem;border-radius:8px;overflow:auto;font-size:0.82rem;}
-.runbook-svg-host{max-width:100%;margin:0.5rem 0;padding:0.5rem;border-radius:10px;border:1px solid rgba(140,180,255,0.25);background:rgba(8,12,22,0.6);}
+.runbook-pre{white-space:pre-wrap;background:#f1f5f9;padding:0.75rem;border-radius:8px;overflow:auto;font-size:0.82rem;border:1px solid #e2e8f0;}
+.runbook-svg-host{max-width:100%;margin:0.5rem 0;padding:0.5rem;border-radius:10px;border:1px solid #cbd5e1;background:#f8fafc;}
 .runbook-svg-host svg{display:block;max-width:100%;height:auto;}
-a{color:#6ec4c8;}
+.runbook-table{width:100%;border-collapse:collapse;margin:0.65rem 0;font-size:0.88rem;}
+.runbook-table th,.runbook-table td{border:1px solid #cbd5e1;padding:0.4rem 0.55rem;text-align:left;vertical-align:top;}
+.runbook-table th{background:#f1f5f9;font-weight:600;}
+.runbook-page-break{height:0;margin:0;border:0;page-break-before:always;}
+a{color:#1d4ed8;}
+@media print{
+  body{margin:0.75in;max-width:none;}
+  .runbook-page-break{page-break-before:always;}
+  .runbook-h2{page-break-before:auto;}
+}
 </style></head><body>${runbookInnerHtml}</body></html>`;
 }
 
@@ -1790,8 +1850,42 @@ function exportMarkdownToRunbookHtml(md: string): string {
     inFence = false;
     fenceLang = "";
   };
+  let tableRows: string[][] = [];
+  const flushTable = (): void => {
+    if (tableRows.length === 0) return;
+    const [header, ...bodyRows] = tableRows;
+    if (header?.length) {
+      out.push('<table class="runbook-table"><thead><tr>');
+      header.forEach((cell) => out.push(`<th>${inlineFmt(cell)}</th>`));
+      out.push("</tr></thead><tbody>");
+      bodyRows.forEach((row) => {
+        out.push("<tr>");
+        row.forEach((cell) => out.push(`<td>${inlineFmt(cell)}</td>`));
+        out.push("</tr>");
+      });
+      out.push("</tbody></table>");
+    }
+    tableRows = [];
+  };
   for (const line of lines) {
     const trimmed = line.trim();
+    if (trimmed === "<!-- pdf-page-break -->") {
+      closeList();
+      flushTable();
+      out.push('<hr class="runbook-page-break" aria-hidden="true" />');
+      continue;
+    }
+    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+      if (/^\|[\s\-:|]+\|$/.test(trimmed)) continue;
+      closeList();
+      const cells = trimmed
+        .slice(1, -1)
+        .split("|")
+        .map((c) => c.trim());
+      tableRows.push(cells);
+      continue;
+    }
+    if (tableRows.length > 0) flushTable();
     if (trimmed.startsWith("```")) {
       if (!inFence) {
         closeList();
@@ -1805,6 +1899,12 @@ function exportMarkdownToRunbookHtml(md: string): string {
     }
     if (inFence) {
       codeBuf.push(line);
+      continue;
+    }
+    const h4 = line.match(/^####\s+(.+)/);
+    if (h4) {
+      closeList();
+      out.push(`<h4 class="runbook-h4">${inlineFmt(h4[1] ?? "")}</h4>`);
       continue;
     }
     const h3 = line.match(/^###\s+(.+)/);
@@ -1842,6 +1942,7 @@ function exportMarkdownToRunbookHtml(md: string): string {
     }
   }
   closeList();
+  flushTable();
   if (inFence) flushFence();
   return out.join("");
 }
@@ -2383,7 +2484,7 @@ export default function App() {
   );
   const [showExistingPuzzleForm, setShowExistingPuzzleForm] = useState<boolean>(false);
   const [validationFlags, setValidationFlags] = useState<Record<string, boolean>>({});
-  const [appView, setAppView] = useState<"builder" | "account">("builder");
+  const [appView, setAppView] = useState<"builder" | "account" | "admin">("builder");
   const [snapshotOpen, setSnapshotOpen] = useState(false);
   const lastPlanningAuthTokenRef = useRef(initialAuth.authToken);
   const pendingAuthSessionBootstrap = useRef(false);
@@ -2415,6 +2516,8 @@ export default function App() {
   const [wizardStep, setWizardStep] = useState<WizardStep>("setup");
   const [hoverPreviewThemeId, setHoverPreviewThemeId] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const selectedTheme = useMemo(
     () => themes.find((theme) => theme.id === selectedThemeId),
@@ -2537,25 +2640,10 @@ export default function App() {
 
   customThemeCoachMessagesRef.current = customThemeCoachMessages;
 
-  const themesStepDockTheme = useMemo(() => {
-    if (wizardStep !== "themes" || themePath !== "generated") return null;
-    if (hoverPreviewThemeId) return themes.find((theme) => theme.id === hoverPreviewThemeId) ?? null;
-    if (selectedThemeId) return themes.find((theme) => theme.id === selectedThemeId) ?? null;
-    return null;
-  }, [wizardStep, themePath, hoverPreviewThemeId, selectedThemeId, themes]);
-
-  const themesStepPolishTheme = useMemo(() => {
-    if (wizardStep !== "themes" || themePath !== "generated" || !selectedThemeId) return null;
-    return themes.find((theme) => theme.id === selectedThemeId) ?? null;
-  }, [wizardStep, themePath, selectedThemeId, themes]);
-
-  const themesStepBriefPreviewMismatch = useMemo(
-    () =>
-      Boolean(
-        themesStepDockTheme && selectedThemeId && themesStepDockTheme.id !== selectedThemeId,
-      ),
-    [themesStepDockTheme, selectedThemeId],
-  );
+  const themePlanningContextLine = useMemo(() => {
+    const env = environmentType.trim() || "environment TBD";
+    return `${playersConcurrent} at once · ${participantsTotal} total · ${sessionDurationMinutes} min · ${env}`;
+  }, [playersConcurrent, participantsTotal, sessionDurationMinutes, environmentType]);
 
   useEffect(() => {
     if (wizardStep !== "themes") setHoverPreviewThemeId(null);
@@ -2624,6 +2712,7 @@ export default function App() {
     if (mode === "strict") {
       if (!Number.isFinite(pc) || pc < 1 || pc > 99) return null;
       if (!Number.isFinite(pt) || pt < 1 || pt > 99) return null;
+      if (pc > pt) return null;
       if (!Number.isFinite(sd) || sd < 10 || sd > 180) return null;
       if (!env) return null;
       if (useCustomMainPuzzleCount && mainOverride === null) return null;
@@ -2776,8 +2865,8 @@ export default function App() {
       }
     };
 
-    if (wizardStep === "themes" && themePath === "generated" && themesStepPolishTheme?.description.trim()) {
-      const t = themesStepPolishTheme;
+    if (wizardStep === "themes" && themePath === "generated" && selectedTheme?.description.trim()) {
+      const t = selectedTheme;
       await run(t.name, t.description, (next) => {
         setThemes((prev) => prev.map((th) => (th.id === t.id ? { ...th, description: next } : th)));
       });
@@ -2868,9 +2957,38 @@ export default function App() {
     const sd = Number(sessionDurationMinutes);
     if (!Number.isFinite(pc) || pc < 1 || pc > 99) missing.push("playersConcurrent");
     if (!Number.isFinite(pt) || pt < 1 || pt > 99) missing.push("participantsTotal");
+    if (Number.isFinite(pc) && Number.isFinite(pt) && pc > pt) {
+      missing.push("headcountOrder");
+      if (!missing.includes("playersConcurrent")) missing.push("playersConcurrent");
+      if (!missing.includes("participantsTotal")) missing.push("participantsTotal");
+    }
     if (!Number.isFinite(sd) || sd < 10 || sd > 180) missing.push("sessionDurationMinutes");
     if (!environmentType.trim()) missing.push("environmentType");
     return missing;
+  };
+
+  const applyPlayersConcurrentChange = (next: string): void => {
+    setPlayersConcurrent(next);
+    setValidationFlags((current) => ({
+      ...current,
+      playersConcurrent: false,
+      participantsTotal: false,
+      headcountOrder: false,
+    }));
+    const pc = Number(next);
+    const pt = Number(participantsTotal);
+    if (Number.isFinite(pc) && Number.isFinite(pt) && pc > pt) {
+      setParticipantsTotal(next);
+    }
+  };
+
+  const applyParticipantsTotalChange = (next: string): void => {
+    setParticipantsTotal(next);
+    setValidationFlags((current) => ({
+      ...current,
+      participantsTotal: false,
+      headcountOrder: false,
+    }));
   };
 
   const scrollFirstInvalidRoomFieldIntoView = (): void => {
@@ -2918,10 +3036,13 @@ export default function App() {
 
   const proceedFromSetupToThemes = async (): Promise<void> => {
     setError("");
+    const missing = collectStrictPlanningMissing();
     if (!buildPlanningBody("strict")) {
-      flagMissingFields(collectStrictPlanningMissing());
+      flagMissingFields(missing);
       setError(
-        "Complete room details on this step (players, duration, and environment) before continuing. Available items are optional suggestions.",
+        missing.includes("headcountOrder")
+          ? "Players at one time cannot exceed total participants. Adjust the counters above, then continue."
+          : "Complete room details on this step (players, duration, and environment) before continuing. Available items are optional suggestions.",
       );
       scrollFirstInvalidRoomFieldIntoView();
       return;
@@ -3113,26 +3234,65 @@ export default function App() {
   };
 
   const handleBillingGate = (code?: string, message?: string): boolean => {
-    if (code === "TRIAL_USED" || code === "TRIAL_NO_SAVE") {
-      openUpgradePrompt(message);
+    if (
+      code === "TRIAL_USED" ||
+      code === "TRIAL_NO_SAVE" ||
+      code === "EXPORT_CREDITS_EXHAUSTED" ||
+      code === "ROOM_NOT_MANIFESTED"
+    ) {
+      openUpgradePrompt(
+        message ??
+          "You've used all your design exports. Purchase an additional export credit or upgrade to an Operator Subscription for live operational access.",
+      );
       return true;
     }
-    if (code === "SUBSCRIPTION_REQUIRED") {
-      openUpgradePrompt(message ?? "Purchase a room pack to continue.");
+    if (code === "SUBSCRIPTION_INACTIVE" || code === "ACCOUNT_CANCELED" || code === "SUBSCRIPTION_REQUIRED") {
+      openUpgradePrompt(
+        message ??
+          (code === "SUBSCRIPTION_INACTIVE"
+            ? "Subscription inactive. Reactivate your operator tier to resume live facility operations."
+            : "Purchase a plan to continue."),
+      );
+      return true;
+    }
+    if (code === "FORBIDDEN" || code === "GENERATION_BLOCKED") {
+      openUpgradePrompt(message ?? "You do not have access to run this step on your current plan.");
       return true;
     }
     return false;
   };
 
-  const refreshProfile = async (): Promise<void> => {
-    if (!authToken) return;
+  useEffect(() => {
+    const state = location.state as { wizardStep?: WizardStep; openUpgrade?: boolean } | null;
+    if (!state?.wizardStep && !state?.openUpgrade) return;
+    if (state.wizardStep) {
+      setWizardStep(state.wizardStep);
+      setAppView("builder");
+      setActivePanel(
+        state.wizardStep === "output-review" || state.wizardStep === "output-export" ? "output" : "themes",
+      );
+    }
+    if (state.openUpgrade) openUpgradePrompt();
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
+
+  const refreshProfile = async (opts?: { retryOnStaleToken?: boolean }): Promise<boolean> => {
+    if (!authToken) return false;
     try {
       const response = await fetch(`${API_BASE}/api/me`, { headers: withAuthGetHeaders() });
+      const data = (await response.json()) as { user?: AuthUser; error?: { code?: string; message?: string } };
       if (response.status === 401) {
-        handleAuthExpired();
-        return;
+        const staleToken =
+          data.error?.code === "TOKEN_INVALID" ||
+          data.error?.code === "UNAUTHORIZED" ||
+          Boolean(data.error?.message?.toLowerCase().includes("sign-in"));
+        if (staleToken && opts?.retryOnStaleToken !== false) {
+          await new Promise((resolve) => window.setTimeout(resolve, 450));
+          return refreshProfile({ retryOnStaleToken: false });
+        }
+        handleAuthExpired(data.error?.message);
+        return false;
       }
-      const data = (await response.json()) as { user?: AuthUser };
       if (data.user) {
         const normalized = normalizeAuthUser(data.user);
         if (normalized) {
@@ -3144,8 +3304,10 @@ export default function App() {
           }
         }
       }
+      return true;
     } catch {
       // offline: keep cached user
+      return true;
     }
   };
 
@@ -3373,7 +3535,7 @@ export default function App() {
       setError("Activation request failed. Is the backend running?");
     }
   };
-  const handleAuthExpired = (): void => {
+  const handleAuthExpired = (message?: string): void => {
     if (planningAutoSyncRef.current) {
       clearTimeout(planningAutoSyncRef.current);
       planningAutoSyncRef.current = null;
@@ -3382,7 +3544,7 @@ export default function App() {
     pendingAuthSessionBootstrap.current = false;
     lastPlanningAuthTokenRef.current = "";
     persistAuth("", null);
-    setError("Your sign-in expired. Please log in again.");
+    setError(message?.trim() || "Your sign-in expired. Please log in again.");
   };
 
   useEffect(() => {
@@ -3421,6 +3583,7 @@ export default function App() {
         return;
       }
       persistAuth(data.authToken, signedUp);
+      await refreshProfile({ retryOnStaleToken: true });
     } catch {
       setError("Sign up failed. Check backend and try again.");
     } finally {
@@ -3435,7 +3598,7 @@ export default function App() {
       const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: anonJsonHeaders(),
-        body: JSON.stringify({ email: authEmail, password: authPassword }),
+        body: JSON.stringify({ login: authEmail.trim(), password: authPassword }),
       });
       const data = (await response.json()) as { authToken?: string; user?: AuthUser; error?: { message?: string } };
       if (!response.ok || !data.authToken || !data.user) {
@@ -3448,6 +3611,7 @@ export default function App() {
         return;
       }
       persistAuth(data.authToken, loggedIn);
+      await refreshProfile({ retryOnStaleToken: true });
     } catch {
       setError("Log in failed. Check backend and try again.");
     } finally {
@@ -3534,10 +3698,12 @@ export default function App() {
       });
       const data = (await response.json()) as {
         puzzles?: Puzzle[];
+        puzzleAccess?: "full" | "preview";
         compatibilityPassed?: boolean;
         storyPlan?: StoryPlan;
         suggestedAdditions?: string[];
         suggestedAdditionsRequired?: string[];
+        user?: unknown;
         error?: { message?: string; code?: string };
       };
       if (!response.ok || !data.puzzles) {
@@ -3553,11 +3719,24 @@ export default function App() {
         setError(data.error?.message ?? "Failed to generate puzzles.");
         return false;
       }
+      if (data.user) {
+        const refreshed = normalizeAuthUser(data.user);
+        if (refreshed) {
+          setAuthUser(refreshed);
+          try {
+            window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authToken, authUser: refreshed }));
+          } catch {
+            // ignore
+          }
+        }
+      }
       const basePuzzles = data.puzzles;
-      const baseSuggestedAdditions = data.suggestedAdditions ?? [];
-      const baseSuggestedRequired = data.suggestedAdditionsRequired ?? [];
+      const previewOnly = data.puzzleAccess === "preview";
+      const baseSuggestedAdditions = previewOnly ? [] : (data.suggestedAdditions ?? []);
+      const baseSuggestedRequired = previewOnly ? [] : (data.suggestedAdditionsRequired ?? []);
       const activeTheme = themeForEnhance ?? themes.find((theme) => theme.id === themeId);
       let aiEnhancement: Awaited<ReturnType<typeof enhancePlanInBrowser>> = null;
+      if (!previewOnly) {
       try {
         aiEnhancement = await enhancePlanInBrowser({
           theme: activeTheme,
@@ -3569,6 +3748,7 @@ export default function App() {
         });
       } catch {
         aiEnhancement = null;
+      }
       }
 
       const enhancedPuzzles = aiEnhancement
@@ -3644,12 +3824,19 @@ export default function App() {
         headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify(payload),
       });
-      const data = (await response.json()) as { sessionId?: string; error?: { message?: string } };
+      const data = (await response.json()) as {
+        sessionId?: string;
+        leaseExpiresAt?: number;
+        error?: { message?: string };
+      };
       if (!response.ok || !data.sessionId) {
         setError(data.error?.message ?? "Failed to create session.");
         return undefined;
       }
       setSessionId(data.sessionId);
+      if (authToken) {
+        void persistPlanningSessionId(authToken, data.sessionId, data.leaseExpiresAt);
+      }
       themeCoachHydratedForSessionRef.current = "";
       setCustomThemeCoachMessages([]);
       setCustomThemeCoachDraft("");
@@ -3691,9 +3878,10 @@ export default function App() {
     planningSessionRecoveryInFlight.current = true;
     try {
       setSessionId("");
+      if (authToken) await clearPersistedPlanningSession(authToken);
       const freshId = await createSession(undefined, { seedThemes: options?.seedThemes ?? false });
       if (freshId) {
-        toast.message(planningSessionRecoveryNotice);
+        toast.message(planningSessionRecoveryNotice, { duration: 4000 });
       }
       return freshId;
     } finally {
@@ -3706,13 +3894,26 @@ export default function App() {
     return createSession(undefined, { seedThemes: true });
   };
 
-  /** New auth token → fresh planning session; same token with empty sessionId (e.g. reload) → create once. */
+  /** Restore persisted sessionId when possible; renew lease in background (no full reload). */
   useEffect(() => {
     if (!authUser || !authToken) {
       lastPlanningAuthTokenRef.current = "";
       pendingAuthSessionBootstrap.current = false;
       return;
     }
+    const headers = withAuthHeaders();
+    const tryRestore = async (): Promise<boolean> => {
+      const persisted = await loadPersistedPlanningSession(authToken);
+      if (!persisted?.sessionId) return false;
+      const health = await fetchPlanningSessionHealth(persisted.sessionId, headers);
+      if (!health?.ok) {
+        await clearPersistedPlanningSession(authToken);
+        return false;
+      }
+      setSessionId(persisted.sessionId);
+      void persistPlanningSessionId(authToken, persisted.sessionId, health.leaseExpiresAt);
+      return true;
+    };
     const isNewToken = lastPlanningAuthTokenRef.current !== authToken;
     if (isNewToken) {
       lastPlanningAuthTokenRef.current = authToken;
@@ -3730,15 +3931,46 @@ export default function App() {
       setApprovedForBuild(false);
       setThemePath(null);
       setExistingPuzzles([]);
-      void createSession({ existingPuzzles: [] }, { seedThemes: true }).finally(() => {
+      void (async () => {
+        const restored = await tryRestore();
+        if (!restored) await createSession({ existingPuzzles: [] }, { seedThemes: true });
+      })().finally(() => {
         pendingAuthSessionBootstrap.current = false;
       });
       return;
     }
     if (!sessionId && !pendingAuthSessionBootstrap.current) {
-      void createSession(undefined, { seedThemes: true });
+      void (async () => {
+        const restored = await tryRestore();
+        if (!restored) await createSession(undefined, { seedThemes: true });
+      })();
     }
   }, [authUser, authToken, sessionId]);
+
+  useEffect(() => {
+    if (!authToken || !sessionId || appView !== "builder") return;
+    const headers = withAuthHeaders();
+    const renew = async () => {
+      const result = await renewPlanningSessionLease(sessionId, headers);
+      if (result.ok && result.leaseExpiresAt) {
+        void persistPlanningSessionId(authToken, sessionId, result.leaseExpiresAt);
+      }
+    };
+    void renew();
+    const id = window.setInterval(() => void renew(), 4 * 60 * 1000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounced lease renew
+  }, [authToken, sessionId, appView]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("enterprise") === "onboarding") {
+      toast.message(
+        "Venue Blueprint multi-room fleet sync requires enterprise provisioning. Contact sales to complete your onboarding pipeline.",
+        { duration: 8000 },
+      );
+    }
+  }, [location.search]);
 
   const addExistingPuzzle = async () => {
     // Add user-provided puzzle metadata to the planning payload.
@@ -5067,8 +5299,13 @@ export default function App() {
               </label>
             ) : null}
             <label className="field-row">
-              Email
-              <input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} />
+              Email or username
+              <input
+                type="text"
+                autoComplete="username"
+                value={authEmail}
+                onChange={(event) => setAuthEmail(event.target.value)}
+              />
             </label>
             <label className="field-row">
               Password
@@ -5189,6 +5426,12 @@ export default function App() {
           Your trial is complete. Open <strong>Account</strong> to purchase a room pack and start your next room.
         </div>
       ) : null}
+      {authUser.subscriptionInactive && appView === "builder" ? (
+        <div className="subscription-inactive-banner" role="alert">
+          Subscription inactive. Reactivate your operator tier to resume live facility operations. Saved rooms remain in
+          read-only mode until billing is restored.
+        </div>
+      ) : null}
       {showSlotUtilizationWarning && appView === "builder" ? (
         <div className="slot-utilization-warning" role="status">
           You are near your saved-room limit ({Math.round((authUser.savedRoomCount / Math.max(1, authUser.roomAllowance)) * 100)}%
@@ -5198,13 +5441,21 @@ export default function App() {
       {targetInterface === "commercial_venue" && sessionId && puzzles.length > 0 && appView === "builder" ? (
         <div className="slot-utilization-warning venue-live-banner" role="status">
           <strong>Retail venue mode:</strong> after export, open the{" "}
-          <Link to={`/gm/${sessionId}`} className="venue-live-banner__link">
-            Gamemaster Live Console
-          </Link>{" "}
+          {authUser.hasGmConsole && !authUser.subscriptionInactive ? (
+            <Link to={`/gm/${sessionId}`} className="venue-live-banner__link">
+              Gamemaster Live Console
+            </Link>
+          ) : (
+            <span className="venue-live-banner__link venue-live-banner__link--disabled">Gamemaster Live Console (frozen)</span>
+          )}{" "}
           and pair the{" "}
-          <Link to={`/room/${sessionId}/player-display`} className="venue-live-banner__link">
-            player display
-          </Link>
+          {authUser.subscriptionInactive ? (
+            <span className="venue-live-banner__link venue-live-banner__link--disabled">player display (frozen)</span>
+          ) : (
+            <Link to={`/room/${sessionId}/player-display`} className="venue-live-banner__link">
+              player display
+            </Link>
+          )}
           . Room packs and checkout live under <strong>Account &amp; pricing</strong>.
         </div>
       ) : null}
@@ -5216,7 +5467,14 @@ export default function App() {
         billingTierLabel={formatBillingTierLabel(authUser.billingTier)}
         planStatusDetail={`${authUser.roomsRemaining} of ${authUser.roomAllowance} save slots · ${authUser.exportCreditsRemaining} export credits`}
         appView={appView}
-        onAppViewChange={setAppView}
+        showAdminTab={authUser.role === "admin" || authUser.isAdmin}
+        onAppViewChange={(view) => {
+          if (view === "admin") {
+            navigate("/admin/dashboard");
+            return;
+          }
+          setAppView(view);
+        }}
         onSignOut={signOut}
         onOpenSnapshot={appView === "builder" ? () => setSnapshotOpen(true) : undefined}
         themeName={selectedTheme?.name}
@@ -5508,7 +5766,7 @@ export default function App() {
       <>
       <div className="builder-workspace">
         <section className="stage-main">
-          <section className="card mission-panel flow-shell glass-panel">
+          <section className="card mission-panel flow-shell glass-panel builder-workspace-shell">
             <div id="flow-shell-error-anchor" className="flow-shell-map-bar workspace-stepper" aria-live="polite">
               <MissionFlowMap
                 stepLabels={missionStepLabels}
@@ -5519,6 +5777,7 @@ export default function App() {
                 canNavigateToStep={(index) => index <= wizardIndex || buildPlanningBody("strict") !== null}
               />
             </div>
+            <div className="flow-shell-scroll-region">
             <div className="flow-controls">
               <div className="flow-controls-top">
                 <div>
@@ -5543,9 +5802,11 @@ export default function App() {
                 wizardStepTotal={wizardSteps.length}
                 wizardStepLabel={wizardLabel}
                 playersConcurrent={playersConcurrent}
-                setPlayersConcurrent={setPlayersConcurrent}
+                onPlayersConcurrentChange={applyPlayersConcurrentChange}
                 participantsTotal={participantsTotal}
-                setParticipantsTotal={setParticipantsTotal}
+                onParticipantsTotalChange={applyParticipantsTotalChange}
+                venueBuildType={venueBuildType}
+                setVenueBuildType={setVenueBuildType}
                 sessionDurationMinutes={sessionDurationMinutes}
                 setSessionDurationMinutes={setSessionDurationMinutes}
                 eventType={eventType}
@@ -5613,8 +5874,8 @@ export default function App() {
                       </>
                     ) : (
                       <>
-                        Full markdown brief and editor pass appear in the <strong>theme details</strong> panel below once you pick or
-                        hover a generated card (or draft a custom theme).
+                        Full markdown brief and editor pass expand <strong>inside each card</strong> once you select or hover a generated
+                        theme (or draft a custom theme).
                       </>
                     )}
                   </p>
@@ -5797,111 +6058,56 @@ export default function App() {
                     <div className="subcard compact-block theme-selection-card">
                       {themes.length === 0 ? <p className="muted">Generating theme ideas...</p> : null}
                       {themes.length > 0 ? (
-                        <ul className={`theme-ideas-list list-compact ${validationFlags.selectedThemeId ? "invalid-list" : ""}`}>
+                        <ul className={`theme-ideas-list ${validationFlags.selectedThemeId ? "invalid-list" : ""}`}>
                           {themes.map((theme) => (
-                            <li
+                            <ThemeCuratedCard
                               key={theme.id}
-                              onMouseEnter={() => setHoverPreviewThemeId(theme.id)}
-                              onMouseLeave={() => setHoverPreviewThemeId(null)}
-                            >
-                              <div
-                                className={`theme-idea-card${selectedThemeId === theme.id ? " theme-idea-card--selected" : ""}`}
-                              >
-                                <div className="theme-idea-card-head">
-                                  <label className="theme-idea-pick">
-                                    <input
-                                      type="radio"
-                                      name="escape-theme-choice"
-                                      className="theme-idea-radio"
-                                      checked={selectedThemeId === theme.id}
-                                      onChange={() => {
-                                        handleThemeSelect(theme.id);
-                                      }}
-                                    />
-                                    <span className="theme-idea-pick-text">
-                                      <strong className="theme-idea-name">{theme.name}</strong>
-                                    </span>
-                                  </label>
-                                </div>
-                                <p className="theme-idea-tldr theme-idea-tldr--peek muted">
-                                  <span className="theme-idea-tldr-label">TL;DR</span>
-                                  <span className="theme-idea-tldr-text">{resolveThemeTldr(theme)}</span>
-                                </p>
-                              </div>
-                            </li>
+                              theme={theme}
+                              tldr={resolveThemeTldr(theme)}
+                              selected={selectedThemeId === theme.id}
+                              preview={hoverPreviewThemeId === theme.id}
+                              simpleView={simpleThemeView}
+                              planningContext={themePlanningContextLine}
+                              onSelect={() => handleThemeSelect(theme.id)}
+                              onPointerEnter={() => setHoverPreviewThemeId(theme.id)}
+                              onPointerLeave={() => setHoverPreviewThemeId(null)}
+                              fullBrief={
+                                !simpleThemeView ? <ThemeDescriptionBlocks text={theme.description} /> : undefined
+                              }
+                              editorPass={
+                                selectedThemeId === theme.id && !simpleThemeView ? (
+                                  <button
+                                    type="button"
+                                    className="secondary-btn theme-editor-pass-btn"
+                                    disabled={briefPolishBusy || !theme.description.trim()}
+                                    aria-busy={briefPolishBusy}
+                                    title={
+                                      coachBrowserAiReady
+                                        ? "Run an on-device editorial pass on the selected theme brief (clarity, sentence case, venue truth)."
+                                        : "Requires on-device AI (e.g. Chrome Prompt API)."
+                                    }
+                                    onClick={() => void runPolishCurrentBrief()}
+                                  >
+                                    {briefPolishBusy ? "Editing…" : "Editor pass (on-device AI)"}
+                                  </button>
+                                ) : undefined
+                              }
+                            />
                           ))}
                         </ul>
                       ) : null}
                     </div>
-                    {themePath === "generated" && themesStepDockTheme ? (
-                      <div className="theme-step-description-dock" role="region" aria-label="Theme brief">
-                        <div className="theme-dock-header">
-                          <h3 className="theme-dock-name">{themesStepDockTheme.name}</h3>
-                          <div className="theme-dock-tldr-row">
-                            <span className="theme-idea-tldr-label">TL;DR</span>
-                            <span className="theme-idea-tldr-text">{resolveThemeTldr(themesStepDockTheme)}</span>
-                          </div>
-                        </div>
-                        {themesStepBriefPreviewMismatch ? (
-                          <p className="muted theme-dock-preview-note" role="note">
-                            Previewing a different card than your radio selection—select this theme or move your pointer off the list to
-                            edit the selected brief.
-                          </p>
-                        ) : null}
-                        {themesStepDockTheme.recommendedPuzzles?.length ? (
-                          <div className="theme-dock-loadout">
-                            <ThemeRecommendedPuzzles
-                              puzzles={themesStepDockTheme.recommendedPuzzles}
-                              sectionTitle="Puzzle loadout"
-                            />
-                          </div>
-                        ) : null}
-                        {!simpleThemeView ? (
-                          <>
-                            <div className="theme-dock-toolbar">
-                              <button
-                                type="button"
-                                className="secondary-btn theme-editor-pass-btn"
-                                disabled={
-                                  briefPolishBusy ||
-                                  !themesStepPolishTheme?.description.trim() ||
-                                  themesStepBriefPreviewMismatch
-                                }
-                                aria-busy={briefPolishBusy}
-                                title={
-                                  themesStepBriefPreviewMismatch
-                                    ? "Editor pass updates the radio-selected theme only. Select this card or stop hovering others."
-                                    : coachBrowserAiReady
-                                      ? "Run an on-device editorial pass on the selected theme brief (clarity, sentence case, venue truth)."
-                                      : "Requires on-device AI (e.g. Chrome Prompt API)."
-                                }
-                                onClick={() => void runPolishCurrentBrief()}
-                              >
-                                {briefPolishBusy ? "Editing…" : "Editor pass (on-device AI)"}
-                              </button>
-                            </div>
-                            <p className="muted theme-dock-lead">
-                              Full brief below—pick the theme with the <strong>radio</strong> in the <strong>list above</strong>, then use{" "}
-                              <strong>Continue to puzzle builder</strong> at the bottom of the step.
-                            </p>
-                            <div className="theme-dock-body">
-                              <ThemeDescriptionBlocks text={themesStepDockTheme.description} />
-                            </div>
-                          </>
-                        ) : null}
-                      </div>
-                    ) : null}
                     <div className="theme-generated-after-selection">
                       <p className="muted theme-pick-hint">
                         {simpleRoomSetup && !selectedThemeId ? (
                           <>
-                            Choose <strong>one</strong> theme with the radios in the list. The backdrop and details preview update as you
-                            hover or change selection; then use <strong>Continue to puzzle builder</strong> at the bottom of this step.
+                            Choose <strong>one</strong> theme with the radios in the carousel. Hover a card to preview narrative and
+                            loadout; then use <strong>Continue to puzzle builder</strong> at the bottom of this step.
                           </>
                         ) : (
                           <>
-                            Each card shows a short <strong>TL;DR</strong>; the <strong>full brief</strong> and <strong>puzzle loadout</strong> are in the{" "}
-                            <strong>panel below</strong> the list. Select a theme with the <strong>radio</strong>, then click{" "}
+                            Each card expands on <strong>hover</strong> or when <strong>selected</strong> to show narrative, your room
+                            parameters, puzzle loadout, and (in full brief mode) the complete write-up. Pick one radio, then{" "}
                             <strong>Continue to puzzle builder</strong> below.
                           </>
                         )}
@@ -6328,7 +6534,6 @@ export default function App() {
                 </div>
               </div>
             ) : null}
-          </section>
           {flowWizardStep === "saved" && hasSavedPlans && showPlanPicker ? (
         <section className="card mission-panel">
           <h2>Welcome back</h2>
@@ -6665,11 +6870,18 @@ export default function App() {
                     <button
                       type="button"
                       className="primary-btn export-action-flow__btn"
-                      disabled={exportBusy}
+                      disabled={exportBusy || !authUser?.canExportRunbook}
                       aria-busy={exportBusy}
-                      onClick={() => void exportPlan()}
+                      title={
+                        authUser?.canExportRunbook
+                          ? undefined
+                          : "Purchase an export credit or upgrade to export a full runbook."
+                      }
+                      onClick={() =>
+                        authUser?.canExportRunbook ? void exportPlan() : openUpgradePrompt()
+                      }
                     >
-                      {exportBusy ? "Exporting…" : "Export plan"}
+                      {exportBusy ? "Exporting…" : authUser?.canExportRunbook ? "Export plan" : "Export plan (locked)"}
                     </button>
                   </div>
                 </div>
@@ -6708,20 +6920,32 @@ export default function App() {
                   <div className="export-live-actions__buttons">
                   {targetInterface === "commercial_venue" ? (
                     <>
-                    <Link
-                      to={`/gm/${sessionId}`}
-                      className="primary-btn export-live-actions__primary"
-                      onClick={() => void initLiveSession(sessionId, "venue")}
-                    >
-                      Open Gamemaster Live Console
-                    </Link>
-                    <Link
-                      to={`/room/${sessionId}/player-display`}
-                      className="secondary-btn export-live-actions__primary"
-                      onClick={() => void initLiveSession(sessionId, "venue")}
-                    >
-                      Launch player screen
-                    </Link>
+                    {authUser?.hasGmConsole && !authUser.subscriptionInactive ? (
+                      <Link
+                        to={`/gm/${sessionId}`}
+                        className="primary-btn export-live-actions__primary"
+                        onClick={() => void initLiveSession(sessionId, "venue")}
+                      >
+                        Open Gamemaster Live Console
+                      </Link>
+                    ) : (
+                      <button type="button" className="primary-btn export-live-actions__primary" disabled>
+                        Gamemaster console frozen
+                      </button>
+                    )}
+                    {authUser?.subscriptionInactive ? (
+                      <button type="button" className="secondary-btn export-live-actions__primary" disabled>
+                        Player screen frozen
+                      </button>
+                    ) : (
+                      <Link
+                        to={`/room/${sessionId}/player-display`}
+                        className="secondary-btn export-live-actions__primary"
+                        onClick={() => void initLiveSession(sessionId, "venue")}
+                      >
+                        Launch player screen
+                      </Link>
+                    )}
                     </>
                   ) : (
                     <>
@@ -6832,6 +7056,8 @@ export default function App() {
             </section>
           ) : null}
 
+            </div>
+          </section>
         </section>
         {flowWizardStep === "setup" ? (
           <button type="button" className="mobile-continue-fab" onClick={() => void proceedFromSetupToThemes()}>

@@ -1,6 +1,8 @@
 import { ClipboardList, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+type AppView = "builder" | "account" | "admin";
+
 type TopNavBarProps = {
   brandName: string;
   authName: string;
@@ -8,8 +10,9 @@ type TopNavBarProps = {
   authProviderLabel: string;
   billingTierLabel: string;
   planStatusDetail?: string;
-  appView: "builder" | "account";
-  onAppViewChange: (view: "builder" | "account") => void;
+  appView: AppView;
+  showAdminTab?: boolean;
+  onAppViewChange: (view: AppView) => void;
   onSignOut: () => void;
   onOpenSnapshot?: () => void;
   themeName?: string;
@@ -24,6 +27,7 @@ export function TopNavBar({
   billingTierLabel,
   planStatusDetail,
   appView,
+  showAdminTab = false,
   onAppViewChange,
   onSignOut,
   onOpenSnapshot,
@@ -62,6 +66,16 @@ export function TopNavBar({
             >
               Account &amp; pricing
             </Button>
+            {showAdminTab ? (
+              <Button
+                type="button"
+                size="sm"
+                variant={appView === "admin" ? "default" : "outline"}
+                onClick={() => onAppViewChange("admin")}
+              >
+                Admin
+              </Button>
+            ) : null}
           </div>
           {onOpenSnapshot ? (
             <details className="app-top-nav__plan-menu">

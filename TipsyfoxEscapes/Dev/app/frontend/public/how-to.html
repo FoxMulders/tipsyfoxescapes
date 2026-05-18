@@ -5,70 +5,292 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>How To Use | Tipsy Fox Escape Builder</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 2rem auto; max-width: 900px; line-height: 1.55; padding: 0 1rem; color: #1a1a1a; }
+    :root { --ink: #1a1a1a; --muted: #444; --accent: #1a56db; --panel: #f0f4f8; --callout: #eff6ff; --callout-border: #93c5fd; }
+    body { font-family: Arial, sans-serif; margin: 2rem auto; max-width: 900px; line-height: 1.55; padding: 0 1rem; color: var(--ink); }
+    main { display: block; }
     h1 { margin-bottom: 0.5rem; }
-    h2 { font-size: 1.1rem; margin-top: 1.25rem; }
-    .muted { color: #444; font-size: 0.95rem; }
-    ol { padding-left: 1.2rem; }
-    ol li { margin: 0.35rem 0; }
-    code { background: #f0f4f8; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.9em; }
-    a { color: #1a56db; }
+    h2 { font-size: 1.15rem; margin-top: 1.75rem; margin-bottom: 0.35rem; }
+    h3 { font-size: 1rem; margin-top: 1.1rem; margin-bottom: 0.25rem; }
+    .muted { color: var(--muted); font-size: 0.95rem; }
+    .toc { background: var(--panel); border-radius: 8px; padding: 0.75rem 1rem; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+    .toc ul { margin: 0.35rem 0 0; padding-left: 1.2rem; }
+    .toc li { margin: 0.2rem 0; }
+    ol, ul { padding-left: 1.2rem; }
+    ol li, ul li { margin: 0.35rem 0; }
+    code { background: var(--panel); padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.9em; }
+    a { color: var(--accent); }
+    figure { margin: 1rem 0 1.25rem; padding: 0; }
+    figure img { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; }
+    figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 0.45rem; }
+    .media-grid { display: grid; gap: 1rem; }
+    @media (min-width: 640px) { .media-grid--builder { grid-template-columns: 1fr 1fr; } }
+    .callout-list { list-style: none; padding-left: 0; counter-reset: tip; }
+    .callout-list li { counter-increment: tip; margin: 0.65rem 0; padding: 0.55rem 0.75rem 0.55rem 2.6rem; position: relative; background: var(--callout); border: 1px solid var(--callout-border); border-radius: 8px; }
+    .callout-list li::before { content: counter(tip); position: absolute; left: 0.75rem; top: 0.55rem; font-weight: 700; color: var(--accent); }
+    .callout-list strong { color: #1e3a8a; }
+    .compare-grid { display: grid; gap: 1rem; margin: 1rem 0; }
+    @media (min-width: 640px) { .compare-grid { grid-template-columns: 1fr 1fr; } }
+    .compare-card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.85rem 1rem; background: #fff; }
+    .compare-card--new { border-color: #1a56db; background: #eff6ff; }
+    .compare-card h4 { margin: 0 0 0.35rem; font-size: 0.95rem; }
+    .url-block { display: block; word-break: break-all; background: var(--panel); padding: 0.5rem 0.65rem; border-radius: 6px; margin: 0.35rem 0; font-size: 0.88em; }
+    section[aria-labelledby] { scroll-margin-top: 1rem; }
   </style>
 </head>
 <body>
-  <h1>How To Use</h1>
-  <p class="muted">Follow the <strong>Flow</strong> strip at the top of the builder. Steps match what you see in the app.</p>
+  <header>
+    <h1>How To Use</h1>
+    <p class="muted">Host-facing guide for the Escape Room Builder and live game night. Follow the <strong>Flow</strong> strip at the top of the builder — steps below match what you see in the app.</p>
+  </header>
 
-  <h2>1. Sign in</h2>
-  <ol>
-    <li>Create an account or log in. The builder assumes a signed-in user for saving and for catalog limits.</li>
-  </ol>
+  <nav class="toc" aria-label="On this page">
+    <strong>On this page</strong>
+    <ul>
+      <li><a href="#builder">Builder workflow</a></li>
+      <li><a href="#physical-anchor">Physical anchor checklist (logic-aware AI)</a></li>
+      <li><a href="#export-documentation">Export documentation (build-ready PDF)</a></li>
+      <li><a href="#how-items-become-puzzles">How items become puzzles</a></li>
+      <li><a href="#multimedia">Multimedia &amp; walkthrough tips</a></li>
+      <li><a href="#builder-to-live">Builder → Live Console workflow</a></li>
+      <li><a href="#live-operations">Live operations</a></li>
+      <li><a href="#admin">Admin (operators)</a></li>
+      <li><a href="#local-dev">Local development</a></li>
+    </ul>
+  </nav>
 
-  <h2>2. Room details</h2>
-  <ol start="2">
-    <li>Enter <strong>players at one time</strong>, <strong>total participants</strong>, and <strong>session duration</strong> (minutes).</li>
-    <li>Enter <strong>environment</strong> (where the game runs) and <strong>available items</strong> as tags — the server uses these for themes, puzzle hooks, and export ideas. See <a href="#how-items-become-puzzles">How available items become puzzles</a> below.</li>
-    <li>Set <strong>room difficulty</strong> and optional <strong>junior add-on</strong> options if you need a parallel easier track.</li>
-    <li>Click <strong>Continue to themes</strong> (or equivalent). Incomplete required fields are highlighted.</li>
-  </ol>
+  <main>
+    <section id="builder" aria-labelledby="builder-heading">
+      <h2 id="builder-heading">Builder workflow</h2>
 
-  <h2>3. Choose a theme</h2>
-  <ol start="6">
-    <li>
-      On the <strong>free trial</strong>, the <strong>same three curated themes</strong> load automatically when you reach this step — pick a theme with the radio, then <strong>Continue to puzzle builder</strong>. With a <strong>paid room pack / full catalog</strong>, use <strong>Generate For Me</strong> or <strong>Refresh Ideas</strong> for the wider rotating set.
-    </li>
-    <li><strong>Use My Own Theme</strong> — only if you have <strong>full catalog</strong> access (room pack). Enter a <strong>theme name</strong>.</li>
-    <li>Write or paste your <strong>theme description</strong> in the large text area <strong>above</strong> the theme coach (markdown-friendly sections are fine).</li>
-    <li>Optional: use the <strong>theme coach</strong> below that field when Chrome on-device AI is enabled; use <strong>Apply answers to description</strong> to merge interview answers into the text area.</li>
-    <li>Click <strong>Add and Select Custom Theme</strong> to save the custom theme and jump to <strong>Build puzzle set</strong>. If something fails, read the red banner at the <strong>top of the Flow card</strong>.</li>
-  </ol>
+      <h3>1. Sign in</h3>
+      <ol>
+        <li>Create an account or log in. The builder assumes a signed-in user for saving and for catalog limits.</li>
+      </ol>
 
-  <h2 id="how-items-become-puzzles">How available items become puzzles</h2>
-  <ul>
-    <li><strong>Each tag is a physical anchor.</strong> List one prop per tag (sofa, ping-pong table, TV, side table). The generator folds them into the theme brief as a numbered story-integration list: where the object sits in the fiction and how a puzzle uses it (clues on a table, a looping video on the TV, a lockbox on a side table, tags in sofa cushions, and similar).</li>
-    <li><strong>Puzzles and copy reference those anchors.</strong> Generated puzzles get inventory tie-ins, and the export includes a <strong>Build team anchor checklist</strong> so ops knows which objects are load-bearing for logic — not movable without redesign.</li>
-    <li><strong>“Add existing puzzle” links</strong> are stored as references in your plan and export (the app does not scrape them). <strong>Puzzle reference links</strong> after generation are for technique, credit, and safety — adapt into <strong>original</strong> venue builds.</li>
-    <li><strong>Polish with on-device AI.</strong> On the theme step, use <strong>Editor pass</strong> (when available in supported browsers) so awkward generator sentences read more cleanly — without changing your inventory contract.</li>
-  </ul>
+      <h3>2. Room details</h3>
+      <ol start="2">
+        <li>Enter <strong>players at one time</strong>, <strong>total participants</strong>, and <strong>session duration</strong> (minutes).</li>
+        <li>Enter <strong>environment</strong> (where the game runs) and <strong>available items</strong> as tags — the server uses these for themes, puzzle hooks, and export ideas. See <a href="#how-items-become-puzzles">How available items become puzzles</a> below.</li>
+        <li>Set <strong>room difficulty</strong> and optional <strong>junior add-on</strong> options if you need a parallel easier track.</li>
+        <li>Choose <strong>Target interface</strong>: <strong>Home Party</strong> optimizes print runbooks; <strong>Commercial Venue</strong> unlocks the Gamemaster Live Console, staff checklists, and multi-display ops.</li>
+        <li>Click <strong>Continue to themes</strong> (or equivalent). Incomplete required fields are highlighted.</li>
+      </ol>
 
-  <h2>4. Build puzzle set</h2>
-  <ol start="11">
-    <li>Optionally add <strong>existing puzzles</strong> you already own (name, link, room part).</li>
-    <li>Click <strong>Generate puzzles</strong> when you are ready. Puzzle count follows the room timing and difficulty you saved earlier.</li>
-    <li>
-      Use <strong>Continue to output review</strong> after you have at least one generated puzzle (the button stays disabled until then). The <strong>Output: Review</strong> card opens <strong>below</strong> the Flow summary; the view scrolls to it. If room details are invalid, fix them via <strong>← Back</strong> to Room details—the app shows a red banner at the top of the Flow card.
-    </li>
-  </ol>
+      <div class="media-grid media-grid--builder" aria-label="Builder walkthrough placeholders">
+        <figure>
+          <img
+            src="/how-to/placeholder-builder-items-tags.svg"
+            width="960"
+            height="540"
+            alt="Placeholder animation frame: adding available item tags such as sofa, TV, and side table in Room details"
+            loading="lazy"
+          />
+          <figcaption><strong>Figure A (GIF planned).</strong> Tag each physical prop you want puzzles to anchor on — one object per tag, not a comma-separated sentence inside one tag.</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="/how-to/placeholder-builder-theme-generate.svg"
+            width="960"
+            height="540"
+            alt="Placeholder animation frame: Generate For Me and Refresh Ideas buttons on the theme selection step"
+            loading="lazy"
+          />
+          <figcaption><strong>Figure B (GIF planned).</strong> With a paid room pack, use <strong>Generate For Me</strong> and <strong>Refresh Ideas</strong> for a rotating theme set (free trial shows three curated themes automatically).</figcaption>
+        </figure>
+      </div>
 
-  <h2>5. Output</h2>
-  <ol start="14">
-    <li>Review the puzzle list and storyline. Use <strong>Continue to Export</strong> when ready.</li>
-    <li>Run <strong>Export Plan</strong>, optionally <strong>Mark Approved for Build</strong>, then <strong>Save Plan</strong> to keep it on your account.</li>
-  </ol>
+      <h3>3. Choose a theme</h3>
+      <ol start="7">
+        <li>
+          On the <strong>free trial</strong>, the <strong>same three curated themes</strong> load automatically when you reach this step — pick a theme with the radio, then <strong>Continue to puzzle builder</strong>. With a <strong>paid room pack / full catalog</strong>, use <strong>Generate For Me</strong> or <strong>Refresh Ideas</strong> for the wider rotating set.
+        </li>
+        <li><strong>Use My Own Theme</strong> — only if you have <strong>full catalog</strong> access (room pack). Enter a <strong>theme name</strong>.</li>
+        <li>Write or paste your <strong>theme description</strong> in the large text area <strong>above</strong> the theme coach (markdown-friendly sections are fine).</li>
+        <li>Optional: use the <strong>theme coach</strong> below that field when Chrome on-device AI is enabled; use <strong>Apply answers to description</strong> to merge interview answers into the text area.</li>
+        <li>Click <strong>Add and Select Custom Theme</strong> to save the custom theme and jump to <strong>Build puzzle set</strong>. If something fails, read the red banner at the <strong>top of the Flow card</strong>.</li>
+      </ol>
 
-  <h2>Local development</h2>
-  <p class="muted">Run the backend from <code>Dev/app/backend</code> and the frontend from <code>Dev/app/frontend</code> (see project README / AGENTS). Open the Vite dev URL (not the raw <code>index.html</code> file) so scripts load correctly.</p>
+      <h3 id="physical-anchor">Physical anchor checklist (logic-aware AI)</h3>
+      <p>The generator is <strong>logic-aware</strong>: it treats each <strong>Available items</strong> tag as a real prop in your room, not decorative flavor text.</p>
+      <ol class="callout-list" aria-label="Physical anchor tips">
+        <li><strong>Name props precisely.</strong> Use <code>beaker</code>, <code>microscope</code>, <code>whiteboard</code> — not “science stuff.” The export’s <strong>Narrative justification</strong> for each puzzle will cite <em>where</em> that object lives and <em>why</em> the clue belongs there.</li>
+        <li><strong>One tag = one object.</strong> Split combined lists into separate chips so the AI can assign distinct puzzle hooks per prop.</li>
+        <li><strong>Match your environment field.</strong> Set <strong>Environment</strong> to the fiction zone (e.g. “Science Lab”) so “where” lines in the export read like a build map, not a generic puzzle blurb.</li>
+        <li><strong>Review the anchor checklist in export.</strong> After export, open the <strong>Build Team Anchor Checklist</strong> — those props are contractually tied to puzzle logic; moving them requires redesign.</li>
+      </ol>
 
-  <p><a href="/faq.html">FAQ</a> · <a href="/contact.html">Contact</a></p>
+      <h3 id="export-documentation">Export documentation (build-ready PDF)</h3>
+      <p>Exported plans are formatted for <strong>professional build teams</strong>, not vague brainstorm notes. After <strong>Export plan</strong>, download <strong>.html</strong> and use your browser’s <strong>Print → Save as PDF</strong>.</p>
+      <ul>
+        <li><strong>Consolidated bill of materials</strong> table at the front (components, sensors, props per puzzle).</li>
+        <li><strong>Narrative justification</strong> on every puzzle — explicit <em>why</em> and <em>where</em> (e.g. “Inside the Science Lab, the player finds a beaker containing…”).</li>
+        <li><strong>Build resources</strong> with real links — Playful Technology for electronics, plus curated supplier/build guides (no placeholder code).</li>
+        <li><strong>Master blueprint</strong>, Mermaid flowchart with your puzzle names, and <strong>Live Ops — Gamemaster briefing</strong> (clue triggers, progression, failure recovery).</li>
+      </ul>
+
+      <div class="compare-grid" aria-label="Export format comparison">
+        <div class="compare-card">
+          <h4>Old format: vague logic</h4>
+          <p class="muted">Generic bullet list of puzzle titles with one-line objectives and no prop placement or procurement table.</p>
+        </div>
+        <div class="compare-card compare-card--new">
+          <h4>New format: build-ready specs</h4>
+          <p class="muted">Per-puzzle narrative justification, BOM rows, wiring sequences, GM clue triggers, and printable page breaks between phases.</p>
+        </div>
+      </div>
+      <figure>
+        <img
+          src="/how-to/placeholder-export-technical-pdf.svg"
+          width="960"
+          height="540"
+          alt="Placeholder: tablet in a room showing narrative justification text beside a physical beaker prop"
+          loading="lazy"
+        />
+        <figcaption><strong>Figure E (video planned).</strong> Screen capture: open the PDF on a tablet in the room, read the <strong>Narrative justification</strong>, then pan to the matching prop on the bench.</figcaption>
+      </figure>
+
+      <h3 id="how-items-become-puzzles">How available items become puzzles</h3>
+      <ul>
+        <li><strong>Each tag is a physical anchor.</strong> List one prop per tag (sofa, ping-pong table, TV, side table). The generator folds them into the theme brief as a numbered story-integration list: where the object sits in the fiction and how a puzzle uses it (clues on a table, a looping video on the TV, a lockbox on a side table, tags in sofa cushions, and similar).</li>
+        <li><strong>Puzzles and copy reference those anchors.</strong> Generated puzzles get inventory tie-ins, and the export includes a <strong>Build team anchor checklist</strong> so ops knows which objects are load-bearing for logic — not movable without redesign.</li>
+        <li><strong>“Add existing puzzle” links</strong> are stored as references in your plan and export (the app does not scrape them). <strong>Puzzle reference links</strong> after generation are for technique, credit, and safety — adapt into <strong>original</strong> venue builds.</li>
+        <li><strong>Polish with on-device AI.</strong> On the theme step, use <strong>Editor pass</strong> (when available in supported browsers) so awkward generator sentences read more cleanly — without changing your inventory contract.</li>
+      </ul>
+
+      <h3>4. Build puzzle set</h3>
+      <ol start="12">
+        <li>Optionally add <strong>existing puzzles</strong> you already own (name, link, room part).</li>
+        <li>Click <strong>Generate puzzles</strong> when you are ready. Puzzle count follows the room timing and difficulty you saved earlier.</li>
+        <li>
+          Use <strong>Continue to output review</strong> after you have at least one generated puzzle (the button stays disabled until then). The <strong>Output: Review</strong> card opens <strong>below</strong> the Flow summary; the view scrolls to it. If room details are invalid, fix them via <strong>← Back</strong> to Room details—the app shows a red banner at the top of the Flow card.
+        </li>
+        <li>Reject a single puzzle with <strong>Replace</strong> — only that slot regenerates; your accepted puzzles stay put.</li>
+      </ol>
+
+      <h3>5. Output</h3>
+      <ol start="16">
+        <li>Review the puzzle list and storyline. Use <strong>Continue to Export</strong> when ready.</li>
+        <li>Run <strong>Export Plan</strong>, optionally <strong>Mark Approved for Build</strong>, then <strong>Save Plan</strong> to keep it on your account.</li>
+        <li>On the Export step, use <strong>Run your game</strong> to open live URLs (commercial venue) or the player screen alone (home party).</li>
+      </ol>
+    </section>
+
+    <section id="multimedia" aria-labelledby="multimedia-heading">
+      <h2 id="multimedia-heading">Multimedia &amp; walkthrough tips</h2>
+      <p class="muted">This page describes where GIFs and diagrams will live — media is not hosted here yet. Swap each placeholder SVG under <code>public/how-to/</code> for a short screen capture when ready.</p>
+
+      <h3>Cursor-highlight guidance (prose)</h3>
+      <ol class="callout-list" aria-label="Builder tips">
+        <li><strong>Available items field:</strong> Click into the tag input, type one prop name, press <strong>Enter</strong> or comma to seal the tag, then add the next. The generator reads each chip separately.</li>
+        <li><strong>Generate For Me:</strong> Appears on the theme step after room details are saved. If the button is disabled, check Account for room-pack access or stay on the free trial’s three curated themes.</li>
+        <li><strong>Continue to output review:</strong> Stays gray until at least one puzzle exists — run <strong>Generate puzzles</strong> first, then watch the page scroll to the review card below the Flow strip.</li>
+        <li><strong>Red Flow banner:</strong> Always at the <strong>top</strong> of the Flow card; fix fields there before hunting at the bottom of the page.</li>
+      </ol>
+
+      <h3>Live walkthrough placeholders</h3>
+      <figure>
+        <img
+          src="/how-to/placeholder-live-clue-split-screen.svg"
+          width="960"
+          height="540"
+          alt="Diagram placeholder: Gamemaster Live Console clue box on the left sending a hint to the player projector window on the right in real time"
+          loading="lazy"
+        />
+        <figcaption><strong>Figure C (GIF planned).</strong> Split-screen concept: you type or tap a pre-saved hint in the <strong>GM live clue box</strong>; the <strong>player window</strong> shows the hint and can switch to hint-overlay mode automatically.</figcaption>
+      </figure>
+      <figure>
+        <img
+          src="/how-to/placeholder-live-venue-layout.svg"
+          width="960"
+          height="540"
+          alt="Infographic placeholder: game master tablet at side station, projector facing play area, labeled URLs for GM console and player display"
+          loading="lazy"
+        />
+        <figcaption><strong>Figure D (infographic planned).</strong> Venue setup: Display 1 = crew tablet on the GM console URL; Display 2 = in-room projector or tablet on the player URL; teams face the player screen.</figcaption>
+      </figure>
+    </section>
+
+    <section id="builder-to-live" aria-labelledby="builder-to-live-heading">
+      <h2 id="builder-to-live-heading">Builder → Live Console workflow</h2>
+      <p class="muted">Bridge the <strong>build packet</strong> (PDF/HTML export) with <strong>game night performance</strong> (live URLs).</p>
+      <ol>
+        <li>Finish Room details → Theme → <strong>Generate puzzles</strong> → <strong>Export plan</strong> (download .md or .html for your build crew).</li>
+        <li>Keep the same <strong>session id</strong> — it links the saved plan, export, GM console, and player display.</li>
+        <li>On the Export step, open <strong>Gamemaster Live Console</strong> and <strong>Launch player screen</strong> (commercial venue) or player screen only (home party).</li>
+        <li>Run the game from the export’s <strong>Live Ops — Gamemaster briefing</strong> table (clue triggers and failure recovery) while driving the console in real time.</li>
+      </ol>
+      <p>See <a href="#live-operations">Live operations</a> for URLs, clue box behavior, and venue layout.</p>
+    </section>
+
+    <section id="live-operations" aria-labelledby="live-heading">
+      <h2 id="live-heading">Live operations</h2>
+      <p class="muted">Use these after you export a plan. URLs use your planning <strong>session id</strong> (shown in the builder and GM console header). Replace <code>{sessionId}</code> with yours.</p>
+
+      <h3>Gamemaster Live Console (master controller)</h3>
+      <p>The GM console is the <strong>only master</strong> for timer, stage, puzzle completion, and clue delivery. Open it on a crew tablet or laptop that stays with your game master — not on the projector.</p>
+      <ul>
+        <li><strong>URL:</strong> <code class="url-block">/gm/{sessionId}</code> (alias: <code>/console/{sessionId}</code>)</li>
+        <li><strong>Access:</strong> Commercial venue / operator subscription with <strong>GM console</strong> enabled. If subscription is inactive, the console is read-only and clues are frozen.</li>
+        <li><strong>Console tab:</strong> Start or pause the countdown, adjust ±1 minute, set active player count, advance story stage, mark puzzles complete, run the reset checklist, and end the game (success or fail).</li>
+        <li><strong>Screen Manager tab:</strong> Push player display modes — Active Game, Hint Overlay, End Game, or Custom Media Trigger (with your label for branded slides).</li>
+        <li><strong>Reports tab:</strong> Session result, elapsed time, bottleneck puzzle, and recent event log.</li>
+      </ul>
+
+      <h3>Player window</h3>
+      <p>Open this on the <strong>in-room projector, TV, or wall-mounted tablet</strong> so teams see the timer and hints at a glance.</p>
+      <ul>
+        <li><strong>URL:</strong> <code class="url-block">/room/{sessionId}/player-display</code></li>
+        <li>Shows plan name, live timer, puzzle progress, and the current hint when the GM sends one.</li>
+        <li>Wait for <strong>Player display ready</strong> on the GM console before you start the clock — that means the player page has connected to the live stream.</li>
+        <li><strong>Home party:</strong> You can run player-only with a printed runbook on your phone; commercial venues pair both URLs.</li>
+      </ul>
+
+      <h3>Clue box — real-time sync</h3>
+      <p>On the GM console <strong>Player window</strong> tab (or the main flow when clues are in context), use the <strong>GM live clue box</strong>:</p>
+      <ol>
+        <li>Type a custom clue and press <strong>Send</strong> (or Enter).</li>
+        <li>Or tap a <strong>pre-saved hint chip</strong> from your exported plan — faster for repeat nudges.</li>
+        <li>The player display updates over the live stream; sending a clue often switches the projector to <strong>Hint Overlay</strong> so the hint is prominent.</li>
+        <li>Clues respect your operating mode policy (venue vs home); invalid or empty clues are rejected with a message on the console.</li>
+      </ol>
+
+      <h3>Venue ops — displays &amp; physical layout</h3>
+      <p>Standard two-display layout (also summarized in the console’s <strong>Venue ops help</strong> disclosure):</p>
+      <ul>
+        <li><strong>Display 1 (GM):</strong> Crew device → <code>/gm/{sessionId}</code> — timer, clue box, puzzle log, screen modes.</li>
+        <li><strong>Display 2 (players):</strong> Projector or tablet → <code>/room/{sessionId}/player-display</code> — large timer + hints only; no GM controls exposed.</li>
+        <li><strong>Layout:</strong> Teams face Display 2; GM works from the side or back of the room so they can see both the floor and their tablet. Tape HDMI/USB runs; label which cable is “player” vs “GM” for teardown.</li>
+        <li><strong>Multi-room fleets:</strong> Each room needs its own session id and display pair; enterprise provisioning is required for fleet features (see Venue Blueprint onboarding if the console redirects you).</li>
+      </ul>
+      <p>See <a href="#multimedia">Figure D</a> for the infographic placeholder and copy notes for your ops run sheet.</p>
+
+      <h3>Quick start from Export</h3>
+      <ol>
+        <li>Export the plan and note your <strong>session id</strong>.</li>
+        <li>On the Export step, click <strong>Open Gamemaster Live Console</strong> (venue) and <strong>Launch player screen</strong>.</li>
+        <li>Open the player URL on the projector; open the GM URL on your crew device.</li>
+        <li>Confirm <strong>Player display ready</strong>, then start the timer and run the game.</li>
+      </ol>
+    </section>
+
+    <section id="admin" aria-labelledby="admin-heading">
+      <h2 id="admin-heading">Admin (operators)</h2>
+      <p class="muted">Internal tool for staff — not part of the host-facing game night flow.</p>
+      <ul>
+        <li><strong>URL:</strong> <code class="url-block">/admin/dashboard</code></li>
+        <li><strong>Requires:</strong> Admin role and signed-in bearer token (same auth as the builder).</li>
+        <li><strong>Use for:</strong> Search users, adjust room allowance and export credits, set lifecycle/subscription flags, toggle enterprise provisioning, and review the audit log.</li>
+      </ul>
+    </section>
+
+    <section id="local-dev" aria-labelledby="local-dev-heading">
+      <h2 id="local-dev-heading">Local development</h2>
+      <p class="muted">Run the backend from <code>Dev/app/backend</code> and the frontend from <code>Dev/app/frontend</code> (see project README / AGENTS). Open the Vite dev URL (not the raw <code>index.html</code> file) so scripts load correctly. Static pages such as this one are served from <code>public/</code> at <code>/how-to.html</code>.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p><a href="/faq.html">FAQ</a> · <a href="/contact.html">Contact</a></p>
+  </footer>
 </body>
 </html>

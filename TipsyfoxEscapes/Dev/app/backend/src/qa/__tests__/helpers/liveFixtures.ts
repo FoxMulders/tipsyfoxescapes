@@ -20,6 +20,11 @@ export const baseLiveState = (overrides: Partial<LiveGameState> = {}): LiveGameS
   ],
   events: [],
   gameResult: "in_progress",
+  playerDisplayMode: "active_game",
+  currentStageIndex: 0,
+  playerDisplayReady: false,
+  playerDisplayReadyAtMs: null,
+  customMediaLabel: "",
   updatedAtMs: Date.now(),
   ...overrides,
 });

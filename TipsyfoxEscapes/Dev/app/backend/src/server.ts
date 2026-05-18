@@ -7,7 +7,8 @@ import { loadEnv } from "./loadEnv.js";
 
 loadEnv();
 import { billingPlanById, resolveBillingPlanId, type BillingPlanId } from "./billing/catalog.js";
-import { registerLiveRoutes } from "./liveGame.js";
+import { countActiveVenueLiveSessions, registerLiveRoutes } from "./liveGame.js";
+import { fleetActivationError, liveOpsFrozenError } from "./enterpriseGate.js";
 import type { TargetInterface } from "../../shared/contracts.js";
 import { targetInterfaceToOperatingMode, type OperatingMode } from "../../shared/liveContracts.js";
 import { registerBillingRoutes, registerSquareWebhook, type BillingRouteDeps } from "./billing/routes.js";
@@ -23,6 +24,43 @@ import { buildOAuthCallbackUrl, resolveAuthCallbackBaseUrl } from "./oauthCallba
 import { exchangeOAuthCode } from "./oauthTokenExchange.js";
 import { createOAuthState, verifyOAuthState } from "./oauthState.js";
 import { createVercelDiskSyncMiddleware } from "./vercelDiskSync.js";
+import {
+  canAuthenticateWithPassword,
+  deriveUsername,
+  indexUserUsername,
+  normalizeEmail,
+  normalizeUsername,
+  resolveLoginIdentifier,
+  verifyUserPassword,
+} from "./authIdentity.js";
+import { issueAuthToken, resolveAuthUserId } from "./authSession.js";
+import { registerAdminRoutes } from "./adminRoutes.js";
+import { buildRoomFlowchartMermaid } from "../../shared/roomFlowchart.js";
+import {
+  consumeManifestCredit,
+  defaultRoomManifest,
+  normalizeRoomManifest,
+  sessionHasFullPuzzleAccess,
+  type RoomManifest,
+} from "./roomManifest.js";
+import { redactPuzzlesForClient, redactStoryPlanForClient } from "./puzzlePresentation.js";
+import {
+  EXPORT_PDF_PRINT_GUIDE,
+  buildConsolidatedBomTable,
+  buildGmLiveOpsBriefing,
+  buildTechnicalPuzzleSections,
+  type ExportPuzzleRef,
+  type ExportSessionContext,
+} from "./exportRunbook.js";
+import {
+  exportRunbookAccessError,
+  generationAccessError,
+  hasGmConsoleAccess,
+  isReadOnlyAccount,
+  resolveLifecycleStatus,
+  tierTypeForUser,
+  type LifecycleStatus,
+} from "./userLifecycle.js";
 import { allPuzzlesPassedPuzzleQa, applyPuzzleQaGate, type PuzzleQaReport } from "./puzzleQa.js";
 import {
   loadAuthTokens,
@@ -196,6 +234,10 @@ type SessionState = {
   currentStoryPlan?: StoryPlan;
   /** Home host vs retail venue live-ops mode (derived from plan tier when unset). */
   operatingMode?: OperatingMode;
+  /** Draft vs manifested room — credit reserved at successful puzzle generation. */
+  roomManifest: RoomManifest;
+  /** Server-side lease — extended on touch and silent client renewals. */
+  leaseExpiresAt?: number;
 };
 
 const EMPTY_ROOM_INSTALL_HEADING = "## What to install in your empty room";
@@ -301,6 +343,7 @@ const deserializeSessionFromDisk = (raw: Record<string, unknown>): SessionState 
     seenThemeIds?: string[];
     seenThemeTitlesLower?: string[];
     seenPuzzleIds?: string[];
+    roomManifest?: unknown;
   };
   return {
     ...data,
@@ -308,6 +351,7 @@ const deserializeSessionFromDisk = (raw: Record<string, unknown>): SessionState 
     seenThemeIds: new Set(data.seenThemeIds ?? []),
     seenThemeTitlesLower: new Set(data.seenThemeTitlesLower ?? []),
     seenPuzzleIds: new Set(data.seenPuzzleIds ?? []),
+    roomManifest: normalizeRoomManifest(data.roomManifest),
   };
 };
 
@@ -323,9 +367,14 @@ type StoredUser = {
   id: string;
   name: string;
   email: string;
+  username: string;
   provider: "local" | "google" | "facebook" | "github";
   password?: string;
   isAdmin: boolean;
+  role: "admin" | "user";
+  lifecycleStatus?: LifecycleStatus;
+  subscriptionActive?: boolean;
+  subscriptionExpiresAt?: string | null;
   /** Max saved plans at once for this account (delete frees a slot). Purchases increase this — not time-based. */
   roomAllowance: number;
   /**
@@ -337,6 +386,9 @@ type StoredUser = {
   trialUsedAt?: string | null;
   /** Highest commercial pack purchased (studio/venue unlock GM console). */
   lastPurchasedPlanId?: BillingPlanId;
+  /** Venue Blueprint fleet / multi-room live ops enabled by enterprise onboarding. */
+  isEnterpriseProvisioned?: boolean;
+  createdAt?: string;
 };
 type PublicUser = {
   id: string;
@@ -358,6 +410,13 @@ type PublicUser = {
   commercialTier: "free" | "home" | "studio" | "venue";
   hasGmConsole: boolean;
   operatingModeDefault: OperatingMode;
+  role: "admin" | "user";
+  tierType: ReturnType<typeof tierTypeForUser>;
+  lifecycleStatus: LifecycleStatus;
+  subscriptionInactive: boolean;
+  readOnlyMode: boolean;
+  canExportRunbook: boolean;
+  isEnterpriseProvisioned: boolean;
 };
 type SavedPlan = {
   planId: string;
@@ -411,14 +470,27 @@ app.use((_req, res, next) => {
 });
 let nextSessionId = 1;
 const sessions = new Map<string, SessionState>();
+const PLANNING_SESSION_LEASE_MS = 7 * 24 * 60 * 60 * 1000;
 
-const resolvePlanningSession = (sessionId: unknown): SessionState | undefined => {
+const touchSessionLease = (session: SessionState): void => {
+  session.leaseExpiresAt = Date.now() + PLANNING_SESSION_LEASE_MS;
+};
+
+const isSessionLeaseExpired = (session: SessionState): boolean =>
+  typeof session.leaseExpiresAt === "number" && session.leaseExpiresAt < Date.now();
+
+const resolvePlanningSession = (sessionId: unknown, options?: { touchLease?: boolean }): SessionState | undefined => {
   if (typeof sessionId !== "string") return undefined;
   const id = sessionId.trim();
   if (!id) return undefined;
   const session = sessions.get(id);
   if (!session) return undefined;
+  if (isSessionLeaseExpired(session)) {
+    sessions.delete(id);
+    return undefined;
+  }
   session.planningInput = normalizeSessionPlanningInput(session.planningInput);
+  if (options?.touchLease !== false) touchSessionLease(session);
   return session;
 };
 
@@ -450,6 +522,7 @@ const SKIP_TTL_MS = 24 * 60 * 60 * 1000;
 const skipHistoryPath = path.join(getDataDir(), "skip-history.json");
 const skipEntries = new Map<string, SkipEntry>();
 const usersByEmail = new Map<string, StoredUser>();
+const usersByUsername = new Map<string, string>();
 const authTokens = new Map<string, string>();
 let nextUserId = 1;
 const savedPlansPath = path.join(getDataDir(), "user-plans.json");
@@ -481,6 +554,26 @@ const pooledOrgBonusSlotsForEmail = (emailLower: string): number => {
     if (pool.memberEmailsLower.includes(emailLower)) sum += Math.max(0, Math.floor(pool.bonusSlots));
   }
   return Math.min(MAX_ROOM_ALLOWANCE, sum);
+};
+
+const readBillingAuditLines = async (limit: number): Promise<Array<Record<string, unknown>>> => {
+  try {
+    const raw = await fs.readFile(billingAuditPath, "utf8");
+    const lines = raw.split("\n").filter(Boolean);
+    const parsed = lines
+      .map((line) => {
+        try {
+          return JSON.parse(line) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean) as Array<Record<string, unknown>>;
+    return parsed.slice(-limit).reverse();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
+  }
 };
 
 const appendBillingAudit = async (entry: {
@@ -648,7 +741,7 @@ const commercialTierForUser = (user: StoredUser): PublicUser["commercialTier"] =
   return user.roomAllowance > FREE_TIER_ROOM_ALLOWANCE ? "home" : "free";
 };
 
-const hasGmConsoleForUser = (user: StoredUser): boolean => user.isAdmin || isOperatorPlanId(user.lastPurchasedPlanId);
+const hasGmConsoleForUser = (user: StoredUser): boolean => hasGmConsoleAccess(user);
 
 const operatingModeDefaultForUser = (user: StoredUser): OperatingMode =>
   hasGmConsoleForUser(user) ? "venue" : "home";
@@ -700,6 +793,16 @@ const toPublicUser = (user: StoredUser): PublicUser => {
     commercialTier: commercialTierForUser(user),
     hasGmConsole: hasGmConsoleForUser(user),
     operatingModeDefault: operatingModeDefaultForUser(user),
+    role: user.isAdmin ? "admin" : "user",
+    tierType: tierTypeForUser(user),
+    lifecycleStatus: resolveLifecycleStatus(user),
+    subscriptionInactive: resolveLifecycleStatus(user) === "delinquent",
+    readOnlyMode: isReadOnlyAccount(user),
+    canExportRunbook:
+      user.isAdmin ||
+      (isTrialTierUser(user) && !user.trialUsedAt) ||
+      (hasFullCatalogAccessUser(user) && exportCreditsRemaining > 0),
+    isEnterpriseProvisioned: Boolean(user.isAdmin || user.isEnterpriseProvisioned),
   };
 };
 
@@ -713,7 +816,10 @@ const getStoredUserById = (userId: string): StoredUser | undefined => {
 const applyAdminFlagsFromEnv = (): void => {
   const admins = parseAdminEmails();
   for (const user of usersByEmail.values()) {
-    if (admins.has(user.email)) user.isAdmin = true;
+    if (admins.has(user.email)) {
+      user.isAdmin = true;
+      user.role = "admin";
+    }
     if (typeof user.exportCreditsRemaining !== "number" || !Number.isFinite(user.exportCreditsRemaining)) {
       user.exportCreditsRemaining =
         user.roomAllowance > FREE_TIER_ROOM_ALLOWANCE ? Math.min(5000, user.roomAllowance * 10) : 0;
@@ -726,9 +832,14 @@ const persistUsers = async (): Promise<void> => {
     id: user.id,
     name: user.name,
     email: user.email,
+    username: user.username,
     provider: user.provider,
     password: user.password,
     isAdmin: user.isAdmin,
+    role: user.role,
+    lifecycleStatus: user.lifecycleStatus ?? resolveLifecycleStatus(user),
+    subscriptionActive: user.subscriptionActive ?? null,
+    subscriptionExpiresAt: user.subscriptionExpiresAt ?? null,
     roomAllowance: user.roomAllowance,
     exportCreditsRemaining: user.exportCreditsRemaining,
     trialUsedAt: user.trialUsedAt ?? null,
@@ -752,7 +863,9 @@ const loadUsers = async (): Promise<void> => {
     >
     >("users.json")) ?? [];
     usersByEmail.clear();
+    usersByUsername.clear();
     let maxNum = 0;
+    const bootstrapAdminPassword = String(process.env.ADMIN_BOOTSTRAP_PASSWORD ?? "").trim();
     for (const row of rows) {
       const email = String(row.email ?? "").trim().toLowerCase();
       if (!email || !row.id) continue;
@@ -781,21 +894,43 @@ const loadUsers = async (): Promise<void> => {
       } else if (row.freeTrialRoomConsumed) {
         trialUsedAt = new Date(0).toISOString();
       }
+      const isAdminRow = Boolean(row.isAdmin);
+      let password = typeof row.password === "string" ? row.password : undefined;
+      if (!password && isAdminRow && bootstrapAdminPassword && DEFAULT_ADMIN_EMAILS_LOWER.has(email)) {
+        password = bootstrapAdminPassword;
+      }
       const user: StoredUser = {
         id: String(row.id),
         name: String(row.name ?? "User").trim(),
         email,
+        username: deriveUsername(email, String(row.name ?? "User"), (row as { username?: string }).username),
         provider: (row.provider as StoredUser["provider"]) ?? "local",
-        password: row.password,
-        isAdmin: Boolean(row.isAdmin),
+        password,
+        isAdmin: isAdminRow,
+        role: isAdminRow ? "admin" : "user",
+        lifecycleStatus:
+          row.lifecycleStatus === "active" || row.lifecycleStatus === "delinquent" || row.lifecycleStatus === "canceled"
+            ? row.lifecycleStatus
+            : undefined,
+        subscriptionActive: typeof row.subscriptionActive === "boolean" ? row.subscriptionActive : undefined,
+        subscriptionExpiresAt:
+          row.subscriptionExpiresAt === null || typeof row.subscriptionExpiresAt === "string"
+            ? row.subscriptionExpiresAt
+            : undefined,
         roomAllowance: Math.min(MAX_ROOM_ALLOWANCE, Math.floor(roomAllowance)),
         exportCreditsRemaining,
         trialUsedAt,
         lastPurchasedPlanId: row.lastPurchasedPlanId
           ? resolveBillingPlanId(String(row.lastPurchasedPlanId))
           : undefined,
+        isEnterpriseProvisioned: Boolean((row as { isEnterpriseProvisioned?: boolean }).isEnterpriseProvisioned),
+        createdAt:
+          typeof (row as { createdAt?: string }).createdAt === "string"
+            ? (row as { createdAt: string }).createdAt
+            : undefined,
       };
       usersByEmail.set(email, user);
+      indexUserUsername(user, usersByUsername, email);
     }
     nextUserId = Math.max(nextUserId, maxNum + 1);
     applyAdminFlagsFromEnv();
@@ -1400,6 +1535,116 @@ const buildAnchorChecklistExportLines = (session: SessionState): string[] => {
     ...rows,
     "",
   ];
+};
+
+const buildExecutiveSummaryExportLines = (session: SessionState): string[] => {
+  const theme = session.selectedTheme;
+  const story = session.currentStoryPlan;
+  const mainPuzzles = session.currentPuzzles.filter((p) => p.audienceTrack !== "youth_addon");
+  const categories = new Set(mainPuzzles.map((p) => p.category));
+  return [
+    "## Thematic executive summary",
+    "",
+    theme
+      ? `**${theme.name}** — ${theme.tldr ?? "Host-ready escape experience aligned to your room constraints."}`
+      : "_Theme not selected — generate themes before export._",
+    "",
+    story?.situation?.trim()
+      ? story.situation
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .join("\n")
+      : "_Story situation not generated yet._",
+    "",
+    `- **Mission:** ${story?.missionObjective?.trim() || "—"}`,
+    `- **Main-track puzzles:** ${mainPuzzles.length} (${[...categories].join(", ") || "categories pending"})`,
+    `- **Recommended flow:** ${getRecommendedFlowPathKind(session)}`,
+    `- **Session clock:** ${session.planningInput.sessionDurationMinutes} minutes · **Concurrent players:** ${session.planningInput.playersConcurrent}`,
+    "",
+  ];
+};
+
+const buildMasterBlueprintExportLines = (session: SessionState): string[] => {
+  const logic = session.currentPuzzles.filter((p) => p.category === "logic");
+  const physical = session.currentPuzzles.filter((p) => p.category === "physical");
+  const electronic = session.currentPuzzles.filter((p) => p.category === "electronic");
+  const inv = session.planningInput.availableItems.filter(Boolean);
+  return [
+    "## Master blueprint",
+    "",
+    "### Logic beats",
+    ...(logic.length > 0
+      ? logic.map((p) => `- **${p.title}** (${p.difficulty}): ${p.objective}`)
+      : ["- _No logic puzzles in this export._"]),
+    "",
+    "### Physical builds & props",
+    ...(physical.length > 0
+      ? physical.flatMap((p) => [
+          `- **${p.title}** (${p.difficulty}): ${p.objective}`,
+          `  - Host steps: ${(p.solveSteps ?? []).slice(0, 2).join(" → ") || p.howItWorks.slice(0, 160)}`,
+        ])
+      : ["- _No physical puzzles in this export._"]),
+  ...(inv.length > 0
+      ? ["", "**Stated inventory anchors:**", ...inv.map((item) => `  - ${item}`)]
+      : []),
+    "",
+    "### 3D print & fabrication",
+    "- Mechanical enclosures, latch carriers, and scenic shells should be modeled in your CAD/ slicer workflow before install week.",
+    "- Print tolerances: plan ±0.3 mm for sliding fits; label each prop with puzzle ID for reset crews.",
+    "- Decorative skins may be FDM/ resin; load-bearing latch parts prefer PETG/ ABS or machined inserts.",
+    "",
+    "### Electronics integration",
+    ...(electronic.length > 0
+      ? electronic.flatMap((p) => {
+          const parts = p.electronicDetails?.parts ?? [];
+          const wiring = p.electronicDetails?.wiringDiagram ?? [];
+          return [
+            `- **${p.title}**`,
+            ...(parts.length > 0 ? [`  - Parts: ${parts.join("; ")}`] : []),
+            ...(wiring.length > 0 ? [`  - Pinout / wiring: ${wiring.join(" | ")}`] : []),
+            `  - Technique references: [Playful Technology](https://www.youtube.com/@playfultechnology) (Arduino escape-room patterns; verify against your generated sketch).`,
+          ];
+        })
+      : ["- _No electronic puzzles — skip MCU bench prep._"]),
+    "",
+  ];
+};
+
+const buildMermaidFlowchartExportLines = (session: SessionState): string[] => {
+  const story = session.currentStoryPlan;
+  if (!story) {
+    return ["## Master flowchart (Mermaid)", "", "_Generate puzzles and storyline to produce the dependency graph._", ""];
+  }
+  const mermaid = buildRoomFlowchartMermaid(
+    {
+      missionObjective: story.missionObjective,
+      progressionRule: story.progressionRule,
+      stages: story.stages.map((s) => ({
+        stage: s.stage,
+        title: s.title,
+        storyBeat: s.storyBeat,
+        requiredPuzzleIds: s.requiredPuzzleIds,
+        requiredPuzzleTitles: s.requiredPuzzleTitles,
+      })),
+      puzzleLinks: story.puzzleLinks.map((l) => ({
+        puzzleId: l.puzzleId,
+        puzzleTitle: l.puzzleTitle,
+        storyRole: l.storyRole,
+      })),
+    },
+    session.currentPuzzles.map((p) => ({
+      id: p.id,
+      title: p.title,
+      category: p.category,
+      stageHint: p.stageHint,
+      audienceTrack: p.audienceTrack,
+    })),
+  );
+  if (!mermaid) {
+    return ["## Master flowchart (Mermaid)", "", "_No puzzle nodes available for flowchart._", ""];
+  }
+  return ["## Master flowchart (Mermaid)", "", "Puzzle names and stage gates reflect your story plan dependencies.", "", "```mermaid", mermaid, "```", ""];
 };
 
 type FlowPathKind = "linear" | "nonlinear" | "multilinear";
@@ -3232,30 +3477,35 @@ const enrichThemesWithRecommended = (themes: Theme[], session: SessionState): Th
   }));
 };
 
-const createAuthTokenForUser = (user: StoredUser): string => {
-  const authToken = `tok_${user.id}_${Date.now()}`;
-  authTokens.set(authToken, user.id);
-  return authToken;
-};
+const createAuthTokenForUser = async (user: StoredUser): Promise<string> => issueAuthToken(authTokens, user.id);
 
 const upsertSocialUser = (provider: StoredUser["provider"], email: string, name: string): StoredUser => {
   const normalizedEmail = email.trim().toLowerCase();
   const adminEmails = parseAdminEmails();
   let user = usersByEmail.get(normalizedEmail);
   if (!user) {
+    const isAdmin = adminEmails.has(normalizedEmail);
     user = {
       id: `usr_${nextUserId++}`,
       name: name.trim(),
       email: normalizedEmail,
+      username: deriveUsername(normalizedEmail, name),
       provider,
-      isAdmin: adminEmails.has(normalizedEmail),
+      isAdmin,
+      role: isAdmin ? "admin" : "user",
       roomAllowance: FREE_TIER_ROOM_ALLOWANCE,
       exportCreditsRemaining: 0,
     };
     usersByEmail.set(normalizedEmail, user);
+    indexUserUsername(user, usersByUsername, normalizedEmail);
     void persistUsers();
   } else if (adminEmails.has(normalizedEmail)) {
     user.isAdmin = true;
+    user.role = "admin";
+    if (!user.username) {
+      user.username = deriveUsername(normalizedEmail, user.name);
+      indexUserUsername(user, usersByUsername, normalizedEmail);
+    }
     void persistUsers();
   }
   return user;
@@ -3289,12 +3539,20 @@ const redirectOAuthStartFailure = (res: express.Response, returnToRaw: string, c
 };
 
 const readAuthUserId = (req: express.Request): string | undefined => {
-  const authHeader = String(req.headers.authorization ?? "");
-  if (!authHeader.toLowerCase().startsWith("bearer ")) return undefined;
-  const token = authHeader.slice(7).trim();
+  const token = String(req.headers.authorization ?? "")
+    .trim()
+    .toLowerCase()
+    .startsWith("bearer ")
+    ? String(req.headers.authorization ?? "")
+        .slice(7)
+        .trim()
+    : "";
   if (!token) return undefined;
   return authTokens.get(token);
 };
+
+const readAuthUserIdAsync = async (req: express.Request): Promise<string | undefined> =>
+  resolveAuthUserId(req, authTokens);
 
 const readAuthUser = (req: express.Request): StoredUser | undefined => {
   const id = readAuthUserId(req);
@@ -3412,8 +3670,8 @@ app.get("/api/webhooks/facebook", (req, res) => {
   handleFacebookWebhookVerify(req, res);
 });
 
-app.post("/api/auth/signup", (req, res) => {
-  const { name, email, password, acceptedTerms } = req.body ?? {};
+app.post("/api/auth/signup", async (req, res) => {
+  const { name, email, password, acceptedTerms, username: usernameRaw } = req.body ?? {};
   if (!name || !email || !password) {
     res.status(400).json({
       error: { code: "VALIDATION_ERROR", message: "name, email, and password are required.", details: [] },
@@ -3430,7 +3688,7 @@ app.post("/api/auth/signup", (req, res) => {
     });
     return;
   }
-  const normalizedEmail = String(email).trim().toLowerCase();
+  const normalizedEmail = normalizeEmail(email);
   if (usersByEmail.has(normalizedEmail)) {
     res.status(409).json({
       error: { code: "EMAIL_EXISTS", message: "An account with this email already exists.", details: [] },
@@ -3438,54 +3696,116 @@ app.post("/api/auth/signup", (req, res) => {
     return;
   }
   const adminEmails = parseAdminEmails();
+  const username = normalizeUsername(usernameRaw) || deriveUsername(normalizedEmail, String(name));
+  if (usersByUsername.has(username)) {
+    res.status(409).json({
+      error: { code: "USERNAME_EXISTS", message: "That username is already taken.", details: [] },
+    });
+    return;
+  }
+  const isAdmin = adminEmails.has(normalizedEmail);
   const user: StoredUser = {
     id: `usr_${nextUserId++}`,
     name: String(name).trim(),
     email: normalizedEmail,
+    username,
     provider: "local",
     password: String(password),
-    isAdmin: adminEmails.has(normalizedEmail),
+    isAdmin,
+    role: isAdmin ? "admin" : "user",
     roomAllowance: FREE_TIER_ROOM_ALLOWANCE,
     exportCreditsRemaining: 0,
+    createdAt: new Date().toISOString(),
   };
   usersByEmail.set(normalizedEmail, user);
-  void persistUsers();
-  const authToken = `tok_${user.id}_${Date.now()}`;
-  authTokens.set(authToken, user.id);
+  indexUserUsername(user, usersByUsername, normalizedEmail);
+  await persistUsers();
+  const authToken = await createAuthTokenForUser(user);
   res.status(201).json({
     authToken,
     user: toPublicUser(user),
   });
 });
 
-app.post("/api/auth/login", (req, res) => {
-  const { email, password } = req.body ?? {};
-  if (!email || !password) {
+app.get("/api/access/room/:step", (req, res) => {
+  const step = String(req.params.step ?? "").trim().toLowerCase();
+  const user = readAuthUser(req);
+  if (step === "build") {
+    const denied = generationAccessError(user);
+    if (denied) {
+      res.status(403).json({
+        error: { code: denied.code, message: denied.message, details: [] },
+        clearSessionPayload: true,
+      });
+      return;
+    }
+  } else if (step === "export") {
+    const denied = exportRunbookAccessError(user);
+    if (denied) {
+      res.status(403).json({
+        error: { code: denied.code, message: denied.message, details: [] },
+        clearSessionPayload: true,
+      });
+      return;
+    }
+  } else {
     res.status(400).json({
-      error: { code: "VALIDATION_ERROR", message: "email and password are required.", details: [] },
+      error: { code: "VALIDATION_ERROR", message: "step must be build or export.", details: [] },
     });
     return;
   }
-  const normalizedEmail = String(email).trim().toLowerCase();
-  const user = usersByEmail.get(normalizedEmail);
-  if (!user || user.provider !== "local" || user.password !== String(password)) {
+  res.json({ allowed: true, user: user ? toPublicUser(user) : null });
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  const body = req.body ?? {};
+  const loginRaw = body.login ?? body.email ?? body.username;
+  const { password } = body;
+  if (!loginRaw || !password) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Email or username and password are required.",
+        details: [],
+      },
+    });
+    return;
+  }
+  const user = resolveLoginIdentifier(loginRaw, usersByEmail, usersByUsername);
+  if (!user || !canAuthenticateWithPassword(user) || !verifyUserPassword(user, password)) {
     res.status(401).json({
-      error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password.", details: [] },
+      error: { code: "INVALID_CREDENTIALS", message: "Invalid email, username, or password.", details: [] },
     });
     return;
   }
-  const authToken = `tok_${user.id}_${Date.now()}`;
-  authTokens.set(authToken, user.id);
+  const authToken = await createAuthTokenForUser(user as StoredUser);
   res.json({
     authToken,
-    user: toPublicUser(user),
+    user: toPublicUser(user as StoredUser),
   });
 });
 
-app.get("/api/me", (req, res) => {
-  const user = readAuthUser(req);
+app.get("/api/me", async (req, res) => {
+  const userId = await readAuthUserIdAsync(req);
+  if (!userId) {
+    res.status(401).json({
+      error: {
+        code: "TOKEN_INVALID",
+        message: "Sign-in expired or invalid. Please log in again.",
+        details: [],
+      },
+    });
+    return;
+  }
+  const user = getStoredUserById(userId);
   if (!user) {
-    res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
+    res.status(401).json({
+      error: {
+        code: "TOKEN_INVALID",
+        message: "Account not found for this sign-in. Please log in again.",
+        details: [],
+      },
+    });
     return;
   }
   res.json({
@@ -3760,8 +4080,7 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
     const { email, name } = await exchangeOAuthCode(provider, code, clientId, clientSecret, callbackUri);
     if (!email) throw new Error(`${provider} account did not provide a usable email.`);
     const user = upsertSocialUser(provider, email, name);
-    const authToken = createAuthTokenForUser(user);
-    await persistAuthTokens(authTokens);
+    const authToken = await createAuthTokenForUser(user);
     res.redirect(buildAuthSuccessRedirect(stateData.returnTo, authToken, user));
   } catch (error) {
     const detail = String(error instanceof Error ? error.message : error);
@@ -3864,14 +4183,51 @@ app.post("/api/planning/session", (req, res) => {
     currentPuzzles: [],
     suggestedAdditions: [],
     suggestedAdditionsRequired: [],
+    roomManifest: defaultRoomManifest(),
   });
   const created = sessions.get(newSessionId)!;
+  touchSessionLease(created);
   created.operatingMode = deriveSessionOperatingMode(created, req);
   res.status(201).json({
     sessionId: newSessionId,
     createdAt: new Date().toISOString(),
     operatingMode: created.operatingMode,
+    leaseExpiresAt: created.leaseExpiresAt,
   });
+});
+
+app.get("/api/planning/session/:sessionId/health", (req, res) => {
+  const sessionId = req.params.sessionId;
+  const session = resolvePlanningSession(sessionId, { touchLease: false });
+  if (!session) {
+    respondInvalidPlanningSession(res, sessionId);
+    return;
+  }
+  res.json({
+    ok: true,
+    sessionId,
+    leaseExpiresAt: session.leaseExpiresAt ?? Date.now() + PLANNING_SESSION_LEASE_MS,
+  });
+});
+
+app.post("/api/planning/session/:sessionId/lease", (req, res) => {
+  const sessionId = req.params.sessionId;
+  const session = resolvePlanningSession(sessionId, { touchLease: false });
+  if (!session) {
+    respondInvalidPlanningSession(res, sessionId);
+    return;
+  }
+  const user = readAuthUser(req);
+  if (user) {
+    const ownerId = sessionUserOwners.get(sessionId);
+    if (ownerId && ownerId !== user.id && !user.isAdmin) {
+      res.status(403).json({ error: { code: "FORBIDDEN", message: "Not your planning session.", details: [] } });
+      return;
+    }
+    if (!ownerId) sessionUserOwners.set(sessionId, user.id);
+  }
+  touchSessionLease(session);
+  res.json({ ok: true, sessionId, leaseExpiresAt: session.leaseExpiresAt });
 });
 
 app.patch("/api/planning/session/:sessionId/planning-input", (req, res) => {
@@ -4007,7 +4363,7 @@ app.post("/api/themes/generate", (req, res) => {
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
-  const denied = trialAccessError(billingUser);
+  const denied = generationAccessError(billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
     return;
@@ -4065,7 +4421,7 @@ app.post("/api/themes/refresh", (req, res) => {
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
-  const denied = trialAccessError(billingUser);
+  const denied = generationAccessError(billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
     return;
@@ -4223,7 +4579,7 @@ app.post("/api/planning/session/:sessionId/existing-puzzles", (req, res) => {
   res.json({ existingPuzzles: session.planningInput.existingPuzzles });
 });
 
-app.post("/api/puzzles/generate", (req, res) => {
+app.post("/api/puzzles/generate", async (req, res) => {
   const { sessionId, themeId } = req.body ?? {};
   const session = resolvePlanningSession(sessionId);
   if (!session) {
@@ -4231,7 +4587,7 @@ app.post("/api/puzzles/generate", (req, res) => {
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
-  const denied = trialAccessError(billingUser);
+  const denied = generationAccessError(billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
     return;
@@ -4354,13 +4710,35 @@ app.post("/api/puzzles/generate", (req, res) => {
   const compatibilityPassed = generatedForResponse.every((puzzle) =>
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
   );
+  if (!session.roomManifest) session.roomManifest = defaultRoomManifest();
+  const manifestResult = consumeManifestCredit(session.roomManifest, billingUser);
+  if (manifestResult.creditConsumed || manifestResult.trialConsumed) {
+    await persistUsers();
+    void appendBillingAudit({
+      userId: billingUser?.id,
+      email: billingUser?.email,
+      action: manifestResult.trialConsumed ? "trial_consumed_at_manifest" : "export_credit_reserved_at_manifest",
+      detail: { sessionId: String(sessionId), manifestedAt: session.roomManifest.manifestedAt },
+    });
+  }
+  const fullAccess = sessionHasFullPuzzleAccess(session.roomManifest);
+  const clientPuzzles = redactPuzzlesForClient(generatedForResponse, fullAccess);
+  const clientStory = redactStoryPlanForClient(
+    session.currentStoryPlan as unknown as Record<string, unknown>,
+    fullAccess,
+  );
   res.json({
-    puzzles: generatedForResponse,
+    puzzles: clientPuzzles,
     compatibilityPassed,
     puzzleQaPassed: allPuzzlesPassedPuzzleQa(generatedForResponse),
-    storyPlan: session.currentStoryPlan,
-    suggestedAdditions: session.suggestedAdditions,
-    suggestedAdditionsRequired: session.suggestedAdditionsRequired,
+    storyPlan: clientStory,
+    suggestedAdditions: fullAccess ? session.suggestedAdditions : [],
+    suggestedAdditionsRequired: fullAccess ? session.suggestedAdditionsRequired : [],
+    roomManifest: session.roomManifest,
+    manifestCreditConsumed: manifestResult.creditConsumed,
+    trialConsumed: manifestResult.trialConsumed,
+    puzzleAccess: fullAccess ? "full" : "preview",
+    user: billingUser ? toPublicUser(billingUser) : undefined,
   });
 });
 
@@ -4373,7 +4751,7 @@ app.post("/api/puzzles/:puzzleId/replace", (req, res) => {
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
-  const denied = trialAccessError(billingUser);
+  const denied = generationAccessError(billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
     return;
@@ -4448,14 +4826,20 @@ app.post("/api/puzzles/:puzzleId/replace", (req, res) => {
   const compatibilityPassed = session.currentPuzzles.every((puzzle) =>
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
   );
+  const fullAccess = sessionHasFullPuzzleAccess(session.roomManifest);
+  const clientReplacement = redactPuzzlesForClient([mergedReplacement], fullAccess)[0];
   res.json({
     replacedPuzzleId: puzzleId,
     puzzleQaPassed: allPuzzlesPassedPuzzleQa(session.currentPuzzles),
-    newPuzzle: mergedReplacement,
+    newPuzzle: clientReplacement,
     compatibilityPassed,
-    storyPlan: session.currentStoryPlan,
-    suggestedAdditions: session.suggestedAdditions,
-    suggestedAdditionsRequired: session.suggestedAdditionsRequired,
+    storyPlan: fullAccess ? session.currentStoryPlan : redactStoryPlanForClient(
+      session.currentStoryPlan as unknown as Record<string, unknown>,
+      false,
+    ),
+    suggestedAdditions: fullAccess ? session.suggestedAdditions : [],
+    suggestedAdditionsRequired: fullAccess ? session.suggestedAdditionsRequired : [],
+    puzzleAccess: fullAccess ? "full" : "preview",
   });
 });
 
@@ -4468,7 +4852,7 @@ app.post("/api/puzzles/:puzzleId/reject", (req, res) => {
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
-  const denied = trialAccessError(billingUser);
+  const denied = generationAccessError(billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
     return;
@@ -4503,14 +4887,19 @@ app.post("/api/puzzles/:puzzleId/reject", (req, res) => {
   const compatibilityPassed = session.currentPuzzles.every((puzzle) =>
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
   );
+  const fullAccess = sessionHasFullPuzzleAccess(session.roomManifest);
   res.json({
     rejectedPuzzleId: puzzleId,
     refusedSlot,
-    puzzles: session.currentPuzzles,
+    puzzles: redactPuzzlesForClient(session.currentPuzzles, fullAccess),
     compatibilityPassed,
-    storyPlan: session.currentStoryPlan,
-    suggestedAdditions: session.suggestedAdditions,
-    suggestedAdditionsRequired: session.suggestedAdditionsRequired,
+    storyPlan: fullAccess ? session.currentStoryPlan : redactStoryPlanForClient(
+      session.currentStoryPlan as unknown as Record<string, unknown>,
+      false,
+    ),
+    suggestedAdditions: fullAccess ? session.suggestedAdditions : [],
+    suggestedAdditionsRequired: fullAccess ? session.suggestedAdditionsRequired : [],
+    puzzleAccess: fullAccess ? "full" : "preview",
   });
 });
 
@@ -4522,7 +4911,7 @@ app.post("/api/puzzles/fill-slot", (req, res) => {
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
-  const denied = trialAccessError(billingUser);
+  const denied = generationAccessError(billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
     return;
@@ -4601,13 +4990,18 @@ app.post("/api/puzzles/fill-slot", (req, res) => {
   const compatibilityPassed = session.currentPuzzles.every((puzzle) =>
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
   );
+  const fullAccess = sessionHasFullPuzzleAccess(session.roomManifest);
   res.json({
-    newPuzzle: mergedReplacement,
-    puzzles: session.currentPuzzles,
+    newPuzzle: redactPuzzlesForClient([mergedReplacement], fullAccess)[0],
+    puzzles: redactPuzzlesForClient(session.currentPuzzles, fullAccess),
     compatibilityPassed,
-    storyPlan: session.currentStoryPlan,
-    suggestedAdditions: session.suggestedAdditions,
-    suggestedAdditionsRequired: session.suggestedAdditionsRequired,
+    storyPlan: fullAccess ? session.currentStoryPlan : redactStoryPlanForClient(
+      session.currentStoryPlan as unknown as Record<string, unknown>,
+      false,
+    ),
+    suggestedAdditions: fullAccess ? session.suggestedAdditions : [],
+    suggestedAdditionsRequired: fullAccess ? session.suggestedAdditionsRequired : [],
+    puzzleAccess: fullAccess ? "full" : "preview",
   });
 });
 
@@ -4620,18 +5014,35 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
     return;
   }
   const billingUser = claimSessionForAuth(sessionId, req);
-  const denied = trialAccessError(billingUser);
-  if (denied) {
-    res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
+  if (!session.roomManifest) session.roomManifest = defaultRoomManifest();
+  const creditReservedAtManifest = Boolean(session.roomManifest.creditConsumedAt);
+  if (!creditReservedAtManifest) {
+    const denied = exportRunbookAccessError(billingUser);
+    if (denied) {
+      res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
+      return;
+    }
+    res.status(403).json({
+      error: {
+        code: "ROOM_NOT_MANIFESTED",
+        message: "Generate your puzzle set first so an export credit can be reserved to this room.",
+        details: [],
+      },
+    });
     return;
   }
   const hasCatalog = Boolean(billingUser && hasFullCatalogAccessUser(billingUser));
   const creditsBefore =
     billingUser && !billingUser.isAdmin && hasCatalog ? Math.max(0, billingUser.exportCreditsRemaining) : 0;
   /** Active trial (before first export): full electronics in the one-time trial export. */
-  const signedInFreeTier = Boolean(billingUser && !billingUser.isAdmin && isTrialTierUser(billingUser));
+  const signedInFreeTier = Boolean(
+    billingUser && !billingUser.isAdmin && isTrialTierUser(billingUser) && !billingUser.trialUsedAt,
+  );
   const allowFullElectronics =
-    Boolean(billingUser?.isAdmin) || (hasCatalog && creditsBefore > 0) || signedInFreeTier;
+    Boolean(billingUser?.isAdmin) ||
+    creditReservedAtManifest ||
+    (hasCatalog && creditsBefore > 0) ||
+    signedInFreeTier;
   const redactElectronicBuild = !allowFullElectronics;
   session.currentPuzzles = withThemeFitReasons(session.currentPuzzles, session.selectedTheme, session);
   session.currentPuzzles = withPuzzleQaForSession(session, session.currentPuzzles);
@@ -4643,12 +5054,40 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
       : exportFlowPathKind === "multilinear"
         ? "Multi-linear (parallel paths)"
         : "Non-linear (open path)";
+  const operatingModeForExport = deriveSessionOperatingMode(session, req);
+  const exportCtx: ExportSessionContext = {
+    environmentType: session.planningInput.environmentType,
+    themeName: session.selectedTheme?.name ?? "Your escape room",
+    sessionDurationMinutes: session.planningInput.sessionDurationMinutes,
+    playersConcurrent: session.planningInput.playersConcurrent,
+    operatingMode: operatingModeForExport,
+  };
+  const exportPuzzles: ExportPuzzleRef[] = session.currentPuzzles.map((puzzle) => ({
+    id: puzzle.id,
+    title: puzzle.title,
+    category: puzzle.category,
+    difficulty: puzzle.difficulty,
+    objective: puzzle.objective,
+    howItWorks: puzzle.howItWorks,
+    themeFitReason: puzzle.themeFitReason,
+    stageHint: puzzle.stageHint,
+    audienceTrack: puzzle.audienceTrack,
+    gatesAdultProgression: puzzle.gatesAdultProgression,
+    solveSteps: puzzle.solveSteps ?? [],
+    referenceLinks: puzzle.referenceLinks ?? [],
+    electronicDetails: puzzle.electronicDetails,
+  }));
   const lines = [
     "# Escape Room Plan",
     "",
+    ...EXPORT_PDF_PRINT_GUIDE,
     "## Session",
     `- ID: ${sessionId}`,
     "",
+    ...buildExecutiveSummaryExportLines(session),
+    ...buildConsolidatedBomTable(exportPuzzles, redactElectronicBuild),
+    ...buildMasterBlueprintExportLines(session),
+    ...buildMermaidFlowchartExportLines(session),
     "## Planning Input",
     `- Players at one time: ${session.planningInput.playersConcurrent}`,
     `- Total participants: ${session.planningInput.participantsTotal}`,
@@ -4726,34 +5165,24 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
       ? session.currentStoryPlan.stagingDiagram.split("\n")
       : ["- _Generate puzzles to produce a numbered staging map._"]),
     "",
-    "## Puzzles",
-    ...session.currentPuzzles.map(
-      (puzzle, index) =>
-        `${index + 1}. **${puzzle.title}** — Type: **${puzzle.category}** (${puzzle.difficulty}${
-          puzzle.audienceTrack === "youth_addon" ? ", junior add-on" : ""
-        }${puzzle.gatesAdultProgression ? ", gates adult flow" : ""}): ${puzzle.objective}`,
-    ),
+    "<!-- pdf-page-break -->",
     "",
+    ...buildTechnicalPuzzleSections(exportPuzzles, exportCtx, redactElectronicBuild),
     ...(session.planningInput.youthAddOnEnabled
       ? [
           "## Junior add-on track (easy–medium, same theme)",
           `- Intended as a parallel space for younger players alongside the main ${session.selectedTheme?.name ?? "room"} run.`,
-          `- Puzzles in this section are limited to easy–medium difficulty in generator output.`,
-          ...session.currentPuzzles
-            .filter((puzzle) => puzzle.audienceTrack === "youth_addon")
-            .map((puzzle) => {
-              const number =
-                session.currentPuzzles.findIndex((candidate) => candidate.id === puzzle.id) + 1;
-              return `${number}. **${puzzle.title}** — Type: **${puzzle.category}** (${puzzle.difficulty}${
-                puzzle.gatesAdultProgression ? " — may be required for adults to proceed" : ""
-              }): ${puzzle.objective}`;
-            }),
           "",
         ]
       : []),
-    "## Puzzle Explanations",
-    ...session.currentPuzzles.map(
-      (puzzle, index) => `### ${index + 1}. ${puzzle.title} (${puzzle.category})\n\n${puzzle.howItWorks}`,
+    ...buildGmLiveOpsBriefing(
+      exportPuzzles,
+      exportCtx,
+      (session.currentStoryPlan?.puzzleLinks ?? []).map((link) => ({
+        puzzleTitle: link.puzzleTitle,
+        storyRole: link.storyRole,
+        unlocks: link.unlocks,
+      })),
     ),
     "",
     "## Suggested Elements to Add (If Needed)",
@@ -4800,6 +5229,9 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
       : ["- _No third-party tutorial links were attached to these template puzzles._", ""]),
     "",
     "## Electronic Puzzle Implementation Details",
+    "",
+    "_Technique library: [Playful Technology](https://www.youtube.com/@playfultechnology) — compare wiring and pinouts below to your generated hardware before install._",
+    "",
     ...session.currentPuzzles
       .filter((puzzle) => puzzle.category === "electronic" && puzzle.electronicDetails)
       .flatMap((puzzle) => [
@@ -4826,8 +5258,14 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
   const exportLines = applyTrialExportRedaction(lines, redactElectronicBuild);
   const format = req.body?.format ?? "markdown";
   const content = exportLines.join("\n");
-  let exportCreditConsumed = false;
-  if (!redactElectronicBuild && billingUser && !billingUser.isAdmin && hasCatalog) {
+  let exportCreditConsumed = creditReservedAtManifest;
+  if (
+    !creditReservedAtManifest &&
+    !redactElectronicBuild &&
+    billingUser &&
+    !billingUser.isAdmin &&
+    hasCatalog
+  ) {
     billingUser.exportCreditsRemaining = Math.max(0, billingUser.exportCreditsRemaining - 1);
     exportCreditConsumed = true;
     await persistUsers();
@@ -4838,8 +5276,8 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
       detail: { sessionId, creditsAfter: billingUser.exportCreditsRemaining },
     });
   }
-  let trialConsumed = false;
-  if (billingUser && isTrialTierUser(billingUser)) {
+  let trialConsumed = creditReservedAtManifest && Boolean(billingUser?.trialUsedAt);
+  if (billingUser && isTrialTierUser(billingUser) && !creditReservedAtManifest) {
     trialConsumed = await consumeTrialIfNeeded(billingUser);
   }
   const operatingMode = deriveSessionOperatingMode(session, req);
@@ -5025,6 +5463,7 @@ const rehydrateLiveSessionFromSavedPlan = (plan: SavedPlan, ownerUserId: string)
     suggestedAdditions: [...(d.suggestedAdditions ?? [])],
     suggestedAdditionsRequired: [...(d.suggestedAdditionsRequired ?? [])],
     currentStoryPlan: d.storyPlan ?? undefined,
+    roomManifest: defaultRoomManifest(),
   };
   sessions.set(plan.sessionId, session);
   sessionUserOwners.set(plan.sessionId, ownerUserId);
@@ -5183,12 +5622,33 @@ const finishBootstrap = async (): Promise<void> => {
   };
   registerBillingRoutes(app, () => billingRouteDeps!);
   registerLiveRoutes(app, {
-    resolvePlanningSession: (sessionId) => sessions.get(sessionId),
+    resolvePlanningSession: (sessionId) => resolvePlanningSession(sessionId),
     deriveOperatingMode: (session) => deriveSessionOperatingMode(session as SessionState),
     hasGmConsoleAccess: (req) => {
       const user = readAuthUser(req);
-      return Boolean(user && hasGmConsoleForUser(user));
+      return Boolean(user && hasGmConsoleAccess(user));
     },
+    readAuthUser: (req) => readAuthUser(req) ?? undefined,
+    getSessionOwnerId: (sessionId) => sessionUserOwners.get(sessionId),
+    assertLiveInitAllowed: (req, sessionId, operatingMode) => {
+      const user = readAuthUser(req);
+      const frozen = liveOpsFrozenError(user);
+      if (frozen && operatingMode === "venue") return frozen;
+      if (operatingMode !== "venue") return null;
+      const ownerId = user?.id ?? sessionUserOwners.get(sessionId);
+      if (!ownerId || !user) return null;
+      const otherVenue = countActiveVenueLiveSessions(ownerId, sessionId, (sid) => sessionUserOwners.get(sid));
+      return fleetActivationError(user, otherVenue);
+    },
+  });
+
+  registerAdminRoutes(app, {
+    readAuthUser: (req) => readAuthUser(req) ?? undefined,
+    usersByEmail,
+    persistUsers,
+    appendBillingAudit,
+    readBillingAudit: readBillingAuditLines,
+    toPublicUser: (user) => toPublicUser(user as StoredUser),
   });
 };
 
@@ -5198,6 +5658,11 @@ const loadDeferredStorage = async (): Promise<void> => {
   await loadUsageLedger();
   await loadSavedPlans();
   await loadPlanningSessions(sessions, deserializeSessionFromDisk);
+  for (const [id, raw] of [...sessions.entries()]) {
+    const session = raw as SessionState;
+    if (isSessionLeaseExpired(session)) sessions.delete(id);
+    else if (!session.leaseExpiresAt) touchSessionLease(session);
+  }
   recomputeIdCountersFromSessions();
 };
 

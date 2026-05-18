@@ -10,6 +10,8 @@ export const operatingModeToTargetInterface = (mode: OperatingMode): TargetInter
 
 export type LiveGameResult = "in_progress" | "success" | "fail";
 
+export type PlayerDisplayMode = "active_game" | "hint_overlay" | "end_game" | "custom_media";
+
 export type LiveEventType =
   | "session_init"
   | "timer_start"
@@ -18,7 +20,10 @@ export type LiveEventType =
   | "puzzle_complete"
   | "clue_sent"
   | "player_count"
-  | "game_end";
+  | "game_end"
+  | "player_ready"
+  | "display_mode"
+  | "stage_change";
 
 export type LiveEvent = {
   id: string;
@@ -52,6 +57,15 @@ export type LiveGameState = {
   events: LiveEvent[];
   gameResult: LiveGameResult;
   gameEndedAtMs?: number;
+  /** GM-controlled projector view (Screen Manager). */
+  playerDisplayMode: PlayerDisplayMode;
+  /** Zero-based stage index aligned to story plan stages when set. */
+  currentStageIndex: number;
+  /** Player display loaded and acknowledged via POST player-ready. */
+  playerDisplayReady: boolean;
+  playerDisplayReadyAtMs: number | null;
+  /** Label shown on custom_media mode (e.g. "Team photo", "Safety briefing"). */
+  customMediaLabel: string;
   updatedAtMs: number;
 };
 

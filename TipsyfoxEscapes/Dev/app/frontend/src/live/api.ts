@@ -1,4 +1,9 @@
-import type { LeaderboardEntry, LiveGameState, OperatingMode } from "../../../shared/liveContracts";
+import type {
+  LeaderboardEntry,
+  LiveGameState,
+  OperatingMode,
+  PlayerDisplayMode,
+} from "../../../shared/liveContracts";
 
 const API_BASE = "";
 
@@ -93,3 +98,42 @@ export const formatMsClock = (ms: number): string => {
   const s = totalSec % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
 };
+
+export const postPlayerReady = async (sessionId: string): Promise<LiveSnapshot> => {
+  const res = await fetch(`${API_BASE}/api/live/${sessionId}/player-ready`, { method: "POST" });
+  const data = (await res.json()) as LiveSnapshot & { error?: { message?: string } };
+  if (!res.ok || !data.state) throw new Error(data.error?.message ?? "Could not signal player ready.");
+  return data;
+};
+
+export const postPlayerDisplayMode = async (
+  sessionId: string,
+  mode: PlayerDisplayMode,
+  customMediaLabel?: string,
+): Promise<LiveSnapshot> => {
+  const res = await fetch(`${API_BASE}/api/live/${sessionId}/display`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode, customMediaLabel }),
+  });
+  const data = (await res.json()) as LiveSnapshot & { error?: { message?: string } };
+  if (!res.ok || !data.state) throw new Error(data.error?.message ?? "Could not update player display.");
+  return data;
+};
+
+export const postLiveStage = async (sessionId: string, index: number): Promise<LiveSnapshot> => {
+  const res = await fetch(`${API_BASE}/api/live/${sessionId}/stage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ index }),
+  });
+  const data = (await res.json()) as LiveSnapshot & { error?: { message?: string } };
+  if (!res.ok || !data.state) throw new Error(data.error?.message ?? "Could not change stage.");
+  return data;
+};
+
+export const isEnterpriseFleetError = (message: string): boolean =>
+  /enterprise provisioning/i.test(message) || /ENTERPRISE_PROVISIONING/i.test(message);
+
+export const isSubscriptionFrozenError = (message: string): boolean =>
+  /subscription inactive/i.test(message) || /SUBSCRIPTION_INACTIVE/i.test(message);

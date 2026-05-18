@@ -1,7 +1,13 @@
 import type { Request, Response } from "express";
 import type { Express } from "express";
 import { readJsonBlob, writeJsonBlob } from "./kvJsonStore.js";
-import type { LeaderboardEntry, LiveGameState, LivePuzzleRow, OperatingMode } from "../../shared/liveContracts.js";
+import type {
+  LeaderboardEntry,
+  LiveGameState,
+  LivePuzzleRow,
+  OperatingMode,
+  PlayerDisplayMode,
+} from "../../shared/liveContracts.js";
 import { validateClueForOperatingMode } from "./qa/cluePolicy.js";
 import { buildResetChecklistSteps } from "./qa/resetChecklist.js";
 import {
@@ -13,10 +19,34 @@ import {
 } from "./qa/liveStateEngine.js";
 
 const liveMemory = new Map<string, LiveGameState>();
+
+/** Count in-memory venue live sessions owned by a user (excludes the session being activated). */
+export const countActiveVenueLiveSessions = (
+  ownerUserId: string,
+  excludeSessionId: string,
+  resolveOwner: (sessionId: string) => string | undefined,
+): number => {
+  let count = 0;
+  for (const [sid, state] of liveMemory.entries()) {
+    if (sid === excludeSessionId) continue;
+    if (state.operatingMode !== "venue") continue;
+    if (resolveOwner(sid) === ownerUserId) count += 1;
+  }
+  return count;
+};
 const subscribers = new Map<string, Set<(state: LiveGameState) => void>>();
 const leaderboards: LeaderboardEntry[] = [];
 
 const liveBlobName = (sessionId: string): string => `live-game-${sessionId}.json`;
+
+const normalizeLiveState = (state: LiveGameState): LiveGameState => ({
+  ...state,
+  playerDisplayMode: state.playerDisplayMode ?? "active_game",
+  currentStageIndex: state.currentStageIndex ?? 0,
+  playerDisplayReady: state.playerDisplayReady ?? false,
+  playerDisplayReadyAtMs: state.playerDisplayReadyAtMs ?? null,
+  customMediaLabel: state.customMediaLabel ?? "",
+});
 
 const notify = (sessionId: string, state: LiveGameState): void => {
   const subs = subscribers.get(sessionId);
@@ -39,10 +69,14 @@ export const subscribeLive = (sessionId: string, fn: (state: LiveGameState) => v
 
 export const getLiveState = async (sessionId: string): Promise<LiveGameState | null> => {
   const cached = liveMemory.get(sessionId);
-  if (cached) return cached;
+  if (cached) return normalizeLiveState(cached);
   const fromDisk = await readJsonBlob<LiveGameState>(liveBlobName(sessionId));
-  if (fromDisk) liveMemory.set(sessionId, fromDisk);
-  return fromDisk;
+  if (fromDisk) {
+    const normalized = normalizeLiveState(fromDisk);
+    liveMemory.set(sessionId, normalized);
+    return normalized;
+  }
+  return null;
 };
 
 const persistLive = async (state: LiveGameState): Promise<void> => {
@@ -89,6 +123,11 @@ export const initLiveState = async (input: {
       },
     ],
     gameResult: "in_progress",
+    playerDisplayMode: "active_game",
+    currentStageIndex: 0,
+    playerDisplayReady: false,
+    playerDisplayReadyAtMs: null,
+    customMediaLabel: "",
     updatedAtMs: Date.now(),
   };
   await persistLive(state);
@@ -125,8 +164,19 @@ export const registerLiveRoutes = (
     resolvePlanningSession: (sessionId: string) => LivePlanningSession | undefined;
     deriveOperatingMode: (session: LivePlanningSession) => OperatingMode;
     hasGmConsoleAccess: (req: Request) => boolean;
+    readAuthUser?: (req: Request) => { id: string; isAdmin?: boolean } | undefined;
+    getSessionOwnerId?: (sessionId: string) => string | undefined;
+    assertLiveInitAllowed?: (
+      req: Request,
+      sessionId: string,
+      operatingMode: OperatingMode,
+    ) => { code: string; message: string } | null;
   },
 ): void => {
+  const liveDenied = (res: Response, denied: { code: string; message: string }): void => {
+    res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
+  };
+
   app.post("/api/live/:sessionId/init", async (req, res) => {
     const sessionId = String(req.params.sessionId ?? "").trim();
     const session = deps.resolvePlanningSession(sessionId);
@@ -138,6 +188,13 @@ export const registerLiveRoutes = (
       req.body?.operatingMode === "home" || req.body?.operatingMode === "venue"
         ? req.body.operatingMode
         : deps.deriveOperatingMode(session);
+    if (deps.assertLiveInitAllowed) {
+      const denied = deps.assertLiveInitAllowed(req, sessionId, operatingMode);
+      if (denied) {
+        liveDenied(res, denied);
+        return;
+      }
+    }
     const puzzles: LivePuzzleRow[] = session.currentPuzzles.map((p) => ({
       id: p.id,
       title: p.title,
@@ -180,6 +237,13 @@ export const registerLiveRoutes = (
     if (!state) {
       res.status(404).json({ error: { code: "NOT_FOUND", message: "Live session not initialized.", details: [] } });
       return;
+    }
+    if (state.operatingMode === "venue" && deps.assertLiveInitAllowed) {
+      const denied = deps.assertLiveInitAllowed(req, sessionId, "venue");
+      if (denied) {
+        liveDenied(res, denied);
+        return;
+      }
     }
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -291,12 +355,89 @@ export const registerLiveRoutes = (
     res.json({ state });
   });
 
+  app.post("/api/live/:sessionId/player-ready", async (req, res) => {
+    const sessionId = String(req.params.sessionId ?? "").trim();
+    const state = await patchLive(sessionId, (s) => {
+      s.playerDisplayReady = true;
+      s.playerDisplayReadyAtMs = Date.now();
+      s.events.push({
+        id: `ev_${Date.now()}_ready`,
+        type: "player_ready",
+        atMs: Date.now(),
+      });
+    });
+    if (!state) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: "Live session not found.", details: [] } });
+      return;
+    }
+    res.json({
+      state,
+      elapsedMs: computeElapsedMs(state),
+      remainingMs: computeRemainingMs(state),
+    });
+  });
+
+  app.post("/api/live/:sessionId/display", async (req, res) => {
+    const sessionId = String(req.params.sessionId ?? "").trim();
+    const modeRaw = String(req.body?.mode ?? "");
+    const allowed: PlayerDisplayMode[] = ["active_game", "hint_overlay", "end_game", "custom_media"];
+    const mode = allowed.includes(modeRaw as PlayerDisplayMode) ? (modeRaw as PlayerDisplayMode) : null;
+    if (!mode) {
+      res.status(400).json({
+        error: { code: "VALIDATION_ERROR", message: "mode must be active_game, hint_overlay, end_game, or custom_media.", details: [] },
+      });
+      return;
+    }
+    const customMediaLabel = String(req.body?.customMediaLabel ?? "").trim().slice(0, 120);
+    const state = await patchLive(sessionId, (s) => {
+      s.playerDisplayMode = mode;
+      if (customMediaLabel) s.customMediaLabel = customMediaLabel;
+      s.events.push({
+        id: `ev_${Date.now()}_display`,
+        type: "display_mode",
+        atMs: Date.now(),
+        detail: { mode, customMediaLabel: s.customMediaLabel },
+      });
+    });
+    if (!state) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: "Live session not found.", details: [] } });
+      return;
+    }
+    res.json({
+      state,
+      elapsedMs: computeElapsedMs(state),
+      remainingMs: computeRemainingMs(state),
+    });
+  });
+
+  app.post("/api/live/:sessionId/stage", async (req, res) => {
+    const sessionId = String(req.params.sessionId ?? "").trim();
+    const index = Math.floor(Number(req.body?.index));
+    const state = await patchLive(sessionId, (s) => {
+      if (Number.isFinite(index) && index >= 0 && index < 32) {
+        s.currentStageIndex = index;
+        s.events.push({
+          id: `ev_${Date.now()}_stage`,
+          type: "stage_change",
+          atMs: Date.now(),
+          detail: { index },
+        });
+      }
+    });
+    if (!state) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: "Live session not found.", details: [] } });
+      return;
+    }
+    res.json({ state, elapsedMs: computeElapsedMs(state), remainingMs: computeRemainingMs(state) });
+  });
+
   app.post("/api/live/:sessionId/end", async (req, res) => {
     const sessionId = String(req.params.sessionId ?? "").trim();
     const result = req.body?.result === "fail" ? "fail" : "success";
     const state = await patchLive(sessionId, (s) => {
       if (s.gameResult === "in_progress") {
         s.gameResult = result;
+        s.playerDisplayMode = "end_game";
         s.gameEndedAtMs = Date.now();
         s.timerRunning = false;
         if (s.timerStartedAtMs != null) {

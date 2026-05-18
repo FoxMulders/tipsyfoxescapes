@@ -9,7 +9,8 @@ import { NumberCounter } from "@/components/planning/NumberCounter";
 import { PropFabricationSection, type PropFabricationKind } from "@/components/planning/PropFabricationSection";
 import { PuzzleEstimateBadge } from "@/components/planning/PuzzleEstimateBadge";
 import { TargetInterfaceField } from "@/components/planning/TargetInterfaceField";
-import type { TargetInterface } from "../../../../shared/contracts";
+import { VenueBuildTypeField } from "@/components/planning/VenueBuildTypeField";
+import type { TargetInterface, VenueBuildType } from "../../../../shared/contracts";
 import { cn } from "@/lib/utils";
 
 type RoomDetailsStepProps = {
@@ -17,9 +18,11 @@ type RoomDetailsStepProps = {
   wizardStepTotal: number;
   wizardStepLabel: string;
   playersConcurrent: string;
-  setPlayersConcurrent: (v: string) => void;
+  onPlayersConcurrentChange: (v: string) => void;
   participantsTotal: string;
-  setParticipantsTotal: (v: string) => void;
+  onParticipantsTotalChange: (v: string) => void;
+  venueBuildType: VenueBuildType;
+  setVenueBuildType: (v: VenueBuildType) => void;
   sessionDurationMinutes: string;
   setSessionDurationMinutes: (v: string) => void;
   eventType: string;
@@ -101,9 +104,17 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
           </div>
 
           {isCommercial ? (
-            <div className="form-field-panel">
-              <FieldHint
-                label="Describe your facility layout or architectural shell"
+            <>
+              <div className="form-field-panel">
+                <VenueBuildTypeField
+                  value={props.venueBuildType}
+                  onChange={props.setVenueBuildType}
+                  environmentType={props.environmentType}
+                />
+              </div>
+              <div className="form-field-panel">
+                <FieldHint
+                  label="Describe your facility layout or architectural shell"
                 required
                 invalid={invalid("environmentType")}
                 tooltip="Retail venues are fully custom—describe zones, door positions, GM sightlines, and any fixed infrastructure so themes and installs align with your build."
@@ -115,6 +126,7 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
                   value={props.environmentType}
                   rows={5}
                   maxLength={800}
+                  placeholder="Example: 4-zone linear flow — briefing airlock, main gallery, tech pit, finale airlock; GM desk sightline to zones 2–3…"
                   aria-invalid={invalid("environmentType")}
                   onChange={(e) => {
                     props.setEnvironmentType(e.target.value);
@@ -122,7 +134,8 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
                   }}
                 />
               </FieldHint>
-            </div>
+              </div>
+            </>
           ) : (
             <div className="form-field-panel">
               <FieldHint
@@ -145,30 +158,27 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             </div>
           )}
 
+          {invalid("headcountOrder") ? (
+            <p className="error-banner room-validation-banner" role="alert">
+              Players at one time cannot exceed total participants. Raise total guests or lower concurrent players.
+            </p>
+          ) : null}
+
           <div className="form-field-panel room-details-metrics-row">
             <FieldHint label="Players at one time" required invalid={invalid("playersConcurrent")}>
               <NumberCounter
                 value={props.playersConcurrent}
-                onChange={(v) => {
-                  props.setPlayersConcurrent(v);
-                  props.clearValidation("playersConcurrent");
-                }}
+                onChange={props.onPlayersConcurrentChange}
                 min={1}
                 max={99}
                 invalid={invalid("playersConcurrent")}
                 aria-label="Players at one time"
               />
             </FieldHint>
-          </div>
-
-          <div className="form-field-panel">
             <FieldHint label="Total participants" required invalid={invalid("participantsTotal")}>
               <NumberCounter
                 value={props.participantsTotal}
-                onChange={(v) => {
-                  props.setParticipantsTotal(v);
-                  props.clearValidation("participantsTotal");
-                }}
+                onChange={props.onParticipantsTotalChange}
                 min={1}
                 max={99}
                 invalid={invalid("participantsTotal")}
@@ -258,14 +268,8 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             </Label>
           </div>
 
-          <PropFabricationSection
-            enabled={props.propFabrication3dEnabled}
-            onEnabledChange={props.setPropFabrication3dEnabled}
-            kinds={props.propFabricationKinds}
-            onKindsChange={props.setPropFabricationKinds}
-          />
-
-          <JuniorTrackFeatureCard
+          <div className="junior-track-standalone">
+            <JuniorTrackFeatureCard
             enabled={props.youthAddOnEnabled}
             onEnabledChange={props.setYouthAddOnEnabled}
             gatesAdultFlow={props.youthAddOnGatesAdultFlow}
@@ -273,6 +277,14 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             ageNote={props.youthAddOnAgeNote}
             onAgeNoteChange={props.setYouthAddOnAgeNote}
             juniorAddOnSlots={props.juniorAddOnPuzzleSlots}
+            />
+          </div>
+
+          <PropFabricationSection
+            enabled={props.propFabrication3dEnabled}
+            onEnabledChange={props.setPropFabrication3dEnabled}
+            kinds={props.propFabricationKinds}
+            onKindsChange={props.setPropFabricationKinds}
           />
 
           <Accordion type="single" collapsible className="form-field-panel rounded-md border border-slate-800/50 bg-card/30 px-4 backdrop-blur-md">

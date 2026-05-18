@@ -6,10 +6,13 @@ type DiskSyncDeps = {
   authTokens: Map<string, string>;
 };
 
-/** On Vercel, reload users/tokens from shared KV (and /tmp mirror) before each request. */
+const shouldReloadAuthFromStore = (): boolean =>
+  Boolean(process.env.VERCEL) || process.env.NODE_ENV === "production";
+
+/** On Vercel/production, reload users/tokens from shared KV (and disk mirror) before each request. */
 export const createVercelDiskSyncMiddleware = (deps: DiskSyncDeps): RequestHandler => {
   return (_req, _res, next) => {
-    if (!process.env.VERCEL) {
+    if (!shouldReloadAuthFromStore()) {
       next();
       return;
     }
