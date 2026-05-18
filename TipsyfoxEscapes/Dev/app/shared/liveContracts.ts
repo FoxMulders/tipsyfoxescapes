@@ -1,4 +1,4 @@
-import type { TargetInterface } from "./contracts";
+import type { TargetInterface } from "./contracts.js";
 
 export type OperatingMode = "home" | "venue";
 

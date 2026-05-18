@@ -1,0 +1,31 @@
+name: QA suite
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: TipsyfoxEscapes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            TipsyfoxEscapes/Dev/app/backend/package-lock.json
+            TipsyfoxEscapes/Dev/app/frontend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: TipsyfoxEscapes/Dev/app/backend
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: TipsyfoxEscapes/Dev/app/frontend
+      - name: Run four-department QA
+        run: npm run qa

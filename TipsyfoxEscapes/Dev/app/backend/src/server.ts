@@ -2249,12 +2249,6 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
       howItWorks:
         "Players discover an encoded clue and a key hint in separate locations. They must identify the cipher pattern, apply the key, and decode the final phrase that reveals the next lock combination.",
       referenceLinks: [
-        refPuzzlePieces("Puzzle Pieces channel"),
-        refPlayfulTechnology("Playful Technology channel"),
-        {
-          title: "Cipher puzzle examples (YouTube)",
-          url: "https://www.youtube.com/results?search_query=escape+room+cipher+puzzle",
-        },
       ],
       solveSteps: ["Find key", "Apply shift"],
       difficulty: "medium",
@@ -2268,13 +2262,7 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
       howItWorks:
         "Players gather symbols from props around the room. They compare symbol order to a reference board and reconstruct the correct sequence, which opens a hidden compartment.",
       referenceLinks: [
-        refPuzzlePieces("Puzzle Pieces channel"),
-        {
-          title: "Symbol puzzle inspiration (YouTube)",
-          url: "https://www.youtube.com/results?search_query=escape+room+symbol+puzzle+design",
-        },
-        refRoomEscapeArtist("Room Escape Artist puzzle ideas"),
-      ],
+        refRoomEscapeArtist("Room Escape Artist puzzle ideas")],
       solveSteps: ["Collect symbols", "Align sequence"],
       difficulty: "medium",
     },
@@ -2287,11 +2275,6 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
       howItWorks:
         "Players solve a sequence of short clues where each answer points to the next riddle card. The final answers map to numbers that open the next lock.",
       referenceLinks: [
-        refPuzzlePieces("Puzzle Pieces channel"),
-        {
-          title: "Escape room riddle chains (YouTube)",
-          url: "https://www.youtube.com/results?search_query=escape+room+riddle+chain+puzzle",
-        },
       ],
       solveSteps: ["Read first riddle", "Follow answer chain", "Convert final answers to code"],
       difficulty: "medium",
@@ -2305,16 +2288,10 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
       howItWorks:
         "Players combine coordinate clues from multiple props and index into a letter grid, revealing a phrase that unlocks the next puzzle stage.",
       referenceLinks: [
-        {
-          title: "Grid cipher puzzle ideas (YouTube)",
-          url: "https://www.youtube.com/results?search_query=grid+cipher+escape+room+puzzle",
-        },
-        refPuzzlePieces("Puzzle Pieces channel"),
       ],
       solveSteps: ["Collect coordinate clues", "Map clues onto grid", "Decode resulting phrase"],
       difficulty: "medium",
-    },
-  ],
+    }],
   physical: [
     {
       id: "pz_physical_1",
@@ -2325,15 +2302,6 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
       howItWorks:
         "A pressure plate or balance mechanism only triggers when object mass is distributed correctly. Players test combinations until the mechanism reaches equilibrium and releases a latch.",
       referenceLinks: [
-        refPuzzlePieces("Puzzle Pieces channel"),
-        {
-          title: "Balance puzzle build examples (YouTube)",
-          url: "https://www.youtube.com/results?search_query=escape+room+balance+puzzle+build",
-        },
-        {
-          title: "Wickes/DIY mechanical puzzle ideas (YouTube)",
-          url: "https://www.youtube.com/results?search_query=DIY+mechanical+escape+room+puzzle",
-        },
       ],
       solveSteps: ["Collect weights", "Balance tray"],
       difficulty: "medium",
@@ -2347,16 +2315,10 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
       howItWorks:
         "Magnetic sensors are hidden behind marked points. Players move a magnet in the correct order and timing to activate all sensors and unlock the next clue container.",
       referenceLinks: [
-        refPlayfulTechnology("Playful Technology channel"),
-        {
-          title: "Magnetic sensor puzzle builds (YouTube)",
-          url: "https://www.youtube.com/results?search_query=reed+switch+escape+room+puzzle",
-        },
         {
           title: "Adafruit reed switch guide",
           url: "https://learn.adafruit.com/search?q=reed%20switch",
-        },
-      ],
+        }],
       solveSteps: ["Find magnet points", "Activate sequence"],
       difficulty: "medium",
     },
@@ -2369,11 +2331,6 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
       howItWorks:
         "Players gather separated parts of an object and physically align them. A hidden pattern or message only appears when assembled correctly.",
       referenceLinks: [
-        {
-          title: "Physical assembly puzzle ideas (YouTube)",
-          url: "https://www.youtube.com/results?search_query=physical+assembly+escape+room+puzzle",
-        },
-        refPuzzlePieces("Puzzle Pieces channel"),
       ],
       solveSteps: ["Find all parts", "Align in correct order", "Read revealed clue"],
       difficulty: "medium",
@@ -2387,15 +2344,10 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
       howItWorks:
         "Players must interpret route markers and physically move a token along a constrained path. A wrong route dead-ends and forces a retry.",
       referenceLinks: [
-        {
-          title: "Track/maze puzzle builds (YouTube)",
-          url: "https://www.youtube.com/results?search_query=escape+room+maze+track+puzzle",
-        },
       ],
       solveSteps: ["Interpret route hints", "Navigate token path", "Trigger endpoint switch"],
       difficulty: "medium",
-    },
-  ],
+    }],
   electronic: [
     {
       id: "pz_electronic_1",
@@ -2406,12 +2358,6 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
       howItWorks:
         "Players complete a button-and-LED circuit driven by an Arduino. When they press the button sequence correctly, the sketch toggles LEDs and reveals the success signal.",
       referenceLinks: [
-        refPlayfulTechnology("Playful Technology channel"),
-        refPuzzlePieces("Puzzle Pieces channel"),
-        {
-          title: "Arduino button and LED puzzle examples (YouTube)",
-          url: "https://www.youtube.com/results?search_query=arduino+escape+room+button+led+puzzle",
-        },
       ],
       solveSteps: ["Wire LEDs", "Upload sketch"],
       difficulty: "medium",
@@ -2424,15 +2370,13 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
           "1x push button",
           "1x 10k ohm resistor",
           "Jumper wires",
-          "USB cable",
-        ],
+          "USB cable"],
         wiringDiagram: [
           "D8 -> 220 ohm resistor -> Red LED anode, LED cathode -> GND",
           "D9 -> 220 ohm resistor -> Green LED anode, LED cathode -> GND",
           "Button leg 1 -> 5V",
           "Button leg 2 -> D2 and 10k ohm resistor to GND (pulldown)",
-          "Arduino GND -> breadboard ground rail",
-        ],
+          "Arduino GND -> breadboard ground rail"],
         wiringDiagramSvg: `<svg xmlns="http://www.w3.org/2000/svg" width="980" height="420" viewBox="0 0 980 420">
   <rect x="20" y="20" width="220" height="360" fill="#f4f6f8" stroke="#333"/>
   <text x="130" y="48" text-anchor="middle" font-family="Arial" font-size="18">Arduino Uno</text>
@@ -2493,8 +2437,7 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
           "Assemble circuit exactly as listed in wiring diagram.",
           "Open Arduino IDE, select board and COM port.",
           "Upload the provided sketch.",
-          "Press the button in the right sequence to trigger green LED and reveal clue.",
-        ],
+          "Press the button in the right sequence to trigger green LED and reveal clue."],
         arduinoCode: `const int redLed = 8;
 const int greenLed = 9;
 const int buttonPin = 2;
@@ -2531,16 +2474,10 @@ void loop() {
       howItWorks:
         "The Arduino emits timed buzzer and LED pulses representing a code pattern. Players observe short and long pulses, decode them, and convert the pattern into the answer.",
       referenceLinks: [
-        refPlayfulTechnology("Playful Technology channel"),
-        {
-          title: "Buzzer code puzzle examples (YouTube)",
-          url: "https://www.youtube.com/results?search_query=arduino+buzzer+code+escape+room",
-        },
         {
           title: "Arduino tone() reference",
           url: "https://www.arduino.cc/reference/en/language/functions/advanced-io/tone/",
-        },
-      ],
+        }],
       solveSteps: ["Connect buzzer", "Upload pulse routine"],
       difficulty: "medium",
       electronicDetails: {
@@ -2551,15 +2488,13 @@ void loop() {
           "1x 220 ohm resistor",
           "Breadboard",
           "Jumper wires",
-          "USB cable",
-        ],
+          "USB cable"],
         wiringDiagram: [
           "D6 -> buzzer positive",
           "Buzzer negative -> GND",
           "D10 -> 220 ohm resistor -> LED anode",
           "LED cathode -> GND",
-          "Arduino GND -> breadboard ground rail",
-        ],
+          "Arduino GND -> breadboard ground rail"],
         wiringDiagramSvg: `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="340" viewBox="0 0 900 340">
   <rect x="20" y="20" width="220" height="280" fill="#f4f6f8" stroke="#333" />
   <text x="130" y="50" text-anchor="middle" font-family="Arial" font-size="18">Arduino Uno</text>
@@ -2585,8 +2520,7 @@ void loop() {
         buildSteps: [
           "Wire buzzer and LED according to diagram.",
           "Upload sketch to board.",
-          "Observe pulse sequence and decode long/short pattern as clue digits.",
-        ],
+          "Observe pulse sequence and decode long/short pattern as clue digits."],
         arduinoCode: `const int buzzerPin = 6;
 const int ledPin = 10;
 const int codePattern[] = {200, 200, 600, 200, 600};
@@ -2617,11 +2551,6 @@ void loop() {
       howItWorks:
         "Players discover an ordered hint and trigger capacitive pads accordingly. The Arduino validates sequence timing and activates an output when correct.",
       referenceLinks: [
-        refPlayfulTechnology("Playful Technology channel"),
-        {
-          title: "Arduino touch sensor puzzle (YouTube)",
-          url: "https://www.youtube.com/results?search_query=arduino+touch+sensor+escape+room+puzzle",
-        },
       ],
       solveSteps: ["Wire touch pads", "Upload sketch", "Enter discovered sequence"],
       difficulty: "medium",
@@ -2632,20 +2561,17 @@ void loop() {
           "3 conductive touch pads",
           "Breadboard",
           "Jumper wires",
-          "USB cable",
-        ],
+          "USB cable"],
         wiringDiagram: [
           "MPR121 SDA/SCL -> Arduino SDA/SCL",
           "MPR121 VCC -> 5V, GND -> GND",
           "Pad outputs -> MPR121 electrode pins",
-          "D9 -> status LED (optional) through 220 ohm resistor",
-        ],
+          "D9 -> status LED (optional) through 220 ohm resistor"],
         wiringDiagramSvg: `<svg xmlns="http://www.w3.org/2000/svg" width="760" height="260" viewBox="0 0 760 260"><rect x="20" y="20" width="180" height="220" fill="#f4f6f8" stroke="#333"/><text x="110" y="45" text-anchor="middle" font-family="Arial" font-size="15">Arduino</text><rect x="250" y="30" width="220" height="100" fill="#fff" stroke="#333"/><text x="360" y="55" text-anchor="middle" font-family="Arial" font-size="14">MPR121</text><circle cx="560" cy="70" r="14" fill="#ddd" stroke="#333"/><circle cx="610" cy="70" r="14" fill="#ddd" stroke="#333"/><circle cx="660" cy="70" r="14" fill="#ddd" stroke="#333"/><text x="610" y="110" text-anchor="middle" font-family="Arial" font-size="12">Touch Pads</text><line x1="80" y1="90" x2="250" y2="70" stroke="#1976d2" stroke-width="2.5"/><line x1="80" y1="120" x2="250" y2="90" stroke="#1976d2" stroke-width="2.5"/><line x1="80" y1="150" x2="250" y2="110" stroke="#e53935" stroke-width="2.5"/><line x1="80" y1="180" x2="250" y2="120" stroke="#424242" stroke-width="2.5"/><line x1="470" y1="70" x2="546" y2="70" stroke="#fb8c00" stroke-width="2.5"/><line x1="470" y1="85" x2="596" y2="70" stroke="#fb8c00" stroke-width="2.5"/><line x1="470" y1="100" x2="646" y2="70" stroke="#fb8c00" stroke-width="2.5"/></svg>`,
         buildSteps: [
           "Wire MPR121 module and pads.",
           "Upload sequence-validation sketch.",
-          "Test each pad, then validate full sequence.",
-        ],
+          "Test each pad, then validate full sequence."],
         arduinoCode: `// Pseudo sketch outline for MPR121 sequence validation
 int seq[4] = {0,2,1,2};
 int pos = 0;
@@ -2665,11 +2591,6 @@ void onPadTouch(int pad){
       howItWorks:
         "Players find tagged props and infer a sequence rule. The Arduino checks scan order and triggers unlock feedback when valid.",
       referenceLinks: [
-        refPlayfulTechnology("Playful Technology channel"),
-        {
-          title: "RFID escape room puzzle (YouTube)",
-          url: "https://www.youtube.com/results?search_query=rfid+escape+room+puzzle+arduino",
-        },
       ],
       solveSteps: ["Wire RFID reader", "Register tag IDs", "Scan in required order"],
       difficulty: "medium",
@@ -2680,8 +2601,7 @@ void onPadTouch(int pad){
           "3 RFID tags/cards",
           "Breadboard",
           "Jumper wires",
-          "USB cable",
-        ],
+          "USB cable"],
         wiringDiagram: ["SPI pins to RFID module", "5V/GND power rails", "D9 output LED via 220 ohm resistor"],
         wiringDiagramSvg: `<svg xmlns="http://www.w3.org/2000/svg" width="760" height="260" viewBox="0 0 760 260"><rect x="20" y="20" width="180" height="220" fill="#f4f6f8" stroke="#333"/><text x="110" y="45" text-anchor="middle" font-family="Arial" font-size="15">Arduino</text><rect x="260" y="40" width="180" height="120" fill="#fff" stroke="#333"/><text x="350" y="68" text-anchor="middle" font-family="Arial" font-size="14">MFRC522 RFID</text><rect x="520" y="45" width="70" height="40" fill="#eee" stroke="#333"/><rect x="600" y="45" width="70" height="40" fill="#eee" stroke="#333"/><rect x="560" y="95" width="70" height="40" fill="#eee" stroke="#333"/><text x="600" y="155" text-anchor="middle" font-family="Arial" font-size="12">RFID tags</text><line x1="90" y1="90" x2="260" y2="80" stroke="#1976d2" stroke-width="2.5"/><line x1="90" y1="110" x2="260" y2="95" stroke="#1976d2" stroke-width="2.5"/><line x1="90" y1="130" x2="260" y2="110" stroke="#1976d2" stroke-width="2.5"/><line x1="90" y1="150" x2="260" y2="125" stroke="#1976d2" stroke-width="2.5"/></svg>`,
         buildSteps: ["Wire RFID reader over SPI.", "Upload sketch and register tags.", "Validate unlock sequence."],
@@ -2699,11 +2619,6 @@ void onTag(String id){ if(id==needed[pos]) pos++; else pos=0; if(pos==3){ /* unl
       howItWorks:
         "Players redirect low-power laser lines into photo sensors. When all channels are aligned simultaneously, the controller triggers the success signal.",
       referenceLinks: [
-        refPlayfulTechnology("Playful Technology channel"),
-        {
-          title: "Laser sensor escape room build (YouTube)",
-          url: "https://www.youtube.com/results?search_query=laser+sensor+escape+room+puzzle",
-        },
       ],
       solveSteps: ["Mount emitter/sensors", "Align beams", "Hold all channels stable"],
       difficulty: "hard",
@@ -2713,8 +2628,7 @@ void onTag(String id){ if(id==needed[pos]) pos++; else pos=0; if(pos==3){ /* unl
           "3x photoresistors or photodiodes",
           "Low-power laser modules",
           "3x 10k resistors",
-          "Breadboard and jumpers",
-        ],
+          "Breadboard and jumpers"],
         wiringDiagram: ["Photo sensors to analog pins with divider resistors", "Laser modules to power rails", "D10 status output"],
         wiringDiagramSvg: `<svg xmlns="http://www.w3.org/2000/svg" width="760" height="260" viewBox="0 0 760 260"><rect x="20" y="20" width="180" height="220" fill="#f4f6f8" stroke="#333"/><text x="110" y="45" text-anchor="middle" font-family="Arial" font-size="15">Arduino</text><circle cx="330" cy="80" r="10" fill="#ff5252"/><circle cx="330" cy="120" r="10" fill="#ff5252"/><circle cx="330" cy="160" r="10" fill="#ff5252"/><rect x="460" y="60" width="20" height="20" fill="#ddd" stroke="#333"/><rect x="460" y="100" width="20" height="20" fill="#ddd" stroke="#333"/><rect x="460" y="140" width="20" height="20" fill="#ddd" stroke="#333"/><line x1="340" y1="80" x2="460" y2="70" stroke="#f44336" stroke-width="2"/><line x1="340" y1="120" x2="460" y2="110" stroke="#f44336" stroke-width="2"/><line x1="340" y1="160" x2="460" y2="150" stroke="#f44336" stroke-width="2"/></svg>`,
         buildSteps: ["Wire analog sensor channels.", "Mount lasers and sensor targets.", "Tune threshold values in sketch."],
@@ -2731,12 +2645,6 @@ if(a0>t && a1>t && a2>t){ /* unlock */ }`,
       howItWorks:
         "Players use a telegraph-style key connected to an Arduino input. Entering the right pulse rhythm simulates a period-correct telegraph code and triggers the unlock signal.",
       referenceLinks: [
-        refPlayfulTechnology("Playful Technology channel"),
-        refPuzzlePieces("Puzzle Pieces channel"),
-        {
-          title: "Telegraph puzzle inspiration (YouTube)",
-          url: "https://www.youtube.com/results?search_query=telegraph+escape+room+puzzle",
-        },
       ],
       solveSteps: ["Connect telegraph key switch", "Input pulse sequence", "Read unlocked clue"],
       difficulty: "medium",
@@ -2749,20 +2657,17 @@ if(a0>t && a1>t && a2>t){ /* unlock */ }`,
           "1x 220 ohm resistor",
           "1x 10k ohm resistor",
           "Jumper wires",
-          "USB cable",
-        ],
+          "USB cable"],
         wiringDiagram: [
           "D2 -> telegraph key output with 10k pulldown to GND",
           "5V -> telegraph key input",
           "D9 -> 220 ohm resistor -> LED anode",
-          "LED cathode -> GND",
-        ],
+          "LED cathode -> GND"],
         wiringDiagramSvg: `<svg xmlns="http://www.w3.org/2000/svg" width="860" height="300" viewBox="0 0 860 300"><rect x="20" y="20" width="220" height="240" fill="#f4f6f8" stroke="#333"/><text x="130" y="46" text-anchor="middle" font-family="Arial" font-size="16">Arduino Uno</text><text x="40" y="90" font-family="Arial" font-size="13">D2</text><text x="40" y="120" font-family="Arial" font-size="13">D9</text><text x="40" y="150" font-family="Arial" font-size="13">5V</text><text x="40" y="180" font-family="Arial" font-size="13">GND</text><rect x="290" y="20" width="550" height="240" fill="#fff" stroke="#333"/><text x="565" y="46" text-anchor="middle" font-family="Arial" font-size="16">Telegraph Key Circuit</text><rect x="540" y="95" width="120" height="28" fill="#ddd" stroke="#333"/><text x="670" y="114" font-family="Arial" font-size="12">Telegraph Key</text><circle cx="500" cy="150" r="10" fill="#2e7d32"/><text x="516" y="154" font-family="Arial" font-size="12">LED</text><polyline points="460,150 472,144 484,156 496,144 508,156 520,150" fill="none" stroke="#8d6e63" stroke-width="2"/><text x="524" y="154" font-family="Arial" font-size="11">220R</text><polyline points="460,205 472,199 484,211 496,199 508,211 520,205" fill="none" stroke="#8d6e63" stroke-width="2"/><text x="524" y="209" font-family="Arial" font-size="11">10k</text><line x1="80" y1="86" x2="540" y2="109" stroke="#fb8c00" stroke-width="2.5"/><line x1="80" y1="146" x2="540" y2="109" stroke="#e53935" stroke-width="2.5"/><line x1="660" y1="109" x2="460" y2="205" stroke="#fb8c00" stroke-width="2.5"/><line x1="520" y1="205" x2="760" y2="220" stroke="#424242" stroke-width="2.5"/><line x1="80" y1="176" x2="760" y2="220" stroke="#424242" stroke-width="2.5"/><line x1="80" y1="116" x2="460" y2="150" stroke="#1976d2" stroke-width="2.5"/></svg>`,
         buildSteps: [
           "Wire telegraph key and LED as shown.",
           "Upload sketch and open serial monitor.",
-          "Tap the key in the correct pattern to complete puzzle.",
-        ],
+          "Tap the key in the correct pattern to complete puzzle."],
         arduinoCode: `const int keyPin = 2;
 const int ledPin = 9;
 int count = 0;
@@ -2773,8 +2678,7 @@ void loop(){
   if(count>=5){digitalWrite(ledPin,HIGH);}
 }`,
       },
-    },
-  ],
+    }],
 };
 
 const fillThemeTemplate = (tpl: string, name: string, noun: string, adj: string): string =>
@@ -4371,11 +4275,8 @@ app.post("/api/puzzles/generate", (req, res) => {
       stageHint: existing.roomPart,
       referenceLinks: [
         { title: `Primary build guide: ${existing.name}`, url: existing.link },
-        {
-          title: `Video examples for ${existing.name}`,
-          url: `https://www.youtube.com/results?search_query=${query}`,
-        },
-        refPuzzlePieces("Puzzle Pieces channel"),
+        refPuzzlePieces(`Puzzle Pieces — inspiration for ${existing.name}`),
+        refRoomEscapeArtist(`Room Escape Artist — ideas for ${existing.name}`),
       ],
       solveSteps: ["Set up puzzle using the primary build guide", "Integrate into room sequence"],
       difficulty: targetDifficulty,
@@ -4948,7 +4849,7 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
     trialConsumed,
     user: billingUser ? toPublicUser(billingUser) : undefined,
     operatingMode,
-    hasGmConsole: operatingMode === "venue" && (billingUser ? hasGmConsoleForUser(billingUser) : false),
+    hasGmConsole: operatingMode === "venue",
     sessionId,
   });
 });
@@ -5115,7 +5016,7 @@ const rehydrateLiveSessionFromSavedPlan = (plan: SavedPlan, ownerUserId: string)
       }),
     ),
     seenPuzzleIds: new Set(d.puzzles.map((p) => p.id)),
-    currentPuzzles: withPuzzleQaForTheme(d.puzzles.map((p) => ({ ...p })), d.themeName ?? selectedTheme?.name ?? "Saved plan"),
+    currentPuzzles: withPuzzleQaForTheme(d.puzzles.map((p) => ({ ...p })), selectedTheme?.name ?? "Saved plan"),
     suggestedAdditions: [...(d.suggestedAdditions ?? [])],
     suggestedAdditionsRequired: [...(d.suggestedAdditionsRequired ?? [])],
     currentStoryPlan: d.storyPlan ?? undefined,

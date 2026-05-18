@@ -4,6 +4,9 @@
  *
  * Per-room positioning: personal hosts (Home host) < pay-as-you-go (Single) <
  * professional tiers (Studio, Venue) — operators pay more per room than families.
+ *
+ * Live ops (Home vs Retail Venue) unlock from Room details → Target interface;
+ * see feature bullets per plan below.
  */
 export type BillingPlanId = "free" | "single" | "home_host" | "studio" | "venue";
 
@@ -28,7 +31,7 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
   {
     id: "free",
     name: "Trial",
-    tagline: "One complete room design — same curated themes every time",
+    tagline: "One complete room design — try Home or Retail Venue live tools on export",
     priceCents: 0,
     currency: "USD",
     roomsToAdd: 0,
@@ -38,6 +41,8 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
       "Same three curated themes for every trial",
       "One full export with electronics (one-time)",
       "Replace puzzles during the trial run",
+      "Home Mode: printable runbook + player screen (timer + plan hints on a TV/tablet)",
+      "Retail Venue Mode: Gamemaster Live Console when you choose Commercial Venue at export",
       "Saving to your account requires a paid pack",
     ],
     comparedTo:
@@ -46,7 +51,7 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
   {
     id: "single",
     name: "Single room",
-    tagline: "One complete room design — pay as you go",
+    tagline: "One saved room — Home player screen or venue GM console included",
     priceCents: 4900,
     currency: "USD",
     roomsToAdd: 1,
@@ -57,6 +62,8 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
       "1 additional saved-room slot",
       "1 full electronic export credit",
       "Full theme catalog, refresh, and custom themes",
+      "Home Mode: post-export onboarding, runbook download, and player display synced to your session timer",
+      "Retail Venue Mode: GM Live Console (start/pause timer, puzzle completion log, custom clues to player screen)",
       "Best when you only need one extra room this season",
     ],
     comparedTo:
@@ -65,7 +72,7 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
   {
     id: "home_host",
     name: "Home host pack",
-    tagline: "Birthdays, family game nights, and backyard parties",
+    tagline: "Family parties with runbook + in-room player screen",
     priceCents: 11900,
     currency: "USD",
     roomsToAdd: 3,
@@ -76,6 +83,9 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
       "3 full electronic export credits",
       "Full catalog for personal hosting seasons",
       "Bring-your-own custom themes",
+      "Home Mode: “How to run your game” walkthrough after every export",
+      "Player screen at /room/…/player-display — live countdown + hints (no GM chat or multi-room)",
+      "Optional Commercial Venue target if you also run ticketed events (GM console included)",
     ],
     comparedTo:
       "three family nights out at a venue (~$360–$720 total for groups of 4–6 across three visits)—for three room plans you can host at home again and again.",
@@ -83,7 +93,7 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
   {
     id: "studio",
     name: "Studio pack",
-    tagline: "Repeat builders running several rooms a year",
+    tagline: "Repeat builders — full Retail Venue live ops when you need them",
     priceCents: 64900,
     currency: "USD",
     roomsToAdd: 10,
@@ -94,14 +104,10 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
       "10 full electronic export credits",
       "Full catalog, custom themes, and refresh",
       "Professional tier — higher per-room than Home host, far below hiring a designer",
-    ],
-    futureFeatureFlags: [
-      "gm_tablet_dashboard",
-      "reset_checklists",
-      "multi_user_staff",
-      "prop_maintenance_logs",
-      "commercial_license_exports",
-      "white_label_exports",
+      "Retail Venue — Gamemaster Live Console: live timer (+1/−1 min), active players, puzzle progress bar",
+      "Player window tab: projector/tablet URL + live clue box with pre-saved hints",
+      "Reports tab: success/fail, elapsed time, event log; interactive reset checklist for staff",
+      "Home Mode on any room: runbook + basic player screen (timer + standard hints)",
     ],
     comparedTo:
       "ten group nights out (~$1,200–$2,400+ for parties of 4–6) or a fraction of one design-firm room ($5,000–$15,000+); about $65 per digital plan—you build and operate.",
@@ -109,7 +115,7 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
   {
     id: "venue",
     name: "Venue pack",
-    tagline: "Operators building a library of hosted rooms",
+    tagline: "Multi-room operators — GM console, player sync, reports & leaderboards",
     priceCents: 179900,
     currency: "USD",
     roomsToAdd: 25,
@@ -120,16 +126,12 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
       "25 full electronic export credits",
       "Full catalog for multi-room venues",
       "Stackable with org pool bonuses on the server",
-    ],
-    futureFeatureFlags: [
-      "gm_tablet_dashboard",
-      "reset_checklists",
-      "multi_user_staff",
-      "prop_maintenance_logs",
-      "commercial_license_exports",
-      "white_label_exports",
-      "seasonal_content_vault",
-      "live_sync_sessions",
+      "Gamemaster Live Console (4 tabs): Console, Player window, Reports, Leaderboards",
+      "Real-time SSE sync: timer, clues, and puzzle state match session duration & player counts",
+      "Leaderboards: public top escape times for corporate and competitive teams",
+      "Multi-room ops: one session ID per active room; venue onboarding for display mapping",
+      "Session reports: completion times, success rate, and per-puzzle bottleneck data",
+      "Home Mode still available for staff-training rooms (runbook + simple player screen)",
     ],
     comparedTo:
       "twenty-five commercial nights out (~$3,000–$6,000+ in tickets for groups of 4–6) or a sliver of turn-key install ($55,000+); about $72 per plan—software and exports only, not build labor or staff.",

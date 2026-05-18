@@ -60,7 +60,7 @@ export function TopNavBar({
               variant={appView === "account" ? "default" : "outline"}
               onClick={() => onAppViewChange("account")}
             >
-              Account
+              Account &amp; pricing
             </Button>
           </div>
           {onOpenSnapshot ? (

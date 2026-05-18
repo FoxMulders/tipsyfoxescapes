@@ -28,7 +28,7 @@ export function TargetInterfaceField({ value, onChange }: TargetInterfaceFieldPr
     <fieldset className="target-interface-field">
       <legend className="text-sm font-medium text-foreground">Target interface</legend>
       <p className="muted mt-1 text-xs">
-        Choose how you will run the game after export. Billing may unlock the GM console for venue tiers.
+        Choose how you will run the game after export. Commercial Venue unlocks the GM Live Console, reports, and multi-display ops.
       </p>
       <div className="target-interface-cards" role="radiogroup" aria-label="Target interface">
         {OPTIONS.map((opt) => {

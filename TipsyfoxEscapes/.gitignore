@@ -32,6 +32,7 @@ Dev/app/frontend/api/server.cjs.map
 
 # Runtime data / local state
 Dev/app/backend/data/*.json
+Dev/app/data/*.json
 
 # Coverage
 coverage/

@@ -4460,7 +4460,8 @@ export default function App() {
         data.operatingMode === "venue" || data.operatingMode === "home"
           ? data.operatingMode
           : targetInterfaceToOperatingMode(targetInterface);
-      const gmAccess = Boolean(data.hasGmConsole ?? authUser?.hasGmConsole);
+      const gmAccess =
+        exportMode === "venue" || Boolean(data.hasGmConsole ?? authUser?.hasGmConsole);
       setLiveOperatingMode(exportMode);
       setLiveHasGmConsole(gmAccess);
       try {
@@ -5108,8 +5109,9 @@ export default function App() {
           <section className="card subscription-card pricing-section pricing-section--login glass-panel" aria-label="Pricing plans">
             <h2 className="subscription-title">Pricing plans</h2>
             <p className="muted pricing-lead">
-              Pay per room or save with a pack — slots and export credits do not expire on a monthly clock. Sign in, then
-              open <strong>Account</strong> to checkout with Square.
+              Pay per room or save with a pack — slots and export credits do not expire on a monthly clock. Every export can
+              power <strong>Home Mode</strong> (runbook + player screen) or <strong>Retail Venue Mode</strong> (Gamemaster Live
+              Console + in-room display). Sign in, then open <strong>Account &amp; pricing</strong> to checkout with Square.
             </p>
             <div className="pricing-grid">
               {billingPlans.map((plan) => (
@@ -5156,6 +5158,19 @@ export default function App() {
         <div className="slot-utilization-warning" role="status">
           You are near your saved-room limit ({Math.round((authUser.savedRoomCount / Math.max(1, authUser.roomAllowance)) * 100)}%
           used). Open <strong>Account</strong> to add slots or free space.
+        </div>
+      ) : null}
+      {targetInterface === "commercial_venue" && sessionId && puzzles.length > 0 && appView === "builder" ? (
+        <div className="slot-utilization-warning venue-live-banner" role="status">
+          <strong>Retail venue mode:</strong> after export, open the{" "}
+          <Link to={`/gm/${sessionId}`} className="venue-live-banner__link">
+            Gamemaster Live Console
+          </Link>{" "}
+          and pair the{" "}
+          <Link to={`/room/${sessionId}/player-display`} className="venue-live-banner__link">
+            player display
+          </Link>
+          . Room packs and checkout live under <strong>Account &amp; pricing</strong>.
         </div>
       ) : null}
       <TopNavBar
@@ -5249,7 +5264,9 @@ export default function App() {
               <h2 className="subscription-title">Pricing plans</h2>
               <p className="muted pricing-lead">
                 Buy a <strong>single room</strong> when you need one design, or choose a <strong>home host pack</strong> for
-                personal parties. Slots and export credits do not expire monthly. Checkout is powered by{" "}
+                personal parties and <strong>studio/venue packs</strong> for GM consoles, live player screens, reports, and
+                leaderboards. Pick <strong>Home Party</strong> or <strong>Commercial Venue</strong> in Room details to match
+                how you run the game. Slots and export credits do not expire monthly. Checkout is powered by{" "}
                 <strong>Square</strong>.
               </p>
               {!squarePaymentsReady ? (
@@ -6629,14 +6646,42 @@ export default function App() {
               </div>
               {sessionId ? (
                 <div className="export-live-actions" role="group" aria-label="Run your game">
+                  <div className="export-live-actions__copy">
+                    <h3 className="export-live-actions__title">Run your game</h3>
+                    <ol className="export-live-actions__steps">
+                      {targetInterface === "commercial_venue" ? (
+                        <>
+                          <li>Open the GM Live Console on your crew device.</li>
+                          <li>Pair the player display on the in-room projector or tablet.</li>
+                          <li>Start the timer, send clues, and mark puzzles complete as teams progress.</li>
+                        </>
+                      ) : (
+                        <>
+                          <li>Open the player link on your TV or tablet inside the room.</li>
+                          <li>Keep this device as your controller with the runbook.</li>
+                          <li>Start the timer and deliver hints from your exported plan.</li>
+                        </>
+                      )}
+                    </ol>
+                  </div>
+                  <div className="export-live-actions__buttons">
                   {targetInterface === "commercial_venue" ? (
+                    <>
                     <Link
                       to={`/gm/${sessionId}`}
                       className="primary-btn export-live-actions__primary"
                       onClick={() => void initLiveSession(sessionId, "venue")}
                     >
-                      Deploy to Live Gamemaster Console
+                      Open Gamemaster Live Console
                     </Link>
+                    <Link
+                      to={`/room/${sessionId}/player-display`}
+                      className="secondary-btn export-live-actions__primary"
+                      onClick={() => void initLiveSession(sessionId, "venue")}
+                    >
+                      Launch player screen
+                    </Link>
+                    </>
                   ) : (
                     <>
                       <button
@@ -6647,11 +6692,16 @@ export default function App() {
                       >
                         Print / Download Runbook
                       </button>
-                      <Link to={`/room/${sessionId}/player-display`} className="primary-btn">
-                        Launch Player Screen
+                      <Link
+                        to={`/room/${sessionId}/player-display`}
+                        className="primary-btn export-live-actions__primary"
+                        onClick={() => void initLiveSession(sessionId, "home")}
+                      >
+                        Launch player screen
                       </Link>
                     </>
                   )}
+                  </div>
                 </div>
               ) : null}
               {exportContent && exportWasRedacted ? (

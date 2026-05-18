@@ -73,9 +73,9 @@ export function HomePostExportModal({
             </Link>
           </Button>
           {operatingMode === "venue" ? (
-            <Button type="button" className={hasGmConsole ? "" : "opacity-80"} variant={hasGmConsole ? "default" : "outline"} asChild>
+            <Button type="button" variant="default" asChild>
               <Link to={gmPath} onClick={onClose}>
-                Deploy to Live Gamemaster Console
+                Open Gamemaster Live Console
               </Link>
             </Button>
           ) : null}

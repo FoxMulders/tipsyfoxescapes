@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "test:unit": "tsx src/qa/puzzleQaSelfTest.ts && tsx src/qa/storyEditorSelfTest.ts && tsx src/qa/catalogStaticScan.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

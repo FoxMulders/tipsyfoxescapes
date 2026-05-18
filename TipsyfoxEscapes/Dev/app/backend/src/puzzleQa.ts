@@ -1,7 +1,10 @@
 /**
- * Puzzle QA department — automated checks on every puzzle presented to the host.
+ * Puzzle QA department — validation on every puzzle presented to the host.
+ * Theme-fit narrative cross-checks Story Editor QA (shared rules).
  * See QA/departments/puzzle_qa.md
  */
+
+import { auditThemeFitNarrative } from "../../shared/qa/storyEditorRules.js";
 
 export type PuzzleReferenceLink = {
   title: string;
@@ -46,6 +49,8 @@ export type PuzzleWithQa = PuzzleForQa & { puzzleQa?: PuzzleQaReport };
 
 export type PuzzleQaContext = {
   themeName: string;
+  /** CI / catalog audit: treat stripped bad links as errors, not silent warns. */
+  strict?: boolean;
 };
 
 const STOPWORDS = new Set([
@@ -74,7 +79,8 @@ const SIGNIFICANT_WORDS = (text: string): string[] =>
 const puzzleCorpus = (puzzle: PuzzleForQa): string =>
   `${puzzle.title} ${puzzle.objective} ${puzzle.howItWorks} ${(puzzle.solveSteps ?? []).join(" ")} ${puzzle.themeFitReason ?? ""}`.toLowerCase();
 
-const themeTokens = (themeName: string): string[] => SIGNIFICANT_WORDS(themeName);
+const PLACEHOLDER_URL =
+  /example\.com|localhost|127\.0\.0\.1|placeholder|lorem|ipsum|todo|fixme|undefined|null/i;
 
 const linkSharesPuzzleContext = (puzzle: PuzzleForQa, link: PuzzleReferenceLink): boolean => {
   const corpus = puzzleCorpus(puzzle);
@@ -118,30 +124,53 @@ const isYoutubeSearchResults = (urlRaw: string): boolean => {
   }
 };
 
+const isSpecificYoutubeVideo = (urlRaw: string): boolean => {
+  try {
+    const u = new URL(urlRaw);
+    const host = u.hostname.replace(/^www\./, "").toLowerCase();
+    if (host === "youtu.be") return u.pathname.length > 1;
+    if (!host.includes("youtube.com")) return false;
+    return (
+      u.pathname.startsWith("/watch") ||
+      u.pathname.startsWith("/embed") ||
+      u.pathname.startsWith("/shorts/")
+    );
+  } catch {
+    return false;
+  }
+};
+
 const isBareYoutubeChannel = (urlRaw: string): boolean => {
   try {
     const u = new URL(urlRaw);
     const host = u.hostname.replace(/^www\./, "").toLowerCase();
     if (host !== "youtube.com" && host !== "m.youtube.com") return false;
     const path = u.pathname.toLowerCase();
-    if (path.startsWith("/watch") || path.startsWith("/embed") || path.startsWith("/shorts/")) return false;
-    if (path.startsWith("/@") || path === "/channel" || path.startsWith("/c/") || path.startsWith("/user/")) {
-      return path.split("/").filter(Boolean).length <= 2;
-    }
-    return false;
+    if (isSpecificYoutubeVideo(urlRaw)) return false;
+    return (
+      path.startsWith("/@") ||
+      path === "/channel" ||
+      path.startsWith("/c/") ||
+      path.startsWith("/user/")
+    );
   } catch {
     return false;
   }
 };
 
-const channelLinkAllowed = (puzzle: PuzzleForQa, link: PuzzleReferenceLink): boolean => {
-  if (puzzle.category !== "electronic") return false;
-  const corpus = puzzleCorpus(puzzle);
-  if (!/\barduino\b|\bled\b|\bbuzzer\b|\bsensor\b|\brfid\b|\belectronic\b/.test(corpus)) return false;
-  const title = (link.title ?? "").toLowerCase();
-  if (title.includes("playful technology") && corpus.includes("arduino")) return true;
-  if (title.includes("puzzle pieces") && linkSharesPuzzleContext(puzzle, link)) return true;
-  return linkSharesPuzzleContext(puzzle, link);
+const isAllowedReferenceUrl = (urlRaw: string): boolean => {
+  const t = urlRaw.trim();
+  if (!t || t === "#") return false;
+  if (PLACEHOLDER_URL.test(t)) return false;
+  try {
+    const u = new URL(t);
+    if (!/^https?:$/i.test(u.protocol)) return false;
+  } catch {
+    return false;
+  }
+  if (isYoutubeSearchResults(t)) return false;
+  if (isBareYoutubeChannel(t)) return false;
+  return true;
 };
 
 /** Drop irrelevant or generic reference links before the host sees the card. */
@@ -151,9 +180,7 @@ export const filterReferenceLinksForPuzzle = (puzzle: PuzzleForQa): PuzzleRefere
   const seen = new Set<string>();
   for (const link of links) {
     const urlRaw = (link.url ?? "").trim();
-    if (!urlRaw) continue;
-    if (isYoutubeSearchResults(urlRaw)) continue;
-    if (isBareYoutubeChannel(urlRaw) && !channelLinkAllowed(puzzle, link)) continue;
+    if (!isAllowedReferenceUrl(urlRaw)) continue;
     if (isOfficialDocLink(urlRaw)) {
       const k = `${urlRaw}|${link.title}`;
       if (!seen.has(k)) {
@@ -162,7 +189,15 @@ export const filterReferenceLinksForPuzzle = (puzzle: PuzzleForQa): PuzzleRefere
       }
       continue;
     }
-    if (!linkSharesPuzzleContext(puzzle, link) && !channelLinkAllowed(puzzle, link)) continue;
+    if (isSpecificYoutubeVideo(urlRaw) && linkSharesPuzzleContext(puzzle, link)) {
+      const k = `${urlRaw}|${link.title}`;
+      if (!seen.has(k)) {
+        seen.add(k);
+        out.push(link);
+      }
+      continue;
+    }
+    if (!linkSharesPuzzleContext(puzzle, link)) continue;
     const k = `${urlRaw}|${link.affiliateUrl ?? ""}|${link.title}`;
     if (seen.has(k)) continue;
     seen.add(k);
@@ -187,9 +222,9 @@ const auditCopyFields = (puzzle: PuzzleForQa, ctx: PuzzleQaContext): PuzzleQaIss
   } else if (!titleWords.some((w) => corpus.includes(w))) {
     issues.push({
       code: "HOW_IT_WORKS_TITLE_MISMATCH",
-      severity: "warn",
+      severity: "error",
       field: "howItWorks",
-      message: "How it works should mention the puzzle title or core mechanism keywords.",
+      message: "How it works must mention the puzzle title or core mechanism keywords.",
     });
   }
 
@@ -202,34 +237,20 @@ const auditCopyFields = (puzzle: PuzzleForQa, ctx: PuzzleQaContext): PuzzleQaIss
     });
   }
 
-  const themeName = ctx.themeName.trim();
-  const fit = (puzzle.themeFitReason ?? "").trim();
-  if (!fit) {
+  const storyIssues = auditThemeFitNarrative(puzzle.themeFitReason ?? "", ctx.themeName, "themeFitReason");
+  for (const si of storyIssues) {
     issues.push({
-      code: "THEME_FIT_MISSING",
-      severity: "error",
-      field: "themeFitReason",
-      message: "Why this fits the theme is required.",
+      code: si.code.replace("STORY_", "PUZZLE_"),
+      severity: si.severity,
+      field: si.field,
+      message: si.message,
     });
-  } else if (themeName) {
-    const tokens = themeTokens(themeName);
-    const fitLower = fit.toLowerCase();
-    const namesTheme =
-      fitLower.includes(themeName.toLowerCase()) || tokens.some((t) => fitLower.includes(t));
-    if (!namesTheme) {
-      issues.push({
-        code: "THEME_FIT_THEME_NAME",
-        severity: "error",
-        field: "themeFitReason",
-        message: `Theme fit should name "${themeName}" or a clear keyword from that theme.`,
-      });
-    }
   }
 
   if ((puzzle.solveSteps ?? []).length < 2) {
     issues.push({
       code: "SOLVE_STEPS_FEW",
-      severity: "warn",
+      severity: "error",
       field: "solveSteps",
       message: "Add at least two solve steps that match how it works.",
     });
@@ -323,9 +344,9 @@ const auditElectronic = (puzzle: PuzzleForQa): PuzzleQaIssue[] => {
     if (parts.length >= 2 && matchedParts.length < 2) {
       issues.push({
         code: "SVG_PART_LABELS",
-        severity: "warn",
+        severity: "error",
         field: "electronicDetails.wiringDiagramSvg",
-        message: "Diagram labels should name components from the parts list.",
+        message: "Diagram labels must name components from the parts list.",
       });
     }
   }
@@ -333,57 +354,110 @@ const auditElectronic = (puzzle: PuzzleForQa): PuzzleQaIssue[] => {
   return issues;
 };
 
-const auditReferences = (filteredCount: number, rawCount: number, strippedSearchCount: number): PuzzleQaIssue[] => {
+const auditReferences = (
+  puzzle: PuzzleForQa,
+  filteredCount: number,
+  rawLinks: PuzzleReferenceLink[],
+  strict: boolean,
+): PuzzleQaIssue[] => {
   const issues: PuzzleQaIssue[] = [];
-  if (strippedSearchCount > 0) {
-    issues.push({
-      code: "REFERENCE_SEARCH_STRIPPED",
-      severity: "warn",
-      field: "referenceLinks",
-      message: `${strippedSearchCount} generic search link(s) removed—only puzzle-specific references are shown.`,
-    });
+  const sev = strict ? "error" : "warn";
+
+  for (const link of rawLinks) {
+    const url = (link.url ?? "").trim();
+    if (!url) {
+      issues.push({
+        code: "REFERENCE_EMPTY_URL",
+        severity: "error",
+        field: "referenceLinks",
+        message: `Reference "${link.title || "(untitled)"}" has an empty URL.`,
+      });
+      continue;
+    }
+    if (PLACEHOLDER_URL.test(url)) {
+      issues.push({
+        code: "REFERENCE_PLACEHOLDER",
+        severity: "error",
+        field: "referenceLinks",
+        message: `Placeholder or invalid URL: ${url}`,
+      });
+    }
+    if (isYoutubeSearchResults(url)) {
+      issues.push({
+        code: "REFERENCE_SEARCH_URL",
+        severity: sev,
+        field: "referenceLinks",
+        message: `Remove YouTube search results URL (not a specific puzzle asset): ${link.title || url}`,
+      });
+    }
+    if (isBareYoutubeChannel(url)) {
+      issues.push({
+        code: "REFERENCE_CHANNEL_HOME",
+        severity: sev,
+        field: "referenceLinks",
+        message: `Remove bare channel home link unless it is a specific video for this puzzle: ${link.title || url}`,
+      });
+    }
+    if (!linkSharesPuzzleContext(puzzle, link) && !isOfficialDocLink(url) && !isSpecificYoutubeVideo(url)) {
+      issues.push({
+        code: "REFERENCE_OFF_TOPIC",
+        severity: sev,
+        field: "referenceLinks",
+        message: `Link does not match this puzzle's title/mechanism: ${link.title || url}`,
+      });
+    }
   }
-  if (rawCount > 0 && filteredCount === 0) {
+
+  if (rawLinks.length > 0 && filteredCount === 0) {
     issues.push({
       code: "REFERENCES_ALL_STRIPPED",
-      severity: "warn",
+      severity: "error",
       field: "referenceLinks",
       message:
-        "All reference links were removed—they did not match this puzzle. Add a specific tutorial or doc when you adapt the build.",
+        "No valid reference links remain—add a specific tutorial, official doc, or credited build guide for this exact puzzle.",
     });
   }
+
   return issues;
 };
 
 export const auditPuzzleQa = (
   puzzle: PuzzleForQa,
   ctx: PuzzleQaContext,
-  refAudit?: { rawCount: number; strippedSearchCount: number },
+  rawLinks?: PuzzleReferenceLink[],
 ): PuzzleQaReport => {
+  const originals = rawLinks ?? puzzle.referenceLinks ?? [];
   const issues: PuzzleQaIssue[] = [
     ...auditCopyFields(puzzle, ctx),
     ...auditElectronic(puzzle),
-    ...(refAudit
-      ? auditReferences(puzzle.referenceLinks.length, refAudit.rawCount, refAudit.strippedSearchCount)
-      : auditReferences(puzzle.referenceLinks.length, puzzle.referenceLinks.length, 0)),
+    ...auditReferences(puzzle, puzzle.referenceLinks.length, originals, Boolean(ctx.strict)),
   ];
   const passed = !issues.some((i) => i.severity === "error");
   return { passed, issues };
 };
 
-const countStrippedSearchLinks = (puzzle: PuzzleForQa): number =>
-  (puzzle.referenceLinks ?? []).filter((link) => isYoutubeSearchResults(link.url ?? "")).length;
-
 /** Filter links, attach QA report, and return updated puzzles. */
 export const applyPuzzleQaGate = <T extends PuzzleForQa>(puzzles: T[], ctx: PuzzleQaContext): PuzzleWithQa[] =>
   puzzles.map((puzzle) => {
-    const rawCount = (puzzle.referenceLinks ?? []).length;
-    const strippedSearchCount = countStrippedSearchLinks(puzzle);
+    const rawLinks = [...(puzzle.referenceLinks ?? [])];
     const filteredLinks = filterReferenceLinksForPuzzle(puzzle);
     const scrubbed = { ...puzzle, referenceLinks: filteredLinks };
-    const puzzleQa = auditPuzzleQa(scrubbed, ctx, { rawCount, strippedSearchCount });
+    const puzzleQa = auditPuzzleQa(scrubbed, ctx, rawLinks);
     return { ...scrubbed, puzzleQa };
   });
 
 export const allPuzzlesPassedPuzzleQa = (puzzles: PuzzleWithQa[]): boolean =>
   puzzles.every((p) => p.puzzleQa?.passed !== false);
+
+export const collectPuzzleQaFailures = (
+  puzzles: PuzzleWithQa[],
+): Array<{ puzzleId: string; title: string; issues: PuzzleQaIssue[] }> =>
+  puzzles
+    .filter((p) => p.puzzleQa && !p.puzzleQa.passed)
+    .map((p) => ({
+      puzzleId: p.id,
+      title: p.title,
+      issues: p.puzzleQa!.issues.filter((i) => i.severity === "error"),
+    }));
+
+// fix rawCount bug - I left a stray variable. Remove rawCount and fix auditReferences call
