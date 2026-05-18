@@ -28,6 +28,10 @@ export interface PlanningInput {
   venueBuildType?: VenueBuildType;
   /** Explicit home vs venue live-ops path; persisted on the planning session. */
   targetInterface?: TargetInterface;
+  /** Host plans to 3D-print props for this room. */
+  propFabrication3dEnabled?: boolean;
+  /** Subset of mechanical vs decorative print intent when 3D printing is enabled. */
+  propFabricationKinds?: ("mechanical" | "decorative")[];
 }
 
 export interface Theme {

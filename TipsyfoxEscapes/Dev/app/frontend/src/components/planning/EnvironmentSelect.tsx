@@ -9,21 +9,28 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-export const ENVIRONMENT_PRESETS = [
+export const HOME_ENVIRONMENT_PRESETS = [
   "Living room",
-  "Family room / rec room",
   "Garage",
   "Basement",
+  "Backyard",
+  "Home office",
+] as const;
+
+export const ENVIRONMENT_PRESETS = [
+  ...HOME_ENVIRONMENT_PRESETS,
+  "Family room / rec room",
   "Kitchen",
   "Dining room",
   "Office / study",
   "Classroom",
   "Conference room",
   "Retail / pop-up space",
-  "Backyard / patio",
   "Indoor party venue",
   "Warehouse / studio",
 ] as const;
+
+export type EnvironmentPresetScope = "home" | "all";
 
 const CUSTOM_VALUE = "__custom_environment__";
 
@@ -37,16 +44,19 @@ export function EnvironmentSelect({
   invalid,
   id,
   onEnvironmentCleared,
+  presetScope = "all",
 }: {
   value: string;
   onChange: (next: string) => void;
   invalid?: boolean;
   id?: string;
   onEnvironmentCleared?: () => void;
+  presetScope?: EnvironmentPresetScope;
 }) {
+  const presets = presetScope === "home" ? HOME_ENVIRONMENT_PRESETS : ENVIRONMENT_PRESETS;
   const matchedPreset = useMemo(
-    () => ENVIRONMENT_PRESETS.find((p) => itemKey(p) === itemKey(value)),
-    [value],
+    () => presets.find((p) => itemKey(p) === itemKey(value)),
+    [value, presets],
   );
   const selectValue = matchedPreset ?? (value.trim() ? CUSTOM_VALUE : "");
   const [customOpen, setCustomOpen] = useState(selectValue === CUSTOM_VALUE);
@@ -71,10 +81,10 @@ export function EnvironmentSelect({
         }}
       >
         <SelectTrigger id={id} className={cn(invalid && "border-destructive ring-destructive/40")} aria-invalid={invalid}>
-          <SelectValue placeholder="Choose environment…" />
+          <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {ENVIRONMENT_PRESETS.map((entry) => (
+          {presets.map((entry) => (
             <SelectItem key={entry} value={entry}>
               {entry}
             </SelectItem>
@@ -92,7 +102,6 @@ export function EnvironmentSelect({
           type="text"
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Describe your play space"
           aria-label="Custom environment description"
         />
       ) : null}

@@ -6,7 +6,11 @@ export type PricingPlanCardPlan = {
   name: string;
   tagline: string;
   priceLabel: string;
+  priceSubtitle?: string | null;
   priceCents: number;
+  billingInterval?: string;
+  tierLane?: string;
+  valueHeadline?: string | null;
   roomsToAdd: number;
   exportCreditsToAdd: number;
   perRoomPriceLabel?: string | null;
@@ -24,6 +28,13 @@ type PricingPlanCardProps = {
   onSelect?: (planId: string) => void;
   comparedToSlot?: ReactNode;
   footer?: ReactNode;
+};
+
+const tierLaneLabel = (lane?: string): string | null => {
+  if (lane === "home") return "Home hosting";
+  if (lane === "operator") return "Operator subscription";
+  if (lane === "enterprise") return "Enterprise";
+  return null;
 };
 
 function PricingCardFooter({ className, children }: { className?: string; children: ReactNode }) {
@@ -47,8 +58,11 @@ export function PricingPlanCard({
   comparedToSlot,
   footer,
 }: PricingPlanCardProps) {
+  const lane = tierLaneLabel(plan.tierLane);
   const className = cn(
     "pricing-card",
+    plan.tierLane === "operator" && "pricing-card--operator",
+    plan.tierLane === "enterprise" && "pricing-card--enterprise",
     plan.highlight && "pricing-card--highlight",
     isCurrent && "pricing-card--current",
     selected && "pricing-card--selected",
@@ -58,16 +72,12 @@ export function PricingPlanCard({
   const body = (
     <>
       <header className="pricing-card-head">
+        {lane ? <p className="pricing-tier-badge">{lane}</p> : null}
         <h3>{plan.name}</h3>
         <p className="pricing-tagline muted">{plan.tagline}</p>
         <p className="pricing-price">{plan.priceLabel}</p>
-        {plan.priceCents > 0 ? (
-          <p className="muted pricing-pack-detail">
-            +{plan.roomsToAdd} slot{plan.roomsToAdd === 1 ? "" : "s"} · +{plan.exportCreditsToAdd} export credit
-            {plan.exportCreditsToAdd === 1 ? "" : "s"}
-            {plan.perRoomPriceLabel ? ` · ${plan.perRoomPriceLabel}` : ""}
-          </p>
-        ) : null}
+        {plan.priceSubtitle ? <p className="pricing-price-sub muted">{plan.priceSubtitle}</p> : null}
+        {plan.valueHeadline ? <p className="pricing-value-headline">{plan.valueHeadline}</p> : null}
       </header>
       <ul className="pricing-features">
         {plan.features.map((feature) => (

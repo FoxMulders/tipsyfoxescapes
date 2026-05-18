@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { CircleHelp } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 function RollingEstimateNum({ target }: { target: number }) {
@@ -42,11 +44,32 @@ export function PuzzleEstimateBadge({ target, juniorAddOnSlots = 0, pulseKey }: 
       key={`estimate-${pulseKey}`}
       role="status"
       aria-live="polite"
+      aria-describedby="puzzle-estimate-hint"
     >
-      <span className="puzzle-estimate-badge__label">Live Session Metrics</span>
+      <div className="puzzle-estimate-badge__head">
+        <span className="puzzle-estimate-badge__label">Estimated puzzle nodes</span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="puzzle-estimate-badge__help"
+              aria-label="How puzzle node count is calculated"
+            >
+              <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs text-left">
+            This number updates live from your session duration and head count—the AI uses it to size how many puzzle nodes to
+            generate in your main track.
+          </TooltipContent>
+        </Tooltip>
+      </div>
       <span className="puzzle-estimate-badge__value">
         <RollingEstimateNum target={target} />
       </span>
+      <p id="puzzle-estimate-hint" className="puzzle-estimate-badge__micro muted">
+        Live estimate based on duration and concurrent players
+      </p>
       {juniorAddOnSlots > 0 ? (
         <span className="puzzle-estimate-badge__junior">+{juniorAddOnSlots} junior</span>
       ) : null}

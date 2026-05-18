@@ -17,6 +17,7 @@
 4. **Progression** — Stages and `puzzleLinks` reference puzzles that exist in the current set; required IDs resolve.
 5. **Tone & safety** — Junior beats stay bright, in-place, and age-appropriate; no true darkness, real utilities as play surfaces, or immersion-breaking modern clutter when theme forbids it.
 6. **Host read-through** — Situation and mission objective are speakable in one minute; no placeholder or duplicate paragraphs.
+7. **Prose & mechanics (English teacher pass)** — Grammar, punctuation, capitalization, and contractions on every narrative field and curated UI string. Automated checks: `auditProseEnglish` / `auditUiCopyCatalog` in `Dev/app/shared/qa/proseQaRules.ts` (CI via `uiCopyProse.test.ts` and theme-fit integration). Fix double spaces, missing apostrophes in contractions, spaces before punctuation, and terminal punctuation on full sentences.
 
 ## Sign-off
 

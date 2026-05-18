@@ -20,7 +20,9 @@ import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
 import { PricingPlanCard } from "@/components/PricingPlanCard";
 import { SquareCheckout } from "@/components/SquareCheckout";
 import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
+import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
 import { RoomDetailsStep } from "@/components/planning/RoomDetailsStep";
+import type { PropFabricationKind } from "@/components/planning/PropFabricationSection";
 import type { TargetInterface, VenueBuildType } from "../../shared/contracts";
 import { classifyApiCatchError, parseApiJson, unexpectedApiResponseMessage } from "./apiErrors.ts";
 import { filterJuniorStoryHooks } from "./juniorStoryHooks.ts";
@@ -171,7 +173,7 @@ type AuthUser = {
 
 const formatBillingTierLabel = (tier: AuthUser["billingTier"]): string => {
   if (tier === "admin") return "Admin";
-  if (tier === "pack") return "Room pack";
+  if (tier === "pack") return "Paid plan";
   if (tier === "trial") return "Free trial";
   return "Free";
 };
@@ -188,9 +190,13 @@ type BillingPlan = {
   name: string;
   tagline: string;
   priceLabel: string;
+  priceSubtitle?: string | null;
   perRoomPriceLabel?: string | null;
   priceCents: number;
   currency: string;
+  billingInterval?: string;
+  tierLane?: string;
+  valueHeadline?: string | null;
   roomsToAdd: number;
   exportCreditsToAdd: number;
   features: string[];
@@ -199,15 +205,23 @@ type BillingPlan = {
   highlight?: boolean;
 };
 
-const PricingComparedTo = ({ text }: { text: string }) => {
+const PricingValueFocus = ({ text }: { text: string }) => {
   const trimmed = text.trim();
   if (!trimmed) return null;
   return (
-    <p className="pricing-compared-inline muted" role="note">
-      <span className="pricing-compared-label">Compared to </span>
+    <p className="pricing-value-focus muted" role="note">
       {trimmed}
     </p>
   );
+};
+
+const pricingCtaLabel = (plan: BillingPlan, busy: boolean): string => {
+  if (busy) return "Opening Square…";
+  if (plan.id === "venue_blueprint") return "Contact sales";
+  if (plan.billingInterval === "monthly") return `Subscribe — ${plan.priceLabel}/mo`;
+  if (plan.billingInterval === "one_time" && plan.id === "home_enthusiast") return `Buy — ${plan.priceLabel}`;
+  if (plan.id === "casual_hobbyist") return `Get event pass — ${plan.priceLabel}`;
+  return `Choose ${plan.name}`;
 };
 
 const normalizeAuthUser = (raw: unknown): AuthUser | null => {
@@ -315,6 +329,8 @@ type SavedPlanPayload = {
     themeMustMatchEnvironment?: boolean;
     venueBuildType?: VenueBuildType;
     targetInterface?: TargetInterface;
+    propFabrication3dEnabled?: boolean;
+    propFabricationKinds?: PropFabricationKind[];
   };
   themes: Theme[];
   selectedThemeId: string;
@@ -2275,6 +2291,8 @@ export default function App() {
   const [themeMustMatchEnvironment, setThemeMustMatchEnvironment] = useState<boolean>(false);
   const [venueBuildType, setVenueBuildType] = useState<VenueBuildType>("prebuilt_space");
   const [targetInterface, setTargetInterface] = useState<TargetInterface>("home_party");
+  const [propFabrication3dEnabled, setPropFabrication3dEnabled] = useState(false);
+  const [propFabricationKinds, setPropFabricationKinds] = useState<PropFabricationKind[]>([]);
   const [availableItems, setAvailableItems] = useState<string>("");
   const [useCustomMainPuzzleCount, setUseCustomMainPuzzleCount] = useState(false);
   const [customMainPuzzleCountStr, setCustomMainPuzzleCountStr] = useState("");
@@ -2412,6 +2430,10 @@ export default function App() {
   useEffect(() => {
     setLiveOperatingMode(targetInterfaceToOperatingMode(targetInterface));
   }, [targetInterface]);
+
+  useEffect(() => {
+    setVenueBuildType(targetInterface === "commercial_venue" ? "professional_empty" : "prebuilt_space");
+  }, [targetInterface]);
   const propPresetLabels = useMemo(
     () => getSuggestedPropOptionsForPlanning(environmentType, eventType).map((o) => o.label),
     [environmentType, eventType],
@@ -2458,6 +2480,8 @@ export default function App() {
     themeMustMatchEnvironment,
     venueBuildType,
     targetInterface,
+    propFabrication3dEnabled,
+    propFabricationKinds,
     useCustomMainPuzzleCount,
     customMainPuzzleCountStr,
     useCustomMix,
@@ -2568,6 +2592,8 @@ export default function App() {
     themeMustMatchEnvironment: boolean;
     venueBuildType: VenueBuildType;
     targetInterface: TargetInterface;
+    propFabrication3dEnabled: boolean;
+    propFabricationKinds: PropFabricationKind[];
   };
 
   const buildPlanningBody = (mode: "draft" | "strict"): PlanningApiBody | null => {
@@ -2620,6 +2646,8 @@ export default function App() {
         themeMustMatchEnvironment,
         venueBuildType,
         targetInterface,
+        propFabrication3dEnabled,
+        propFabricationKinds,
       };
     }
     const players = Number.isFinite(pc) && pc > 0 ? Math.min(99, Math.max(1, Math.trunc(pc))) : 4;
@@ -2643,6 +2671,8 @@ export default function App() {
       themeMustMatchEnvironment,
       venueBuildType,
       targetInterface,
+      propFabrication3dEnabled,
+      propFabricationKinds,
     };
   };
 
@@ -4686,6 +4716,13 @@ export default function App() {
       setVenueBuildType(vbt === "professional_empty" ? "professional_empty" : "prebuilt_space");
       const ti = payload.planningInput.targetInterface;
       setTargetInterface(ti === "commercial_venue" ? "commercial_venue" : "home_party");
+      setPropFabrication3dEnabled(Boolean(payload.planningInput.propFabrication3dEnabled));
+      const pfKinds = payload.planningInput.propFabricationKinds;
+      setPropFabricationKinds(
+        Array.isArray(pfKinds)
+          ? pfKinds.filter((k): k is PropFabricationKind => k === "mechanical" || k === "decorative")
+          : [],
+      );
       setAvailableItems(payload.planningInput.availableItems.join(", "));
       const mo = payload.planningInput.mainTrackPuzzleCountOverride;
       setUseCustomMainPuzzleCount(typeof mo === "number" && Number.isFinite(mo));
@@ -4919,9 +4956,7 @@ export default function App() {
 
   const flowMutedHelper =
     flowWizardStep === "setup"
-      ? simpleRoomSetup
-        ? "Simple setup covers who’s playing, how long, where, props, and optional event type. Use **All options** for difficulty, junior track, and the live puzzle-count strip."
-        : "Set duration, headcount, room difficulty, and optional junior add-on—the app sizes puzzle count from session length and players, biases suggestions, and can append an easy–medium parallel track for kids. Add optional props, then pick a theme."
+      ? "Pick your target interface first, then session timing and space details. The estimated puzzle node count updates live from duration and head count. Commercial venue install checklists unlock in Review after your theme and puzzle set are generated."
       : flowWizardStep === "themes-puzzles"
         ? selectedTheme
           ? `Build or refresh puzzles for: ${selectedTheme.name}. Add any **premade** puzzles you already own on this step before generating; count follows room timing and difficulty from Room details. Treat generator output and web references as starting points—adapt into **original** venue-specific puzzles (including any Arduino builds) and **QA** electronics before opening.`
@@ -5107,18 +5142,18 @@ export default function App() {
         </div>
         {billingPlans.length > 0 ? (
           <section className="card subscription-card pricing-section pricing-section--login glass-panel" aria-label="Pricing plans">
-            <h2 className="subscription-title">Pricing plans</h2>
+            <h2 className="subscription-title">Plans &amp; subscriptions</h2>
             <p className="muted pricing-lead">
-              Pay per room or save with a pack — slots and export credits do not expire on a monthly clock. Every export can
-              power <strong>Home Mode</strong> (runbook + player screen) or <strong>Retail Venue Mode</strong> (Gamemaster Live
-              Console + in-room display). Sign in, then open <strong>Account &amp; pricing</strong> to checkout with Square.
+              Start free, then pick a <strong>home hosting</strong> pass for backyard events or an{" "}
+              <strong>operator subscription</strong> for live consoles, white-label staff run sheets, and fleet management.
+              Sign in to checkout with Square.
             </p>
             <div className="pricing-grid">
               {billingPlans.map((plan) => (
                 <PricingPlanCard
                   key={plan.id}
                   plan={plan}
-                  comparedToSlot={<PricingComparedTo text={plan.comparedTo ?? ""} />}
+                  comparedToSlot={<PricingValueFocus text={plan.comparedTo ?? ""} />}
                   footer={
                     <p className="muted pricing-included">
                       {plan.purchasable ? "Available after sign-in" : "Free to start"}
@@ -5261,13 +5296,12 @@ export default function App() {
           ) : null}
           {!authUser.isAdmin ? (
             <section className="card subscription-card pricing-section" aria-label="Pricing plans">
-              <h2 className="subscription-title">Pricing plans</h2>
+              <h2 className="subscription-title">Plans &amp; subscriptions</h2>
               <p className="muted pricing-lead">
-                Buy a <strong>single room</strong> when you need one design, or choose a <strong>home host pack</strong> for
-                personal parties and <strong>studio/venue packs</strong> for GM consoles, live player screens, reports, and
-                leaderboards. Pick <strong>Home Party</strong> or <strong>Commercial Venue</strong> in Room details to match
-                how you run the game. Slots and export credits do not expire monthly. Checkout is powered by{" "}
-                <strong>Square</strong>.
+                <strong>Home hosting</strong> plans unlock saved rooms, runbooks, and player screens.{" "}
+                <strong>Operator subscriptions</strong> add the Gamemaster Live Console, white-label staff sheets, multi-room
+                sync, and leaderboards. Pick <strong>Home Party</strong> or <strong>Commercial Venue</strong> in Room details
+                to match how you run each build. Checkout is powered by <strong>Square</strong>.
               </p>
               {!squarePaymentsReady ? (
                 <p className="muted pricing-square-hint" role="status">
@@ -5300,9 +5334,13 @@ export default function App() {
                       isCurrent={isCurrent}
                       interactive={plan.purchasable}
                       onSelect={plan.purchasable ? setSelectedBillingPlanId : undefined}
-                      comparedToSlot={<PricingComparedTo text={plan.comparedTo ?? ""} />}
+                      comparedToSlot={<PricingValueFocus text={plan.comparedTo ?? ""} />}
                       footer={
-                        plan.purchasable ? (
+                        plan.id === "venue_blueprint" ? (
+                          <a className="secondary-btn pricing-card-cta" href="mailto:support@tipsyfoxescapes.ca">
+                            Contact sales
+                          </a>
+                        ) : plan.purchasable ? (
                           <button
                             type="button"
                             className={isSelected || plan.highlight ? "primary-btn" : "secondary-btn"}
@@ -5310,13 +5348,7 @@ export default function App() {
                             aria-busy={checkoutPlanId === plan.id}
                             onClick={() => void handlePurchasePlan(plan.id)}
                           >
-                            {checkoutPlanId === plan.id
-                              ? "Opening Square…"
-                              : plan.id === "single"
-                                ? `Buy one room — ${plan.priceLabel}`
-                                : authUser.billingTier === "pack"
-                                  ? `Add ${plan.name}`
-                                  : `Upgrade — ${plan.priceLabel}`}
+                            {pricingCtaLabel(plan, checkoutPlanId === plan.id)}
                           </button>
                         ) : (
                           <p className="muted pricing-included">
@@ -5344,11 +5376,11 @@ export default function App() {
           <section className="card subscription-card" aria-label="Room plan billing">
             <div className={authUser.isAdmin ? "subscription-card-grid" : "subscription-card-grid subscription-card-grid--single"}>
               <div>
-                <h2 className="subscription-title">Room slots (not time-based)</h2>
+                <h2 className="subscription-title">Plan capacity</h2>
                 <p className="muted">
                   You have <strong>{authUser.savedRoomCount}</strong> saved room{authUser.savedRoomCount === 1 ? "" : "s"} and{" "}
                   <strong>{authUser.roomsRemaining}</strong> slot{authUser.roomsRemaining === 1 ? "" : "s"} remaining out of{" "}
-                  <strong>{authUser.roomAllowance}</strong> effective capacity (personal purchases plus any org pool bonus).
+                  <strong>{authUser.roomAllowance}</strong> total (your plan plus any org pool bonus).
                 </p>
                 {authUser.orgPoolBonusSlots > 0 ? (
                   <p className="muted">
@@ -5364,24 +5396,25 @@ export default function App() {
                   </p>
                 ) : (
                   <p className="muted">
-                    Trial: one full export with electronics; plans are not saved to your account. A room pack adds save slots, the
-                    full theme catalog, custom themes, and export credits for additional rooms.
+                    Trial: one full export with electronics; plans are not saved to your account. A paid home or operator plan adds
+                    save slots, catalog access, and export credits for additional rooms.
                   </p>
                 )}
                 <p className="muted">
                   Status:{" "}
                   <strong>
                     {authUser.billingTier === "pack"
-                      ? "Paid room pack — full theme catalog + custom themes"
+                      ? "Paid plan — catalog, saves, and exports per your tier"
                       : authUser.isAdmin
                         ? "Admin — unlimited catalog and exports"
                         : authUser.trialUsed
-                          ? "Trial used — purchase a room pack to continue"
+                          ? "Trial used — choose a plan under Plans & subscriptions"
                           : "Trial — same 3 curated themes, one export, no saved rooms"}
                   </strong>
                 </p>
                 <p className="muted anti-abuse-note">
-                  Your free trial is tied to this account. After your one export, purchase a room pack to design and export more rooms.
+                  Your free trial is tied to this account. After your one export, upgrade to a home pass or operator subscription to
+                  design, save, and export more rooms.
                 </p>
               </div>
               {authUser.isAdmin ? (
@@ -5506,6 +5539,9 @@ export default function App() {
             </div>
             {flowWizardStep === "setup" ? (
               <RoomDetailsStep
+                wizardStepIndex={wizardIndex}
+                wizardStepTotal={wizardSteps.length}
+                wizardStepLabel={wizardLabel}
                 playersConcurrent={playersConcurrent}
                 setPlayersConcurrent={setPlayersConcurrent}
                 participantsTotal={participantsTotal}
@@ -5520,8 +5556,6 @@ export default function App() {
                 setAvailableItems={setAvailableItems}
                 themeMustMatchEnvironment={themeMustMatchEnvironment}
                 setThemeMustMatchEnvironment={setThemeMustMatchEnvironment}
-                venueBuildType={venueBuildType}
-                setVenueBuildType={setVenueBuildType}
                 targetInterface={targetInterface}
                 setTargetInterface={setTargetInterface}
                 roomDifficulty={roomDifficulty}
@@ -5532,6 +5566,10 @@ export default function App() {
                 setYouthAddOnGatesAdultFlow={setYouthAddOnGatesAdultFlow}
                 youthAddOnAgeNote={youthAddOnAgeNote}
                 setYouthAddOnAgeNote={setYouthAddOnAgeNote}
+                propFabrication3dEnabled={propFabrication3dEnabled}
+                setPropFabrication3dEnabled={setPropFabrication3dEnabled}
+                propFabricationKinds={propFabricationKinds}
+                setPropFabricationKinds={setPropFabricationKinds}
                 validationFlags={validationFlags}
                 clearValidation={(key) => setValidationFlags((current) => ({ ...current, [key]: false }))}
                 commercialVenueContext={commercialVenueContext}
@@ -6417,6 +6455,9 @@ export default function App() {
                       <pre className="staging-diagram-block">{storyPlan.stagingDiagram}</pre>
                     </>
                   ) : null}
+                  {targetInterface === "commercial_venue" && selectedTheme && puzzles.length > 0 ? (
+                    <EmptyRoomInstallChecklist environmentType={environmentType} themeName={selectedTheme.name} />
+                  ) : null}
                   {puzzles.length > 0 ? (
                     <>
                       <h3 className="output-review-section-title">Room flowchart</h3>
@@ -6954,7 +6995,7 @@ export default function App() {
       {upgradePromptOpen && authUser ? (
         <div className="idle-session-overlay" role="dialog" aria-modal="true" aria-labelledby="upgrade-prompt-title">
           <div className="idle-session-dialog glass-panel upgrade-prompt-dialog">
-            <h2 id="upgrade-prompt-title">Purchase a room pack</h2>
+            <h2 id="upgrade-prompt-title">Choose a plan</h2>
             <p className="muted">{upgradePromptMessage}</p>
             {billingPlans.length > 0 ? (
               <div className="pricing-grid pricing-grid--compact">
@@ -6969,6 +7010,7 @@ export default function App() {
                         selected={isSelected}
                         interactive
                         onSelect={setSelectedBillingPlanId}
+                        comparedToSlot={<PricingValueFocus text={plan.comparedTo ?? ""} />}
                         footer={
                           <button
                             type="button"
@@ -6976,7 +7018,7 @@ export default function App() {
                             disabled={!squarePaymentsReady || checkoutPlanId === plan.id}
                             onClick={() => void handlePurchasePlan(plan.id)}
                           >
-                            {checkoutPlanId === plan.id ? "Opening Square…" : `Buy — ${plan.priceLabel}`}
+                            {pricingCtaLabel(plan, checkoutPlanId === plan.id)}
                           </button>
                         }
                       />

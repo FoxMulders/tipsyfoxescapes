@@ -6,7 +6,7 @@ import crypto from "crypto";
 import { loadEnv } from "./loadEnv.js";
 
 loadEnv();
-import { billingPlanById, type BillingPlanId } from "./billing/catalog.js";
+import { billingPlanById, resolveBillingPlanId, type BillingPlanId } from "./billing/catalog.js";
 import { registerLiveRoutes } from "./liveGame.js";
 import type { TargetInterface } from "../../shared/contracts.js";
 import { targetInterfaceToOperatingMode, type OperatingMode } from "../../shared/liveContracts.js";
@@ -623,23 +623,32 @@ const hasFullCatalogAccessUser = (user: StoredUser | undefined): boolean => {
 
 const PLAN_TIER_RANK: Record<BillingPlanId, number> = {
   free: 0,
-  single: 1,
-  home_host: 2,
-  studio: 3,
-  venue: 4,
+  casual_hobbyist: 1,
+  home_enthusiast: 2,
+  creative_studio: 3,
+  venue_blueprint: 4,
+};
+
+const isOperatorPlanId = (planId: string | undefined): boolean => {
+  const resolved = planId ? resolveBillingPlanId(planId) : undefined;
+  return resolved === "creative_studio" || resolved === "venue_blueprint";
+};
+
+const isHomePaidPlanId = (planId: string | undefined): boolean => {
+  const resolved = planId ? resolveBillingPlanId(planId) : undefined;
+  return resolved === "casual_hobbyist" || resolved === "home_enthusiast";
 };
 
 const commercialTierForUser = (user: StoredUser): PublicUser["commercialTier"] => {
   if (user.isAdmin) return "venue";
-  const planId = user.lastPurchasedPlanId;
-  if (planId === "venue") return "venue";
-  if (planId === "studio") return "studio";
-  if (planId === "home_host" || planId === "single") return "home";
+  const planId = user.lastPurchasedPlanId ? resolveBillingPlanId(user.lastPurchasedPlanId) : undefined;
+  if (planId === "venue_blueprint") return "venue";
+  if (planId === "creative_studio") return "studio";
+  if (isHomePaidPlanId(user.lastPurchasedPlanId)) return "home";
   return user.roomAllowance > FREE_TIER_ROOM_ALLOWANCE ? "home" : "free";
 };
 
-const hasGmConsoleForUser = (user: StoredUser): boolean =>
-  user.isAdmin || user.lastPurchasedPlanId === "studio" || user.lastPurchasedPlanId === "venue";
+const hasGmConsoleForUser = (user: StoredUser): boolean => user.isAdmin || isOperatorPlanId(user.lastPurchasedPlanId);
 
 const operatingModeDefaultForUser = (user: StoredUser): OperatingMode =>
   hasGmConsoleForUser(user) ? "venue" : "home";
@@ -782,13 +791,9 @@ const loadUsers = async (): Promise<void> => {
         roomAllowance: Math.min(MAX_ROOM_ALLOWANCE, Math.floor(roomAllowance)),
         exportCreditsRemaining,
         trialUsedAt,
-        lastPurchasedPlanId:
-          row.lastPurchasedPlanId === "studio" ||
-          row.lastPurchasedPlanId === "venue" ||
-          row.lastPurchasedPlanId === "home_host" ||
-          row.lastPurchasedPlanId === "single"
-            ? row.lastPurchasedPlanId
-            : undefined,
+        lastPurchasedPlanId: row.lastPurchasedPlanId
+          ? resolveBillingPlanId(String(row.lastPurchasedPlanId))
+          : undefined,
       };
       usersByEmail.set(email, user);
     }
@@ -5115,12 +5120,13 @@ const applyPlanTopUp = (
   planId: string,
 ): { roomsAdded: number; exportCreditsAdded: number } | null => {
   const plan = billingPlanById(planId);
-  if (!plan || plan.roomsToAdd <= 0) return null;
+  if (!plan || !plan.purchasable || plan.roomsToAdd <= 0) return null;
   user.roomAllowance = Math.min(MAX_ROOM_ALLOWANCE, user.roomAllowance + plan.roomsToAdd);
   user.exportCreditsRemaining = Math.min(500_000, user.exportCreditsRemaining + plan.exportCreditsToAdd);
-  const pid = plan.id as BillingPlanId;
-  const prev = user.lastPurchasedPlanId;
-  if (!prev || PLAN_TIER_RANK[pid] > PLAN_TIER_RANK[prev]) {
+  const pid = plan.id;
+  const prevResolved = user.lastPurchasedPlanId ? resolveBillingPlanId(user.lastPurchasedPlanId) : undefined;
+  const prevRank = prevResolved ? PLAN_TIER_RANK[prevResolved] : -1;
+  if (PLAN_TIER_RANK[pid] > prevRank) {
     user.lastPurchasedPlanId = pid;
   }
   return { roomsAdded: plan.roomsToAdd, exportCreditsAdded: plan.exportCreditsToAdd };

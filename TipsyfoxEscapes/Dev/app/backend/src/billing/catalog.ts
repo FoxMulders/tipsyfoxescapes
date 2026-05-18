@@ -1,158 +1,193 @@
 /**
- * Public catalog: one-time room packs (slots do not expire).
- * Prices in USD cents — edit here; UI and Square checkout read from this file.
- *
- * Per-room positioning: personal hosts (Home host) < pay-as-you-go (Single) <
- * professional tiers (Studio, Venue) — operators pay more per room than families.
- *
- * Live ops (Home vs Retail Venue) unlock from Room details → Target interface;
- * see feature bullets per plan below.
+ * Public catalog: value-driven subscriptions and passes.
+ * Prices in USD cents — UI and Square checkout read from this file.
  */
-export type BillingPlanId = "free" | "single" | "home_host" | "studio" | "venue";
+export type BillingPlanId =
+  | "free"
+  | "casual_hobbyist"
+  | "home_enthusiast"
+  | "creative_studio"
+  | "venue_blueprint";
+
+/** @deprecated Legacy IDs map to new tiers for existing purchases */
+export type LegacyBillingPlanId = "single" | "home_host" | "studio" | "venue";
+
+export type BillingInterval = "free" | "one_time" | "monthly" | "annual" | "enterprise";
+
+export type TierLane = "home" | "operator" | "enterprise";
 
 export type BillingPlanDefinition = {
   id: BillingPlanId;
   name: string;
   tagline: string;
+  /** Primary price shown on card */
   priceCents: number;
   currency: "USD";
+  /** e.g. "30-Day Event Pass · or $9/month" */
+  priceSubtitle?: string;
+  billingInterval: BillingInterval;
+  tierLane: TierLane;
   roomsToAdd: number;
   exportCreditsToAdd: number;
   features: string[];
-  /** Placeholder flags for future operator tooling (not enforced in MVP). */
-  futureFeatureFlags?: string[];
-  /** One inline sentence after "Compared to:" in the UI */
-  comparedTo: string;
+  /** Short value line under price (replaces per-room pack detail) */
+  valueHeadline?: string;
+  /** Core focus — shown instead of "Compared to" on marketing cards */
+  valueFocus: string;
   purchasable: boolean;
   highlight?: boolean;
+  /** @deprecated Use valueFocus in UI */
+  comparedTo?: string;
+};
+
+const LEGACY_PLAN_ALIASES: Record<string, BillingPlanId> = {
+  single: "casual_hobbyist",
+  home_host: "home_enthusiast",
+  studio: "creative_studio",
+  venue: "venue_blueprint",
 };
 
 export const BILLING_PLANS: BillingPlanDefinition[] = [
   {
     id: "free",
     name: "Trial",
-    tagline: "One complete room design — try Home or Retail Venue live tools on export",
+    tagline: "Design one complete room — explore Home or Retail Venue flows",
     priceCents: 0,
     currency: "USD",
+    billingInterval: "free",
+    tierLane: "home",
     roomsToAdd: 0,
     exportCreditsToAdd: 0,
     purchasable: false,
+    valueHeadline: "One curated design pass",
+    valueFocus: "Low-risk way to test the builder before choosing a host or operator plan.",
     features: [
-      "Same three curated themes for every trial",
+      "Same three curated themes every trial",
       "One full export with electronics (one-time)",
-      "Replace puzzles during the trial run",
-      "Home Mode: printable runbook + player screen (timer + plan hints on a TV/tablet)",
-      "Retail Venue Mode: Gamemaster Live Console when you choose Commercial Venue at export",
-      "Saving to your account requires a paid pack",
+      "Replace puzzles during your trial run",
+      "Home Mode: standard runbook + basic player screen",
+      "Saving to your account requires a paid plan",
     ],
-    comparedTo:
-      "one family night out at a venue (~$120–$160 for four people, one hour); Trial is a single at-home design pass—you cannot save the plan until you purchase a pack.",
+    comparedTo: "",
   },
   {
-    id: "single",
-    name: "Single room",
-    tagline: "One saved room — Home player screen or venue GM console included",
-    priceCents: 4900,
+    id: "casual_hobbyist",
+    name: "The Casual Hobbyist Pass",
+    tagline: "Lightweight entry for backyard parties and birthdays",
+    priceCents: 1500,
     currency: "USD",
+    priceSubtitle: "30-Day Event Pass · or $9/month",
+    billingInterval: "one_time",
+    tierLane: "home",
     roomsToAdd: 1,
     exportCreditsToAdd: 1,
     purchasable: true,
     highlight: true,
+    valueHeadline: "1 active room · full catalog · standard runbook",
+    valueFocus: "Low-barrier hosting for casual events — print and play without operator tooling.",
     features: [
-      "1 additional saved-room slot",
-      "1 full electronic export credit",
-      "Full theme catalog, refresh, and custom themes",
-      "Home Mode: post-export onboarding, runbook download, and player display synced to your session timer",
-      "Retail Venue Mode: GM Live Console (start/pause timer, puzzle completion log, custom clues to player screen)",
-      "Best when you only need one extra room this season",
+      "1 active room slot",
+      "Full theme catalog",
+      "Standard runbook export (Home Mode)",
+      "Player screen with timer + preset hints",
+      "No Gamemaster Live Console or multi-room ops",
     ],
-    comparedTo:
-      "one family night out (~$120–$240 for 4–6 people at a commercial room); you keep a reusable host plan to run at home, not a single timed session.",
+    comparedTo: "",
   },
   {
-    id: "home_host",
-    name: "Home host pack",
-    tagline: "Family parties with runbook + in-room player screen",
-    priceCents: 11900,
+    id: "home_enthusiast",
+    name: "The Home Host Enthusiast",
+    tagline: "For dedicated home haunters building a season of rooms",
+    priceCents: 5900,
     currency: "USD",
+    billingInterval: "one_time",
+    tierLane: "home",
     roomsToAdd: 3,
     exportCreditsToAdd: 3,
     purchasable: true,
+    valueHeadline: "3 saved rooms · 3 export credits · electronics unlocked",
+    valueFocus: "Heavy hobbyists who want wiring notes, diagrams, and Arduino detail in exports.",
     features: [
-      "3 additional saved-room slots",
-      "3 full electronic export credits",
-      "Full catalog for personal hosting seasons",
-      "Bring-your-own custom themes",
-      "Home Mode: “How to run your game” walkthrough after every export",
-      "Player screen at /room/…/player-display — live countdown + hints (no GM chat or multi-room)",
-      "Optional Commercial Venue target if you also run ticketed events (GM console included)",
+      "3 saved room slots",
+      "3 full export credits",
+      "Unlocks electronics & tech wiring notes in exports",
+      "Full catalog + custom themes",
+      "Home Mode player screen; optional Commercial Venue preview on export",
     ],
-    comparedTo:
-      "three family nights out at a venue (~$360–$720 total for groups of 4–6 across three visits)—for three room plans you can host at home again and again.",
+    comparedTo: "",
   },
   {
-    id: "studio",
-    name: "Studio pack",
-    tagline: "Repeat builders — full Retail Venue live ops when you need them",
-    priceCents: 64900,
+    id: "creative_studio",
+    name: "The Creative Studio",
+    tagline: "Recurring operator rights for small venues and repeat builders",
+    priceCents: 14900,
     currency: "USD",
-    roomsToAdd: 10,
+    priceSubtitle: "$149/month · or $1,200/year (save ~33%)",
+    billingInterval: "monthly",
+    tierLane: "operator",
+    roomsToAdd: 5,
     exportCreditsToAdd: 10,
     purchasable: true,
+    valueHeadline: "5 concurrent live rooms · white-label staff run sheets",
+    valueFocus: "Commercial operator rights with Gamemaster Live Console — timer, clues, and basic reporting.",
     features: [
-      "10 additional saved-room slots",
-      "10 full electronic export credits",
-      "Full catalog, custom themes, and refresh",
-      "Professional tier — higher per-room than Home host, far below hiring a designer",
-      "Retail Venue — Gamemaster Live Console: live timer (+1/−1 min), active players, puzzle progress bar",
-      "Player window tab: projector/tablet URL + live clue box with pre-saved hints",
-      "Reports tab: success/fail, elapsed time, event log; interactive reset checklist for staff",
-      "Home Mode on any room: runbook + basic player screen (timer + standard hints)",
+      "5 concurrent active live rooms",
+      "Full commercial operator rights",
+      "100% white-labeled staff run sheets",
+      "Gamemaster Live Console: timer controls, clue box, basic reporting",
+      "Player window + SSE sync to in-room displays",
+      "Interactive reset checklists for staff",
     ],
-    comparedTo:
-      "ten group nights out (~$1,200–$2,400+ for parties of 4–6) or a fraction of one design-firm room ($5,000–$15,000+); about $65 per digital plan—you build and operate.",
+    comparedTo: "",
   },
   {
-    id: "venue",
-    name: "Venue pack",
-    tagline: "Multi-room operators — GM console, player sync, reports & leaderboards",
-    priceCents: 179900,
+    id: "venue_blueprint",
+    name: "The Venue Blueprint",
+    tagline: "Enterprise fleet management for multi-room operators",
+    priceCents: 24900,
     currency: "USD",
+    priceSubtitle: "From $249/month · custom enterprise pricing available",
+    billingInterval: "enterprise",
+    tierLane: "enterprise",
     roomsToAdd: 25,
     exportCreditsToAdd: 25,
-    purchasable: true,
+    purchasable: false,
+    valueHeadline: "Unlimited saved rooms · fleet-scale live ops",
+    valueFocus: "Multi-room fleet management, leaderboards, and real-time display mapping for corporate teams.",
     features: [
-      "25 additional saved-room slots",
-      "25 full electronic export credits",
-      "Full catalog for multi-room venues",
-      "Stackable with org pool bonuses on the server",
-      "Gamemaster Live Console (4 tabs): Console, Player window, Reports, Leaderboards",
-      "Real-time SSE sync: timer, clues, and puzzle state match session duration & player counts",
-      "Leaderboards: public top escape times for corporate and competitive teams",
-      "Multi-room ops: one session ID per active room; venue onboarding for display mapping",
-      "Session reports: completion times, success rate, and per-puzzle bottleneck data",
-      "Home Mode still available for staff-training rooms (runbook + simple player screen)",
+      "Unlimited saved rooms (fair-use policy)",
+      "Multi-room fleet management — active session ID per room",
+      "Interactive reset checklists for staff",
+      "Real-time SSE display mapping across rooms",
+      "Public leaderboards for corporate & competitive teams",
+      "Full Gamemaster Live Console suite + priority onboarding",
     ],
-    comparedTo:
-      "twenty-five commercial nights out (~$3,000–$6,000+ in tickets for groups of 4–6) or a sliver of turn-key install ($55,000+); about $72 per plan—software and exports only, not build labor or staff.",
+    comparedTo: "",
   },
 ];
 
-export const billingPlanById = (id: string): BillingPlanDefinition | undefined =>
-  BILLING_PLANS.find((p) => p.id === id);
+export const resolveBillingPlanId = (id: string): BillingPlanId | undefined => {
+  const normalized = LEGACY_PLAN_ALIASES[id] ?? id;
+  return BILLING_PLANS.find((p) => p.id === normalized)?.id;
+};
+
+export const billingPlanById = (id: string): BillingPlanDefinition | undefined => {
+  const resolved = resolveBillingPlanId(id);
+  if (!resolved) return undefined;
+  return BILLING_PLANS.find((p) => p.id === resolved);
+};
 
 export const formatPlanPrice = (plan: BillingPlanDefinition): string => {
+  if (plan.billingInterval === "enterprise" && !plan.purchasable) {
+    return "Custom";
+  }
   if (plan.priceCents <= 0) return "Free";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: plan.currency }).format(
     plan.priceCents / 100,
   );
 };
 
-export const perRoomPriceLabel = (plan: BillingPlanDefinition): string | null => {
-  if (plan.priceCents <= 0 || plan.roomsToAdd <= 0) return null;
-  const perRoom = plan.priceCents / plan.roomsToAdd / 100;
-  return `≈ ${new Intl.NumberFormat("en-US", { style: "currency", currency: plan.currency }).format(perRoom)} per room`;
-};
+export const perRoomPriceLabel = (_plan: BillingPlanDefinition): string | null => null;
 
 export type PublicBillingPlan = BillingPlanDefinition & {
   priceLabel: string;
@@ -164,4 +199,5 @@ export const toPublicBillingPlans = (): PublicBillingPlan[] =>
     ...plan,
     priceLabel: formatPlanPrice(plan),
     perRoomPriceLabel: perRoomPriceLabel(plan),
+    comparedTo: plan.valueFocus,
   }));

@@ -3,6 +3,7 @@
  * See QA/departments/story_editor_qa.md
  */
 
+import { auditProseFields } from "../../shared/qa/proseQaRules.js";
 import {
   auditJuniorHooksForContext,
   auditThemeFitNarrative,
@@ -21,7 +22,14 @@ export type StoryPlanForQa = {
   situation?: string;
   premise?: string;
   missionObjective?: string;
-  stages?: Array<{ title?: string; requiredPuzzleIds?: string[]; requiredPuzzleTitles?: string[] }>;
+  stages?: Array<{
+    title?: string;
+    storyBeat?: string;
+    objective?: string;
+    whyThisStageExists?: string;
+    requiredPuzzleIds?: string[];
+    requiredPuzzleTitles?: string[];
+  }>;
   puzzleLinks?: Array<{ puzzleId?: string }>;
 };
 
@@ -42,6 +50,23 @@ export const auditStoryPlan = (
     return { passed: !issues.some((i) => i.severity === "error"), issues };
   }
   const theme = themeName.trim();
+  issues.push(
+    ...auditProseFields([
+      { text: plan.situation ?? "", field: "storyPlan.situation", requireTerminalPunctuation: true },
+      { text: plan.premise ?? "", field: "storyPlan.premise", requireTerminalPunctuation: true },
+      { text: plan.missionObjective ?? "", field: "storyPlan.missionObjective", requireTerminalPunctuation: true },
+    ]),
+  );
+  for (const stage of plan.stages ?? []) {
+    issues.push(
+      ...auditProseFields([
+        { text: stage.title ?? "", field: "storyPlan.stages.title" },
+        { text: stage.storyBeat ?? "", field: "storyPlan.stages.storyBeat", requireTerminalPunctuation: true },
+        { text: stage.objective ?? "", field: "storyPlan.stages.objective", requireTerminalPunctuation: true },
+        { text: stage.whyThisStageExists ?? "", field: "storyPlan.stages.whyThisStageExists", requireTerminalPunctuation: true },
+      ]),
+    );
+  }
   const corpus = `${plan.situation ?? ""} ${plan.premise ?? ""} ${plan.missionObjective ?? ""}`.toLowerCase();
   if (theme && corpus.length > 20) {
     const tokens = theme.toLowerCase().split(/\s+/).filter((w) => w.length >= 4);

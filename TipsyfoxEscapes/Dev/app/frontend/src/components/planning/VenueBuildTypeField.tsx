@@ -1,4 +1,3 @@
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { FieldHint } from "@/components/planning/FieldHint";
 import type { VenueBuildType } from "../../../../shared/contracts";
 
@@ -68,34 +67,16 @@ export function VenueBuildTypeField({ value, onChange, environmentType, compact 
           ))}
         </fieldset>
       </FieldHint>
-
-      {value === "professional_empty" ? (
-        <Accordion type="single" collapsible className="rounded-md border border-slate-800/50 bg-card/30 px-4 backdrop-blur-md">
-          <AccordionItem value="empty-room-checklist">
-            <AccordionTrigger className={compact ? "py-2 text-xs" : undefined}>
-              What to install in your empty room
-            </AccordionTrigger>
-            <AccordionContent>
-              <p className="mb-3 text-sm text-muted-foreground">
-                Starter checklist for a ticketed escape room venue.
-                {envTrim ? (
-                  <>
-                    {" "}
-                    Environment type <strong className="text-foreground">{envTrim}</strong> still guides theme fiction
-                    even though you are building the shell from scratch.
-                  </>
-                ) : (
-                  " Pick an environment below so themes match your intended fiction."
-                )}
-              </p>
-              <ul className="list-inside list-decimal space-y-2 text-sm text-foreground">
-                {EMPTY_ROOM_INSTALL_CHECKLIST.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+      {value === "professional_empty" && !compact ? (
+        <p className="text-xs text-muted-foreground" role="note">
+          Your venue install checklist unlocks after theme selection in the <strong>Review</strong> step (prop layout phase).
+          {envTrim ? (
+            <>
+              {" "}
+              Facility notes: <strong className="text-foreground">{envTrim}</strong>.
+            </>
+          ) : null}
+        </p>
       ) : null}
     </div>
   );

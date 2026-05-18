@@ -2,6 +2,8 @@
  * Shared Story Editor QA rules — used by backend storyEditorQa, puzzleQa (theme fit), and CI.
  */
 
+import { auditProseEnglish } from "./proseQaRules.js";
+
 export type StoryEditorQaIssue = {
   code: string;
   severity: "error" | "warn";
@@ -67,6 +69,7 @@ export const auditThemeFitNarrative = (
       requiredChange: `Rewrite to start with: For "${theme}", this puzzle…`,
     });
   }
+  issues.push(...auditProseEnglish(fit, field, { requireTerminalPunctuation: true, label: field }));
   return issues;
 };
 

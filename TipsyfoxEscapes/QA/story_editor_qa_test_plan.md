@@ -28,3 +28,16 @@ See checklist: `departments/story_editor_qa.md`.
 **Expected**
 
 - Story plan and puzzle theme-fit lines reference the new theme, not the prior one.
+
+## SE-04 Prose & mechanics (automated)
+
+1. From repo root, run `npm run qa` (or `cd Dev/app/backend && npm run test:unit`).
+
+**Expected**
+
+- `uiCopyProse.test.ts` passes — curated Room details UI strings have correct grammar, punctuation, and capitalization.
+- `storyEditorRules.test.ts` prose cases pass — theme-fit lines with sentence-level copy get terminal punctuation and spacing checks.
+
+**Manual spot-check**
+
+- Read aloud: situation, premise, mission objective, and stage beats on **Output: Review** — no run-on sentences, missing periods, or lowercase sentence starts after a period.
