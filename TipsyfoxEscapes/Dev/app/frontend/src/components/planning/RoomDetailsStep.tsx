@@ -73,13 +73,13 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
 
   return (
     <div className="flow-content flow-content--blueprint">
-      <div className="room-details-form-card">
+      <div className="room-details-form-card overflow-hidden rounded-2xl border border-slate-600/50 bg-slate-950/95 shadow-2xl backdrop-blur-md">
         <header className="room-setup-command-bar" aria-label="Room details setup">
           <div className="room-setup-command-bar__primary">
-            <p className="room-setup-command-bar__step muted">
-              Step {props.wizardStepIndex + 1} of {props.wizardStepTotal} · {props.wizardStepLabel}
-            </p>
             <h2 className="room-details-title">Room details</h2>
+            <p className="mt-1 text-sm leading-relaxed text-slate-300/90">
+              Configure your space, headcount, and props. Progress is tracked in the mission map above.
+            </p>
           </div>
           <div className="room-setup-command-bar__actions">
             <PuzzleEstimateBadge
@@ -89,7 +89,7 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             />
             <button
               type="button"
-              className="secondary-btn inspiration-drawer-trigger"
+              className="secondary-btn inspiration-drawer-trigger self-stretch"
               onClick={props.onOpenInspiration}
               title="Opens curated prop ideas, theme sparks, and on-device AI inspiration for your space."
             >
@@ -98,7 +98,7 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
           </div>
         </header>
 
-        <div className="mx-auto max-w-xl space-y-5" id="room-details-blueprint-form">
+        <div className="mx-auto max-w-xl space-y-4" id="room-details-blueprint-form">
           <div className="form-field-panel form-field-panel--primary">
             <TargetInterfaceField value={props.targetInterface} onChange={props.setTargetInterface} />
           </div>
@@ -204,31 +204,33 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             </FieldHint>
           </div>
 
-          <div className="form-field-panel space-y-4">
+          <div className="form-field-panel">
             <FieldHint
               label="Event context"
               htmlFor="event-context-input"
               tooltip="e.g., Commercial venue, Halloween party, corporate team building, or school fundraiser."
-            />
-            <Input
-              id="event-context-input"
-              type="text"
-              list="event-type-suggestions"
-              value={props.eventType}
-              maxLength={200}
-              onChange={(e) => props.setEventType(e.target.value)}
-            />
-            <datalist id="event-type-suggestions">
-              {props.eventSuggestions.map((entry) => (
-                <option key={entry} value={entry} />
-              ))}
-            </datalist>
-            {props.commercialVenueContext ? (
-              <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm" role="note">
-                <strong>Commercial / ticketed venue:</strong> Guests expect a clearly unique experience—treat generated ideas as raw
-                material for original puzzles and flow.
-              </p>
-            ) : null}
+            >
+              <Input
+                id="event-context-input"
+                type="text"
+                list="event-type-suggestions"
+                className="border-slate-700/60 bg-slate-900/90 text-slate-50"
+                value={props.eventType}
+                maxLength={200}
+                onChange={(e) => props.setEventType(e.target.value)}
+              />
+              <datalist id="event-type-suggestions">
+                {props.eventSuggestions.map((entry) => (
+                  <option key={entry} value={entry} />
+                ))}
+              </datalist>
+              {props.commercialVenueContext ? (
+                <p className="rounded-md border border-amber-500/35 bg-amber-500/12 p-3 text-sm text-amber-50/95" role="note">
+                  <strong>Commercial / ticketed venue:</strong> Guests expect a clearly unique experience—treat generated ideas as raw
+                  material for original puzzles and flow.
+                </p>
+              ) : null}
+            </FieldHint>
           </div>
 
           <div className="form-field-panel">

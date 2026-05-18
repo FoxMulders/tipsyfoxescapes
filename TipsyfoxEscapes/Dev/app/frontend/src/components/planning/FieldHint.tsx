@@ -20,7 +20,7 @@ export function FieldHint({
 }) {
   return (
     <div className={cn("space-y-2", invalid && "rounded-md p-1 ring-1 ring-destructive/60")}>
-      <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+      <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-100">
         {htmlFor ? (
           <label htmlFor={htmlFor} className="cursor-default">
             {label}

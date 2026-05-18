@@ -65,10 +65,10 @@ export function MissionFlowMap({
       role="navigation"
       aria-label="Mission progress map"
       data-testid="mission-flow-map"
-      style={{ minHeight: `${h}px` }}
+      style={{ minHeight: `${h + (useFork ? 28 : 18)}px` }}
     >
       <svg
-        className="mission-flow-svg"
+        className="mission-flow-svg block max-h-none w-full overflow-visible"
         viewBox={`0 0 ${w} ${h}`}
         preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"

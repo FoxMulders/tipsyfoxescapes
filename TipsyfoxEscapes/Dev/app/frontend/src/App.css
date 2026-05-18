@@ -718,6 +718,8 @@ pre.code-inline {
 }
 
 .mission-panel.flow-shell.builder-workspace-shell {
+  display: flex;
+  flex-direction: column;
   padding: 0;
   overflow: hidden;
   border: 1px solid rgba(72, 130, 140, 0.55);
@@ -727,36 +729,50 @@ pre.code-inline {
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   max-height: calc(100dvh - var(--builder-chrome-offset, 11.5rem));
   min-height: min(28rem, 72dvh);
+  isolation: isolate;
+}
+
+.builder-workspace-shell.glass-panel::before,
+.builder-workspace-shell.glass-panel::after {
+  display: none;
+}
+
+.builder-workspace-shell.glass-panel > * {
+  position: relative;
+  z-index: 1;
 }
 
 .flow-shell-scroll-region {
   flex: 1 1 auto;
-  min-height: 12rem;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  contain: paint;
   overscroll-behavior: contain;
-  padding: 0.35rem 1rem 1rem;
+  padding: 0.5rem 1rem 1.25rem;
   -webkit-overflow-scrolling: touch;
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
 }
 
 .flow-shell-map-bar {
-  position: sticky;
-  top: 0;
-  z-index: 24;
-  flex-shrink: 0;
+  position: relative;
+  top: auto;
+  z-index: 20;
+  flex: 0 0 auto;
   width: 100%;
-  min-height: 9.25rem;
+  min-height: 10rem;
   height: auto;
-  padding: 0.65rem 1rem 1.15rem;
-  margin-bottom: 0.35rem;
+  padding: 0.75rem 1rem 1.25rem;
+  margin: 0 0 2rem;
   border-bottom: 1px solid rgba(72, 130, 140, 0.45);
-  background: hsl(220 26% 7% / 0.98);
-  contain: layout style;
+  background: hsl(220 26% 7% / 0.99);
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .flow-shell-map-bar--fork {
-  min-height: 10.85rem;
+  min-height: 11.5rem;
 }
 
 .flow-shell .flow-controls {
@@ -767,14 +783,15 @@ pre.code-inline {
   flex: 1 1 auto;
   min-height: 0;
   padding-right: 0.15rem;
-  contain: paint;
+  position: relative;
+  z-index: 0;
 }
 
 .flow-controls {
-  margin-top: 0.15rem;
-  margin-bottom: 1rem;
+  margin: 0 0 2rem;
   position: relative;
-  z-index: 1;
+  z-index: 2;
+  flex-shrink: 0;
 }
 
 .flow-controls-top {
@@ -795,16 +812,17 @@ pre.code-inline {
   justify-content: space-between;
   gap: 0.75rem 1rem;
   width: 100%;
-  margin: 0 0 0.15rem;
+  margin: 0;
   padding: 0.85rem 1rem;
   border-radius: 12px;
   border: 1px solid rgba(72, 130, 140, 0.52);
-  background: hsl(220 24% 9% / 0.82);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: hsl(220 22% 8% / 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   box-shadow:
     0 10px 28px rgba(0, 0, 0, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
 }
 
 .flow-step-intro-card__copy {
@@ -2964,7 +2982,14 @@ label.checkbox-field {
 
 .mission-flow-map--header {
   width: 100%;
-  padding-bottom: 0.35rem;
+  padding-bottom: 0.5rem;
+  overflow: hidden;
+}
+
+.flow-shell-scroll-region--body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .mission-flow-map--fork {
@@ -4906,19 +4931,32 @@ ul.auth-hero-para {
 }
 
 .flow-content--blueprint {
-  contain: paint;
-  min-height: 12rem;
+  position: relative;
+  z-index: 0;
+  min-height: 0;
+  margin-top: 0;
+  overflow: visible;
 }
 
 .room-details-form-card {
   position: relative;
+  z-index: 0;
   margin: 0 auto;
   max-width: 42rem;
-  padding: 1.15rem 1.25rem 1.35rem;
+  padding: 1.25rem 1.35rem 1.5rem;
   border-radius: 14px;
-  border: 1px solid rgba(72, 130, 140, 0.48);
-  background: hsl(220 24% 7% / 0.98);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(100, 150, 165, 0.55);
+  background: hsl(220 24% 6% / 0.98);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.room-details-form-card .muted,
+.room-details-form-card .room-setup-command-bar__step {
+  color: hsl(210 18% 78%);
 }
 
 .room-details-metrics-row {
@@ -4937,65 +4975,77 @@ ul.auth-hero-para {
 }
 
 .room-setup-command-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.85rem 1.25rem;
-  margin-bottom: 1.1rem;
-  padding-bottom: 0.85rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+@media (min-width: 640px) {
+  .room-setup-command-bar {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+    align-items: start;
+    column-gap: 1.25rem;
+  }
 }
 
 .room-setup-command-bar__primary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 0.85rem;
   min-width: 0;
 }
 
 .room-setup-command-bar__step {
-  margin: 0;
+  margin: 0 0 0.35rem;
   font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .room-setup-command-bar__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 0.55rem;
-  margin-left: auto;
+  display: grid;
+  width: 100%;
+  gap: 0.65rem;
+  align-items: stretch;
+}
+
+@media (min-width: 480px) {
+  .room-setup-command-bar__actions {
+    grid-template-columns: minmax(9.5rem, auto) minmax(0, 1fr);
+  }
 }
 
 .room-details-title {
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.35rem;
+  font-weight: 800;
   line-height: 1.2;
+  color: hsl(210 40% 96%);
 }
 
 .inspiration-drawer-trigger {
-  max-width: 16rem;
+  width: 100%;
+  min-height: 2.75rem;
   text-align: center;
-  line-height: 1.25;
+  line-height: 1.3;
   white-space: normal;
 }
 
-.form-field-panel {
-  padding: 0.85rem 0.95rem;
+.room-details-form-card .form-field-panel {
+  padding: 0.9rem 1rem;
   border-radius: 12px;
-  border: 1px solid rgba(72, 130, 140, 0.35);
-  background: rgba(6, 12, 18, 0.55);
+  border: 1px solid rgba(100, 140, 160, 0.42);
+  background: hsl(220 22% 8% / 0.92);
 }
 
-.form-field-panel--primary {
-  border-color: rgba(56, 189, 198, 0.45);
-  background: rgba(8, 20, 28, 0.72);
+.room-details-form-card .form-field-panel--primary {
+  border-color: rgba(56, 189, 198, 0.5);
+  background: hsl(200 28% 10% / 0.94);
+}
+
+.room-details-form-card .form-field-panel label,
+.room-details-form-card .form-field-panel .text-sm {
+  color: hsl(210 30% 93%);
 }
 
 .feature-card {
@@ -5168,10 +5218,10 @@ ul.auth-hero-para {
 
 .puzzle-estimate-badge__micro {
   margin: 0;
-  font-size: 0.62rem;
-  line-height: 1.2;
-  max-width: 11rem;
-  text-align: right;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  max-width: 14rem;
+  color: hsl(210 18% 78%);
 }
 
 .room-details-form-card__cta {
@@ -5180,15 +5230,25 @@ ul.auth-hero-para {
 }
 
 .puzzle-estimate-badge {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
+  justify-content: center;
   gap: 0.15rem;
-  padding: 0.45rem 0.65rem;
+  width: 100%;
+  min-width: 9.5rem;
+  padding: 0.55rem 0.7rem;
   border-radius: 10px;
   border: 1px solid hsl(187 92% 48% / 0.45);
-  background: hsl(187 92% 48% / 0.12);
+  background: hsl(187 92% 48% / 0.14);
   box-shadow: 0 0 0 0 hsl(187 92% 48% / 0);
+}
+
+@media (min-width: 480px) {
+  .room-setup-command-bar__actions .puzzle-estimate-badge {
+    align-items: flex-end;
+    text-align: right;
+  }
 }
 
 .puzzle-estimate-badge--pulse {
@@ -5215,7 +5275,7 @@ ul.auth-hero-para {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: hsl(210 20% 80%);
 }
 
 .puzzle-estimate-badge__value {

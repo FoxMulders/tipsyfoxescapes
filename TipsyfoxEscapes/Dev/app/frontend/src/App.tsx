@@ -5787,8 +5787,8 @@ export default function App() {
                 canNavigateToStep={(index) => index <= wizardIndex || buildPlanningBody("strict") !== null}
               />
             </div>
-            <div className="flow-shell-scroll-region">
-            <div className="flow-controls">
+            <div className="flow-shell-scroll-region flow-shell-scroll-region--body">
+            <div className="flow-controls flow-controls--step-intro">
               {flowWizardStep !== "setup" ? (
                 <FlowStepIntro
                   stepIndex={wizardIndex}
