@@ -19,6 +19,7 @@ import {
 } from "./qa/liveStateEngine.js";
 
 const liveMemory = new Map<string, LiveGameState>();
+const activeSseConnections = new Map<string, number>();
 
 /** Count in-memory venue live sessions owned by a user (excludes the session being activated). */
 export const countActiveVenueLiveSessions = (
@@ -34,6 +35,10 @@ export const countActiveVenueLiveSessions = (
   }
   return count;
 };
+export const getActiveLiveConnectionStats = (): Array<{ sessionId: string; connections: number }> =>
+  [...activeSseConnections.entries()]
+    .map(([sessionId, connections]) => ({ sessionId, connections }))
+    .filter((entry) => entry.connections > 0);
 const subscribers = new Map<string, Set<(state: LiveGameState) => void>>();
 const leaderboards: LeaderboardEntry[] = [];
 
@@ -171,10 +176,36 @@ export const registerLiveRoutes = (
       sessionId: string,
       operatingMode: OperatingMode,
     ) => { code: string; message: string } | null;
+    appendOperationalAudit?: (entry: {
+      ts: string;
+      action: string;
+      email?: string;
+      detail?: Record<string, unknown>;
+    }) => Promise<void>;
   },
 ): void => {
   const liveDenied = (res: Response, denied: { code: string; message: string }): void => {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
+  };
+
+  const requireWritableLiveState = async (
+    req: Request,
+    res: Response,
+    sessionId: string,
+  ): Promise<LiveGameState | null> => {
+    const state = await getLiveState(sessionId);
+    if (!state) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: "Live session not found.", details: [] } });
+      return null;
+    }
+    if (state.operatingMode === "venue" && deps.assertLiveInitAllowed) {
+      const denied = deps.assertLiveInitAllowed(req, sessionId, "venue");
+      if (denied) {
+        liveDenied(res, denied);
+        return null;
+      }
+    }
+    return state;
   };
 
   app.post("/api/live/:sessionId/init", async (req, res) => {
@@ -249,6 +280,13 @@ export const registerLiveRoutes = (
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
+    const currentConnections = (activeSseConnections.get(sessionId) ?? 0) + 1;
+    activeSseConnections.set(sessionId, currentConnections);
+    void deps.appendOperationalAudit?.({
+      ts: new Date().toISOString(),
+      action: "live_sse_connected",
+      detail: { sessionId, operatingMode: state.operatingMode, activeConnections: currentConnections },
+    });
 
     const send = (s: LiveGameState) => {
       const payload = JSON.stringify({
@@ -266,11 +304,20 @@ export const registerLiveRoutes = (
     req.on("close", () => {
       clearInterval(heartbeat);
       unsub();
+      const remaining = Math.max(0, (activeSseConnections.get(sessionId) ?? 1) - 1);
+      if (remaining > 0) activeSseConnections.set(sessionId, remaining);
+      else activeSseConnections.delete(sessionId);
+      void deps.appendOperationalAudit?.({
+        ts: new Date().toISOString(),
+        action: "live_sse_disconnected",
+        detail: { sessionId, activeConnections: remaining },
+      });
     });
   });
 
   app.post("/api/live/:sessionId/timer", async (req, res) => {
     const sessionId = String(req.params.sessionId ?? "").trim();
+    if (!(await requireWritableLiveState(req, res, sessionId))) return;
     const action = String(req.body?.action ?? "");
     const deltaMin = Number(req.body?.deltaMinutes);
     const state = await patchLive(sessionId, (s) => {
@@ -296,6 +343,7 @@ export const registerLiveRoutes = (
 
   app.post("/api/live/:sessionId/players", async (req, res) => {
     const sessionId = String(req.params.sessionId ?? "").trim();
+    if (!(await requireWritableLiveState(req, res, sessionId))) return;
     const count = Math.floor(Number(req.body?.count));
     const state = await patchLive(sessionId, (s) => {
       if (Number.isFinite(count) && count >= 0 && count <= 99) {
@@ -317,6 +365,7 @@ export const registerLiveRoutes = (
 
   app.post("/api/live/:sessionId/puzzles/:puzzleId/complete", async (req, res) => {
     const sessionId = String(req.params.sessionId ?? "").trim();
+    if (!(await requireWritableLiveState(req, res, sessionId))) return;
     const puzzleId = String(req.params.puzzleId ?? "").trim();
     const state = await patchLive(sessionId, (s) => {
       const updated = applyPuzzleComplete(s, puzzleId);
@@ -336,6 +385,13 @@ export const registerLiveRoutes = (
     if (!stateBefore) {
       res.status(404).json({ error: { code: "NOT_FOUND", message: "Live session not found.", details: [] } });
       return;
+    }
+    if (stateBefore.operatingMode === "venue" && deps.assertLiveInitAllowed) {
+      const denied = deps.assertLiveInitAllowed(req, sessionId, "venue");
+      if (denied) {
+        liveDenied(res, denied);
+        return;
+      }
     }
     const clueCheck = validateClueForOperatingMode(clueRaw, stateBefore.operatingMode, stateBefore.preSavedHints);
     if (!clueCheck.ok) {
@@ -357,6 +413,7 @@ export const registerLiveRoutes = (
 
   app.post("/api/live/:sessionId/player-ready", async (req, res) => {
     const sessionId = String(req.params.sessionId ?? "").trim();
+    if (!(await requireWritableLiveState(req, res, sessionId))) return;
     const state = await patchLive(sessionId, (s) => {
       s.playerDisplayReady = true;
       s.playerDisplayReadyAtMs = Date.now();
@@ -379,6 +436,7 @@ export const registerLiveRoutes = (
 
   app.post("/api/live/:sessionId/display", async (req, res) => {
     const sessionId = String(req.params.sessionId ?? "").trim();
+    if (!(await requireWritableLiveState(req, res, sessionId))) return;
     const modeRaw = String(req.body?.mode ?? "");
     const allowed: PlayerDisplayMode[] = ["active_game", "hint_overlay", "end_game", "custom_media"];
     const mode = allowed.includes(modeRaw as PlayerDisplayMode) ? (modeRaw as PlayerDisplayMode) : null;
@@ -412,6 +470,7 @@ export const registerLiveRoutes = (
 
   app.post("/api/live/:sessionId/stage", async (req, res) => {
     const sessionId = String(req.params.sessionId ?? "").trim();
+    if (!(await requireWritableLiveState(req, res, sessionId))) return;
     const index = Math.floor(Number(req.body?.index));
     const state = await patchLive(sessionId, (s) => {
       if (Number.isFinite(index) && index >= 0 && index < 32) {
@@ -433,6 +492,7 @@ export const registerLiveRoutes = (
 
   app.post("/api/live/:sessionId/end", async (req, res) => {
     const sessionId = String(req.params.sessionId ?? "").trim();
+    if (!(await requireWritableLiveState(req, res, sessionId))) return;
     const result = req.body?.result === "fail" ? "fail" : "success";
     const state = await patchLive(sessionId, (s) => {
       if (s.gameResult === "in_progress") {
@@ -478,6 +538,14 @@ export const registerLiveRoutes = (
     if (!session) {
       res.status(404).json({ error: { code: "NOT_FOUND", message: "Planning session not found.", details: [] } });
       return;
+    }
+    const operatingMode = deps.deriveOperatingMode(session);
+    if (operatingMode === "venue" && deps.assertLiveInitAllowed) {
+      const denied = deps.assertLiveInitAllowed(req, sessionId, "venue");
+      if (denied) {
+        liveDenied(res, denied);
+        return;
+      }
     }
     const steps = buildResetChecklistSteps({
       puzzles: session.currentPuzzles.map((p) => ({

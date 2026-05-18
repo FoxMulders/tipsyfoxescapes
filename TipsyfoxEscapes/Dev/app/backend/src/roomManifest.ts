@@ -66,6 +66,8 @@ export const consumeManifestCredit = (
     return { alreadyManifested: false, creditConsumed: true, trialConsumed: false };
   }
 
-  manifest.creditConsumedAt = now;
+  manifest.status = "draft";
+  manifest.manifestedAt = null;
+  manifest.creditConsumedAt = null;
   return { alreadyManifested: false, creditConsumed: false, trialConsumed: false };
 };

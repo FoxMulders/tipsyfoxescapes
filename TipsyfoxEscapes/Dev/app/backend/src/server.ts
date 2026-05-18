@@ -7,7 +7,7 @@ import { loadEnv } from "./loadEnv.js";
 
 loadEnv();
 import { billingPlanById, quotePlanCheckout, resolveBillingPlanId, type BillingPlanId } from "./billing/catalog.js";
-import { countActiveVenueLiveSessions, registerLiveRoutes } from "./liveGame.js";
+import { countActiveVenueLiveSessions, getActiveLiveConnectionStats, registerLiveRoutes } from "./liveGame.js";
 import { fleetActivationError, liveOpsFrozenError } from "./enterpriseGate.js";
 import type { TargetInterface } from "../../shared/contracts.js";
 import { targetInterfaceToOperatingMode, type OperatingMode } from "../../shared/liveContracts.js";
@@ -828,16 +828,48 @@ const getStoredUserById = (userId: string): StoredUser | undefined => {
 
 const applyAdminFlagsFromEnv = (): void => {
   const admins = parseAdminEmails();
+  const bootstrapAdminPassword = String(process.env.ADMIN_BOOTSTRAP_PASSWORD ?? "").trim();
   for (const user of usersByEmail.values()) {
     if (admins.has(user.email)) {
       user.isAdmin = true;
       user.role = "admin";
+      user.username = deriveUsername(user.email, user.name, user.username);
+      indexUserUsername(user, usersByUsername, user.email);
+      if (!user.password && bootstrapAdminPassword && DEFAULT_ADMIN_EMAILS_LOWER.has(user.email)) {
+        user.password = bootstrapAdminPassword;
+      }
     }
     if (typeof user.exportCreditsRemaining !== "number" || !Number.isFinite(user.exportCreditsRemaining)) {
       user.exportCreditsRemaining =
         user.roomAllowance > FREE_TIER_ROOM_ALLOWANCE ? Math.min(5000, user.roomAllowance * 10) : 0;
     }
   }
+};
+
+const ensureBootstrapAdminUser = (): boolean => {
+  const bootstrapAdminPassword = String(process.env.ADMIN_BOOTSTRAP_PASSWORD ?? "").trim();
+  if (!bootstrapAdminPassword) return false;
+  let changed = false;
+  for (const email of DEFAULT_ADMIN_EMAILS_LOWER) {
+    if (usersByEmail.has(email)) continue;
+    const user: StoredUser = {
+      id: `usr_${nextUserId++}`,
+      name: "Brad Mulders",
+      email,
+      username: deriveUsername(email, "Brad Mulders"),
+      provider: "local",
+      password: bootstrapAdminPassword,
+      isAdmin: true,
+      role: "admin",
+      roomAllowance: MAX_ROOM_ALLOWANCE,
+      exportCreditsRemaining: 1_000_000,
+      createdAt: new Date().toISOString(),
+    };
+    usersByEmail.set(email, user);
+    indexUserUsername(user, usersByUsername, email);
+    changed = true;
+  }
+  return changed;
 };
 
 const persistUsers = async (): Promise<void> => {
@@ -857,6 +889,8 @@ const persistUsers = async (): Promise<void> => {
     exportCreditsRemaining: user.exportCreditsRemaining,
     trialUsedAt: user.trialUsedAt ?? null,
     lastPurchasedPlanId: user.lastPurchasedPlanId ?? null,
+    isEnterpriseProvisioned: Boolean(user.isEnterpriseProvisioned),
+    createdAt: user.createdAt ?? null,
   }));
   const { writeJsonBlob } = await import("./kvJsonStore.js");
   await writeJsonBlob("users.json", rows);
@@ -947,7 +981,9 @@ const loadUsers = async (): Promise<void> => {
     }
     nextUserId = Math.max(nextUserId, maxNum + 1);
     applyAdminFlagsFromEnv();
+    const seededAdmin = ensureBootstrapAdminUser();
     if (usersByEmail.size > 0) await persistUsers();
+    else if (seededAdmin) await persistUsers();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       // eslint-disable-next-line no-console
@@ -3487,6 +3523,7 @@ const upsertSocialUser = (provider: StoredUser["provider"], email: string, name:
       role: isAdmin ? "admin" : "user",
       roomAllowance: FREE_TIER_ROOM_ALLOWANCE,
       exportCreditsRemaining: 0,
+      createdAt: new Date().toISOString(),
     };
     usersByEmail.set(normalizedEmail, user);
     indexUserUsername(user, usersByUsername, normalizedEmail);
@@ -3558,6 +3595,14 @@ const claimSessionForAuth = (sessionId: string | undefined, req: express.Request
   if (user) sessionUserOwners.set(sessionId, user.id);
   const ownerId = sessionUserOwners.get(sessionId);
   return ownerId ? getStoredUserById(ownerId) : user;
+};
+
+const puzzleMutationAccessError = (
+  session: SessionState,
+  user: StoredUser | undefined,
+): { code: string; message: string } | null => {
+  if (sessionHasFullPuzzleAccess(session.roomManifest)) return null;
+  return generationAccessError(user);
 };
 
 /** Require a logged-in user who owns (or can claim) this planning session. */
@@ -4713,6 +4758,18 @@ app.post("/api/puzzles/generate", async (req, res) => {
       detail: { sessionId: String(sessionId), manifestedAt: session.roomManifest.manifestedAt },
     });
   }
+  void appendBillingAudit({
+    userId: billingUser?.id,
+    email: billingUser?.email,
+    action: "ai_room_generation_success",
+    detail: {
+      sessionId: String(sessionId),
+      themeId: String(themeId),
+      puzzleCount: generatedForResponse.length,
+      manifestStatus: session.roomManifest.status,
+      creditConsumedAt: session.roomManifest.creditConsumedAt,
+    },
+  });
   const fullAccess = sessionHasFullPuzzleAccess(session.roomManifest);
   const clientPuzzles = redactPuzzlesForClient(generatedForResponse, fullAccess);
   const clientStory = redactStoryPlanForClient(
@@ -4743,7 +4800,7 @@ app.post("/api/puzzles/:puzzleId/replace", (req, res) => {
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
-  const denied = generationAccessError(billingUser);
+  const denied = puzzleMutationAccessError(session, billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
     return;
@@ -4844,7 +4901,7 @@ app.post("/api/puzzles/:puzzleId/reject", (req, res) => {
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
-  const denied = generationAccessError(billingUser);
+  const denied = puzzleMutationAccessError(session, billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
     return;
@@ -4903,7 +4960,7 @@ app.post("/api/puzzles/fill-slot", (req, res) => {
     return;
   }
   const billingUser = claimSessionForAuth(String(sessionId), req);
-  const denied = generationAccessError(billingUser);
+  const denied = puzzleMutationAccessError(session, billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
     return;
@@ -5639,6 +5696,7 @@ const finishBootstrap = async (): Promise<void> => {
       const otherVenue = countActiveVenueLiveSessions(ownerId, sessionId, (sid) => sessionUserOwners.get(sid));
       return fleetActivationError(user, otherVenue);
     },
+    appendOperationalAudit: appendBillingAudit,
   });
 
   registerAdminRoutes(app, {
@@ -5648,6 +5706,17 @@ const finishBootstrap = async (): Promise<void> => {
     appendBillingAudit,
     readBillingAudit: readBillingAuditLines,
     toPublicUser: (user) => toPublicUser(user as StoredUser),
+    getLiveConnectionStats: getActiveLiveConnectionStats,
+    clearSessionLocks: (userId) => {
+      let cleared = 0;
+      for (const [sessionId, ownerId] of [...sessionUserOwners.entries()]) {
+        if (!userId || ownerId === userId) {
+          sessionUserOwners.delete(sessionId);
+          cleared += 1;
+        }
+      }
+      return cleared;
+    },
   });
 };
 

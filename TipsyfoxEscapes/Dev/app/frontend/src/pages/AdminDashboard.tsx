@@ -25,6 +25,7 @@ type AuditRow = {
   action?: string;
   detail?: Record<string, unknown>;
 };
+type LiveConnectionRow = { sessionId: string; connections: number };
 
 type AdminDashboardProps = {
   apiBase: string;
@@ -34,10 +35,14 @@ type AdminDashboardProps = {
 
 export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardProps) {
   const [search, setSearch] = useState("");
+  const [tierFilter, setTierFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [page, setPage] = useState(1);
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [total, setTotal] = useState(0);
   const [audit, setAudit] = useState<AuditRow[]>([]);
+  const [liveConnections, setLiveConnections] = useState<LiveConnectionRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [roomAllowance, setRoomAllowance] = useState("");
   const [exportCredits, setExportCredits] = useState("");
@@ -61,6 +66,9 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
   const loadUsers = useCallback(async () => {
     setError("");
     const params = new URLSearchParams({ page: String(page), pageSize: "25", search });
+    if (tierFilter) params.set("tier", tierFilter);
+    if (statusFilter) params.set("status", statusFilter);
+    if (roleFilter) params.set("role", roleFilter);
     const response = await fetch(`${apiBase}/api/admin/users?${params}`, { headers: headers() });
     const data = (await response.json()) as {
       users?: AdminUserRow[];
@@ -73,12 +81,15 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
     }
     setUsers(data.users ?? []);
     setTotal(data.total ?? 0);
-  }, [apiBase, headers, page, search]);
+  }, [apiBase, headers, page, roleFilter, search, statusFilter, tierFilter]);
 
   const loadAudit = useCallback(async () => {
     const response = await fetch(`${apiBase}/api/admin/audit?limit=80`, { headers: headers() });
-    const data = (await response.json()) as { entries?: AuditRow[] };
-    if (response.ok) setAudit(data.entries ?? []);
+    const data = (await response.json()) as { entries?: AuditRow[]; liveConnections?: LiveConnectionRow[] };
+    if (response.ok) {
+      setAudit(data.entries ?? []);
+      setLiveConnections(data.liveConnections ?? []);
+    }
   }, [apiBase, headers]);
 
   useEffect(() => {
@@ -133,6 +144,28 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
     }
   };
 
+  const clearSessionLocks = async (userId?: string): Promise<void> => {
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch(`${apiBase}/api/admin/session-locks/clear`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify(userId ? { userId } : {}),
+      });
+      const data = (await response.json()) as { cleared?: number; error?: { message?: string } };
+      if (!response.ok) {
+        setError(data.error?.message ?? "Could not clear session locks.");
+        return;
+      }
+      setNotice(`Cleared ${data.cleared ?? 0} active session lock(s).`);
+      await loadAudit();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="admin-dashboard">
       <section className="card mission-panel glass-panel">
@@ -152,6 +185,51 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
             }}
             aria-label="Search users"
           />
+          <select
+            className="blueprint-input"
+            value={tierFilter}
+            onChange={(e) => {
+              setTierFilter(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filter by active plan tier"
+          >
+            <option value="">All tiers</option>
+            <option value="trial">Trial</option>
+            <option value="hobbyist">Hobbyist</option>
+            <option value="enthusiast">Enthusiast</option>
+            <option value="studio">Studio</option>
+            <option value="venue">Venue</option>
+            <option value="admin">Admin</option>
+            <option value="free">Free</option>
+          </select>
+          <select
+            className="blueprint-input"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filter by lifecycle status"
+          >
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="delinquent">Delinquent</option>
+            <option value="canceled">Canceled</option>
+          </select>
+          <select
+            className="blueprint-input"
+            value={roleFilter}
+            onChange={(e) => {
+              setRoleFilter(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filter by role"
+          >
+            <option value="">All roles</option>
+            <option value="admin">Admin</option>
+            <option value="user">User</option>
+          </select>
           <button type="button" className="secondary-btn" onClick={() => void loadUsers()}>
             Refresh roster
           </button>
@@ -249,11 +327,23 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
                 <button type="button" className="primary-btn" disabled={busy} onClick={() => void patchSelected()}>
                   {busy ? "Saving…" : "Apply overrides"}
                 </button>
+                <button type="button" className="secondary-btn" disabled={busy} onClick={() => void clearSessionLocks(selected.id)}>
+                  Clear this user’s session locks
+                </button>
               </div>
             ) : (
               <p className="muted">Select a user from the roster.</p>
             )}
             <h3 className="admin-dashboard__aside-title">Operational audit</h3>
+            <div className="admin-dashboard__live-connections" role="status">
+              <strong>Active live streams:</strong>{" "}
+              {liveConnections.length === 0
+                ? "0"
+                : liveConnections.map((row) => `${row.sessionId} (${row.connections})`).join(", ")}
+            </div>
+            <button type="button" className="secondary-btn" disabled={busy} onClick={() => void clearSessionLocks()}>
+              Clear all session locks
+            </button>
             <ul className="admin-dashboard__audit list-compact">
               {audit.slice(0, 40).map((row, i) => (
                 <li key={`${row.ts ?? i}-${row.action ?? ""}`}>

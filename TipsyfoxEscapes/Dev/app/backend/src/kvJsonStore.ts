@@ -32,7 +32,15 @@ const kvKey = (name: string): string => `erb:${name.replace(/\.json$/i, "")}`;
 
 export const kvGetJson = async <T>(name: string): Promise<T | null> => {
   if (!isKvConfigured()) return null;
-  const raw = await kvCommand(["GET", kvKey(name)]);
+  let raw: unknown;
+  try {
+    raw = await kvCommand(["GET", kvKey(name)]);
+  } catch (err) {
+    // Fall back to local mirror if the managed KV service is temporarily unreachable.
+    // eslint-disable-next-line no-console
+    console.warn(`KV read failed for ${name}; using local mirror if available.`, err);
+    return null;
+  }
   if (raw == null) return null;
   if (typeof raw === "object") return raw as T;
   try {
@@ -44,7 +52,13 @@ export const kvGetJson = async <T>(name: string): Promise<T | null> => {
 
 export const kvSetJson = async (name: string, value: unknown): Promise<void> => {
   if (!isKvConfigured()) return;
-  await kvCommand(["SET", kvKey(name), JSON.stringify(value)]);
+  try {
+    await kvCommand(["SET", kvKey(name), JSON.stringify(value)]);
+  } catch (err) {
+    // Preserve availability for auth/admin writes by continuing to the local mirror.
+    // eslint-disable-next-line no-console
+    console.warn(`KV write failed for ${name}; persisted to local mirror only.`, err);
+  }
 };
 
 const filePath = (name: string): string => path.join(getDataDir(), name);

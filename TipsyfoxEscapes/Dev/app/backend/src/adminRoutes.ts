@@ -34,6 +34,8 @@ export type AdminRouteDeps = {
   }) => Promise<void>;
   readBillingAudit: (limit: number) => Promise<Array<Record<string, unknown>>>;
   toPublicUser: (user: AdminStoredUser) => Record<string, unknown>;
+  clearSessionLocks: (userId?: string) => number;
+  getLiveConnectionStats: () => Array<{ sessionId: string; connections: number }>;
 };
 
 const requireAdmin = (deps: AdminRouteDeps, req: express.Request, res: express.Response): AdminStoredUser | null => {
@@ -76,6 +78,9 @@ export const registerAdminRoutes = (app: express.Express, deps: AdminRouteDeps):
       .toLowerCase();
     const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
     const pageSize = Math.min(100, Math.max(10, Number.parseInt(String(req.query.pageSize ?? "25"), 10) || 25));
+    const tier = String(req.query.tier ?? "").trim().toLowerCase();
+    const status = String(req.query.status ?? "").trim().toLowerCase();
+    const role = String(req.query.role ?? "").trim().toLowerCase();
     let rows = Array.from(deps.usersByEmail.values()).map(adminUserRow);
     if (q) {
       rows = rows.filter(
@@ -86,6 +91,9 @@ export const registerAdminRoutes = (app: express.Express, deps: AdminRouteDeps):
           r.id.toLowerCase().includes(q),
       );
     }
+    if (tier) rows = rows.filter((r) => r.tierType === tier);
+    if (status) rows = rows.filter((r) => r.lifecycleStatus === status);
+    if (role) rows = rows.filter((r) => r.role === role);
     rows.sort((a, b) => a.email.localeCompare(b.email));
     const total = rows.length;
     const start = (page - 1) * pageSize;
@@ -154,6 +162,20 @@ export const registerAdminRoutes = (app: express.Express, deps: AdminRouteDeps):
     if (emailFilter) {
       entries = entries.filter((e) => String(e.email ?? "").toLowerCase().includes(emailFilter));
     }
-    res.json({ entries: entries.slice(0, limit) });
+    res.json({ entries: entries.slice(0, limit), liveConnections: deps.getLiveConnectionStats() });
+  });
+
+  app.post("/api/admin/session-locks/clear", async (req, res) => {
+    const admin = requireAdmin(deps, req, res);
+    if (!admin) return;
+    const userId = typeof req.body?.userId === "string" ? req.body.userId.trim() : undefined;
+    const cleared = deps.clearSessionLocks(userId || undefined);
+    await deps.appendBillingAudit({
+      ts: new Date().toISOString(),
+      action: "admin_session_locks_cleared",
+      email: admin.email,
+      detail: { userId: userId || null, cleared },
+    });
+    res.json({ cleared });
   });
 };
