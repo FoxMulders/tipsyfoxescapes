@@ -3589,9 +3589,26 @@ const readAuthUser = (req: express.Request): StoredUser | undefined => {
   return getStoredUserById(id);
 };
 
+const readAuthUserAsync = async (req: express.Request): Promise<StoredUser | undefined> => {
+  const id = await readAuthUserIdAsync(req);
+  if (!id) return undefined;
+  return getStoredUserById(id);
+};
+
 const claimSessionForAuth = (sessionId: string | undefined, req: express.Request): StoredUser | undefined => {
   if (!sessionId) return undefined;
   const user = readAuthUser(req);
+  if (user) sessionUserOwners.set(sessionId, user.id);
+  const ownerId = sessionUserOwners.get(sessionId);
+  return ownerId ? getStoredUserById(ownerId) : user;
+};
+
+const claimSessionForAuthAsync = async (
+  sessionId: string | undefined,
+  req: express.Request,
+): Promise<StoredUser | undefined> => {
+  if (!sessionId) return undefined;
+  const user = await readAuthUserAsync(req);
   if (user) sessionUserOwners.set(sessionId, user.id);
   const ownerId = sessionUserOwners.get(sessionId);
   return ownerId ? getStoredUserById(ownerId) : user;
@@ -4132,7 +4149,7 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
   }
 });
 
-app.post("/api/planning/session", (req, res) => {
+app.post("/api/planning/session", async (req, res) => {
   // Validate planning payload and start a new session state.
   const {
     playersConcurrent,
@@ -4159,7 +4176,7 @@ app.post("/api/planning/session", (req, res) => {
     return;
   }
   const newSessionId = `sess_${nextSessionId++}`;
-  const ownerId = readAuthUserId(req);
+  const ownerId = await readAuthUserIdAsync(req);
   if (ownerId) sessionUserOwners.set(newSessionId, ownerId);
   const bodyMode = (req.body as { operatingMode?: unknown })?.operatingMode;
   const initialOperatingMode: OperatingMode | undefined =
@@ -4392,14 +4409,14 @@ app.put("/api/planning/session/:sessionId/theme-coach", (req, res) => {
   res.json({ ok: true, messages: session.themeCoachChat });
 });
 
-app.post("/api/themes/generate", (req, res) => {
+app.post("/api/themes/generate", async (req, res) => {
   const { sessionId } = req.body ?? {};
   const session = resolvePlanningSession(sessionId);
   if (!session) {
     respondInvalidPlanningSession(res, sessionId);
     return;
   }
-  const billingUser = claimSessionForAuth(String(sessionId), req);
+  const billingUser = await claimSessionForAuthAsync(String(sessionId), req);
   const denied = generationAccessError(billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
@@ -4450,14 +4467,14 @@ app.post("/api/themes/generate", (req, res) => {
   });
 });
 
-app.post("/api/themes/refresh", (req, res) => {
+app.post("/api/themes/refresh", async (req, res) => {
   const { sessionId, excludeThemeIds } = req.body ?? {};
   const session = resolvePlanningSession(sessionId);
   if (!session) {
     respondInvalidPlanningSession(res, sessionId);
     return;
   }
-  const billingUser = claimSessionForAuth(String(sessionId), req);
+  const billingUser = await claimSessionForAuthAsync(String(sessionId), req);
   const denied = generationAccessError(billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
@@ -4511,7 +4528,7 @@ app.post("/api/themes/refresh", (req, res) => {
   });
 });
 
-app.post("/api/themes/custom", (req, res) => {
+app.post("/api/themes/custom", async (req, res) => {
   // Support user-authored themes and include them in selectable options.
   const { sessionId, name, description } = req.body ?? {};
   const session = resolvePlanningSession(sessionId);
@@ -4519,7 +4536,7 @@ app.post("/api/themes/custom", (req, res) => {
     respondInvalidPlanningSession(res, sessionId);
     return;
   }
-  const billingUser = claimSessionForAuth(String(sessionId), req);
+  const billingUser = await claimSessionForAuthAsync(String(sessionId), req);
   if (!hasFullCatalogAccessUser(billingUser)) {
     res.status(403).json({
       error: {
@@ -4623,7 +4640,7 @@ app.post("/api/puzzles/generate", async (req, res) => {
     respondInvalidPlanningSession(res, sessionId);
     return;
   }
-  const billingUser = claimSessionForAuth(String(sessionId), req);
+  const billingUser = await claimSessionForAuthAsync(String(sessionId), req);
   const denied = generationAccessError(billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });

@@ -2929,7 +2929,7 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/api/planning/session/${activeSessionId}/planning-input`, {
         method: "PATCH",
-        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify(body),
       });
       const data = await parseApiJson<{ ok?: boolean; error?: { message?: string; code?: string } }>(response);
@@ -3241,13 +3241,25 @@ export default function App() {
     }
     persistAuth("", null);
   };
+  const currentAuthToken = (): string => {
+    if (authToken.trim()) return authToken.trim();
+    try {
+      const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+      if (!raw) return "";
+      const parsed = JSON.parse(raw) as { authToken?: unknown };
+      return typeof parsed.authToken === "string" ? parsed.authToken.trim() : "";
+    } catch {
+      return "";
+    }
+  };
+  const hasAuthToken = (): boolean => currentAuthToken().length > 0;
   const withAuthHeaders = (): HeadersInit => ({
     "Content-Type": "application/json",
-    Authorization: `Bearer ${authToken}`,
+    Authorization: `Bearer ${currentAuthToken()}`,
     "X-Device-Id": deviceId,
   });
   const withAuthGetHeaders = (): HeadersInit => ({
-    Authorization: `Bearer ${authToken}`,
+    Authorization: `Bearer ${currentAuthToken()}`,
     "X-Device-Id": deviceId,
   });
   const anonJsonHeaders = (): HeadersInit => ({
@@ -3709,7 +3721,7 @@ export default function App() {
   ): Promise<Theme[] | undefined> => {
     const response = await fetch(`${API_BASE}${endpoint}`, {
       method: "POST",
-      headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+      headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
       body:
         endpoint === "/api/themes/refresh"
           ? JSON.stringify({ sessionId: activeSessionId, excludeThemeIds: currentThemes.map((theme) => theme.id) })
@@ -3742,7 +3754,7 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/api/puzzles/generate`, {
         method: "POST",
-        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify({ sessionId: activeSessionId, themeId }),
       });
       const data = (await response.json()) as {
@@ -3848,7 +3860,7 @@ export default function App() {
   ): Promise<void> => {
     await fetch(`${API_BASE}/api/planning/session/${activeSessionId}/existing-puzzles`, {
       method: "POST",
-      headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+      headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
       body: JSON.stringify({ existingPuzzles: nextExistingPuzzles }),
     });
   };
@@ -3870,7 +3882,7 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/api/planning/session`, {
         method: "POST",
-        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify(payload),
       });
       const data = (await response.json()) as {
@@ -3883,8 +3895,9 @@ export default function App() {
         return undefined;
       }
       setSessionId(data.sessionId);
-      if (authToken) {
-        void persistPlanningSessionId(authToken, data.sessionId, data.leaseExpiresAt);
+      const tokenForPlanning = currentAuthToken();
+      if (tokenForPlanning) {
+        void persistPlanningSessionId(tokenForPlanning, data.sessionId, data.leaseExpiresAt);
       }
       themeCoachHydratedForSessionRef.current = "";
       setCustomThemeCoachMessages([]);
@@ -3927,7 +3940,8 @@ export default function App() {
     planningSessionRecoveryInFlight.current = true;
     try {
       setSessionId("");
-      if (authToken) await clearPersistedPlanningSession(authToken);
+      const tokenForPlanning = currentAuthToken();
+      if (tokenForPlanning) await clearPersistedPlanningSession(tokenForPlanning);
       const freshId = await createSession(undefined, { seedThemes: options?.seedThemes ?? false });
       if (freshId) {
         toast.message(planningSessionRecoveryNotice, { duration: 4000 });
@@ -4213,7 +4227,7 @@ export default function App() {
       try {
         response = await fetch(`${API_BASE}/api/themes/custom`, {
           method: "POST",
-          headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+          headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
           body: JSON.stringify({
             sessionId: activeSessionId,
             name: customThemeName,
@@ -4577,7 +4591,7 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/api/puzzles/${encodeURIComponent(puzzleId)}/replace`, {
         method: "POST",
-        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify({ sessionId: activeSessionId, themeId: selectedThemeId }),
       });
       const data = (await response.json()) as {
@@ -4621,7 +4635,7 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/api/puzzles/${encodeURIComponent(puzzleId)}/reject`, {
         method: "POST",
-        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify({ sessionId: activeSessionId }),
       });
       const data = (await response.json()) as {
@@ -4675,7 +4689,7 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/api/puzzles/fill-slot`, {
         method: "POST",
-        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify({
           sessionId: activeSessionId,
           category: slot.category,
@@ -4716,7 +4730,7 @@ export default function App() {
       void (await syncPlanningInputToServer(activeSessionId, "draft"));
       const response = await fetch(`${API_BASE}/api/plans/${activeSessionId}/export`, {
         method: "POST",
-        headers: authToken ? withAuthHeaders() : anonJsonHeaders(),
+        headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify({ format: "markdown" }),
       });
       const data = (await response.json()) as {
