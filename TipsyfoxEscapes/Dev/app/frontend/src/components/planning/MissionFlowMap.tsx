@@ -22,8 +22,8 @@ export function MissionFlowMap({
   const segW = compact ? 72 : n <= 5 ? 132 : 96;
   const w = Math.max(520, 56 + (n - 1) * segW);
   const useFork = youthAddOnEnabled && forkSegmentIndex !== null && forkSegmentIndex >= 0 && forkSegmentIndex < n - 1;
-  const h = 88;
-  const nodeY = 44;
+  const h = useFork ? 118 : 104;
+  const nodeY = useFork ? 56 : 48;
   const nodeR = compact ? 9 : 11;
   const lineEndInset = nodeR + 4;
   const xs = stepLabels.map((_, i) => 40 + i * ((w - 80) / Math.max(1, n - 1)));
@@ -60,12 +60,20 @@ export function MissionFlowMap({
       className={cn(
         "mission-flow-map mission-flow-map--header",
         compact && "mission-flow-map--compact",
+        useFork && "mission-flow-map--fork",
       )}
       role="navigation"
       aria-label="Mission progress map"
       data-testid="mission-flow-map"
+      style={{ minHeight: `${h}px` }}
     >
-      <svg className="mission-flow-svg" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMidYMid meet">
+      <svg
+        className="mission-flow-svg"
+        viewBox={`0 0 ${w} ${h}`}
+        preserveAspectRatio="xMidYMid meet"
+        aria-hidden="true"
+        focusable="false"
+      >
         <defs>
           <filter id={glowId} x="-40%" y="-40%" width="180%" height="180%">
             <feGaussianBlur stdDeviation="2.2" result="b" />

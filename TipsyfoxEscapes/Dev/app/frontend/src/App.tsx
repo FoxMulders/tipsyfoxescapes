@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { GlobalFooter } from "@/components/layout/GlobalFooter";
 import { PlanningSnapshotSheet } from "@/components/layout/PlanningSnapshotSheet";
 import { TopNavBar } from "@/components/layout/TopNavBar";
+import { FlowStepIntro } from "@/components/planning/FlowStepIntro";
 import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
 import { PricingPlanCard } from "@/components/PricingPlanCard";
 import { SquareCheckout } from "@/components/SquareCheckout";
@@ -84,6 +85,10 @@ type Puzzle = {
     issues: Array<{ code: string; severity: "error" | "warn"; field: string; message: string }>;
   };
   stageHint?: string;
+  physical_anchor_prop?: string;
+  narrative_justification?: string;
+  bill_of_materials?: string[];
+  build_documentation_url?: string;
   audienceTrack?: "main" | "youth_addon";
   gatesAdultProgression?: boolean;
   electronicDetails?: {
@@ -92,6 +97,7 @@ type Puzzle = {
     wiringDiagramSvg: string;
     buildSteps: string[];
     arduinoCode: string;
+    pinoutTable?: Array<{ pin: string; function: string; connectsTo: string }>;
   };
   /** Server preview gate — high-level label only until export credit is reserved. */
   previewLabel?: string;
@@ -5767,7 +5773,11 @@ export default function App() {
       <div className="builder-workspace">
         <section className="stage-main">
           <section className="card mission-panel flow-shell glass-panel builder-workspace-shell">
-            <div id="flow-shell-error-anchor" className="flow-shell-map-bar workspace-stepper" aria-live="polite">
+            <div
+              id="flow-shell-error-anchor"
+              className={`flow-shell-map-bar workspace-stepper${youthAddOnEnabled && juniorForkSegmentIndex !== null ? " flow-shell-map-bar--fork" : ""}`}
+              aria-live="polite"
+            >
               <MissionFlowMap
                 stepLabels={missionStepLabels}
                 activeIndex={wizardIndex}
@@ -5779,22 +5789,21 @@ export default function App() {
             </div>
             <div className="flow-shell-scroll-region">
             <div className="flow-controls">
-              <div className="flow-controls-top">
-                <div>
-                  {flowWizardStep === "setup" ? null : (
-                    <>
-                      <p className="muted">Step {wizardIndex + 1} of {wizardSteps.length}</p>
-                      <p><strong>{wizardLabel}</strong></p>
-                    </>
-                  )}
-                  {flowMutedHelper ? <p className="muted">{flowMutedHelper}</p> : null}
-                </div>
-                {showBackInFlowHeader && canGoWizardBack ? (
-                  <button type="button" className="secondary-btn flow-back-btn" onClick={goWizardBack}>
-                    ← Back
-                  </button>
-                ) : null}
-              </div>
+              {flowWizardStep !== "setup" ? (
+                <FlowStepIntro
+                  stepIndex={wizardIndex}
+                  stepTotal={wizardSteps.length}
+                  title={wizardLabel}
+                  helper={flowMutedHelper}
+                  actions={
+                    showBackInFlowHeader && canGoWizardBack ? (
+                      <button type="button" className="secondary-btn flow-back-btn" onClick={goWizardBack}>
+                        ← Back
+                      </button>
+                    ) : undefined
+                  }
+                />
+              ) : null}
             </div>
             {flowWizardStep === "setup" ? (
               <RoomDetailsStep

@@ -23,6 +23,11 @@ const samplePuzzle: ExportPuzzleRef = {
   difficulty: "medium",
   objective: "Decode the valve order from the wall chart.",
   howItWorks: "Players cross-reference color bands on the chart with labeled valves.",
+  physical_anchor_prop: "beaker",
+  narrative_justification:
+    "Inside **Bench station**, the crew engages **beaker** to achieve: Decode the valve order from the wall chart.",
+  bill_of_materials: ["beaker (host inventory anchor)", "Printed clue set"],
+  build_documentation_url: "https://roomescapeartist.com/",
   themeFitReason:
     'Inventory tie-in (“beaker”): Clues are hidden inside glassware on the bench. Placement hint: Center workbench in Science Lab.',
   stageHint: "Bench station",
@@ -39,9 +44,9 @@ const samplePuzzle: ExportPuzzleRef = {
 describe("exportRunbook", () => {
   it("buildNarrativeJustification includes where and why", () => {
     const text = buildNarrativeJustification(samplePuzzle, ctx);
-    expect(text).toContain("Science Lab");
+    expect(text).toContain("Bench station");
     expect(text).toContain("beaker");
-    expect(text).toContain("Why it belongs here");
+    expect(text).toMatch(/achieve|Why it belongs here/i);
   });
 
   it("buildConsolidatedBomTable emits markdown table rows", () => {

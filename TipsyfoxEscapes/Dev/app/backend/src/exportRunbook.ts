@@ -2,6 +2,8 @@
  * Technical Director export sections — printable runbook structure, BOM, narrative justification, GM briefing.
  */
 
+import { formatPinoutTableMarkdown } from "./arduinoResourceRouter.js";
+
 export type ExportPuzzleRef = {
   title: string;
   id: string;
@@ -15,11 +17,16 @@ export type ExportPuzzleRef = {
   gatesAdultProgression?: boolean;
   solveSteps: string[];
   referenceLinks: Array<{ title: string; url: string; creditTo?: string; affiliateUrl?: string }>;
+  physical_anchor_prop?: string;
+  narrative_justification?: string;
+  bill_of_materials?: string[];
+  build_documentation_url?: string;
   electronicDetails?: {
     parts: string[];
     wiringDiagram: string[];
     buildSteps: string[];
     arduinoCode: string;
+    pinoutTable?: Array<{ pin: string; function: string; connectsTo: string }>;
   };
 };
 
@@ -61,8 +68,10 @@ export const buildNarrativeJustification = (
   puzzle: ExportPuzzleRef,
   ctx: ExportSessionContext,
 ): string => {
+  if (puzzle.narrative_justification?.trim()) return puzzle.narrative_justification.trim();
   const where = zoneLabel(puzzle, ctx.environmentType);
   const prop =
+    puzzle.physical_anchor_prop?.trim() ??
     extractInventoryProp(puzzle.themeFitReason) ??
     (puzzle.category === "electronic"
       ? "installed control panel or sensor rig"
@@ -82,15 +91,27 @@ export const buildNarrativeJustification = (
 
 const buildResourceLines = (puzzle: ExportPuzzleRef, redactElectronic: boolean): string[] => {
   const rows: string[] = ["#### Build resources", ""];
+  if (puzzle.physical_anchor_prop?.trim()) {
+    rows.push(`- **Physical anchor prop:** ${puzzle.physical_anchor_prop.trim()} _(do not relocate without redesign)_`);
+  }
+  if (puzzle.build_documentation_url?.trim()) {
+    rows.push(`- **Build documentation:** [Open fabrication guide](${puzzle.build_documentation_url.trim()})`);
+  }
+  const bom = puzzle.bill_of_materials ?? [];
+  if (bom.length > 0) {
+    rows.push("- **Bill of materials (this puzzle):**");
+    bom.forEach((line) => rows.push(`  - ${line}`));
+  }
   if (puzzle.category === "electronic") {
     rows.push(
       `- **Technique library:** [Playful Technology — Arduino escape-room patterns](${PLAYFUL_TECH_URL}) — compare their wiring discipline to your generated pinout below.`,
     );
     if (!redactElectronic && puzzle.electronicDetails) {
-      const parts = puzzle.electronicDetails.parts ?? [];
-      if (parts.length > 0) {
-        rows.push("- **Bill of materials (this puzzle):**");
-        parts.forEach((p) => rows.push(`  - ${p}`));
+      const pinout = puzzle.electronicDetails.pinoutTable ?? [];
+      if (pinout.length > 0) {
+        rows.push("- **MCU pinout mapping (production):**");
+        rows.push(...formatPinoutTableMarkdown(pinout).map((line) => (line.startsWith("|") ? `  ${line}` : line)));
+        rows.push("");
       }
       const wiring = puzzle.electronicDetails.wiringDiagram ?? [];
       if (wiring.length > 0) {
@@ -140,6 +161,21 @@ export const buildConsolidatedBomTable = (
 ): string[] => {
   const rows: BomRow[] = [];
   for (const puzzle of puzzles) {
+    const puzzleBom = puzzle.bill_of_materials ?? [];
+    if (puzzleBom.length > 0) {
+      for (const component of puzzleBom) {
+        rows.push({
+          puzzle: puzzle.title,
+          category: puzzle.category,
+          component,
+          qty: "1",
+          notes: puzzle.build_documentation_url
+            ? `See ${puzzle.build_documentation_url}`
+            : "Cross-check narrative justification",
+        });
+      }
+      continue;
+    }
     if (puzzle.category === "electronic" && puzzle.electronicDetails && !redactElectronic) {
       for (const part of puzzle.electronicDetails.parts ?? []) {
         rows.push({
@@ -147,11 +183,12 @@ export const buildConsolidatedBomTable = (
           category: "electronic",
           component: part,
           qty: "1 set",
-          notes: "Verify against wiring diagram in export",
+          notes: "Verify against pinout table in export",
         });
       }
     } else if (puzzle.category === "physical") {
-      const prop = extractInventoryProp(puzzle.themeFitReason) ?? "Physical prop kit";
+      const prop =
+        puzzle.physical_anchor_prop?.trim() ?? extractInventoryProp(puzzle.themeFitReason) ?? "Physical prop kit";
       rows.push({
         puzzle: puzzle.title,
         category: "physical",

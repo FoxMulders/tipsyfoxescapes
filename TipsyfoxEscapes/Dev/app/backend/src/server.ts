@@ -63,6 +63,10 @@ import {
 } from "./userLifecycle.js";
 import { allPuzzlesPassedPuzzleQa, applyPuzzleQaGate, type PuzzleQaReport } from "./puzzleQa.js";
 import {
+  enrichPuzzlesWithManufacturingSchema,
+  PUZZLE_GENERATION_INVENTORY_POLICY,
+} from "./puzzleManufacturingSchema.js";
+import {
   loadAuthTokens,
   loadPlanningSessions,
   persistAuthTokens,
@@ -95,12 +99,21 @@ type Puzzle = {
   /** When true, host guidance: adult primary path may depend on this youth-accessible outcome. */
   gatesAdultProgression?: boolean;
   stageHint?: string;
+  /** Host inventory prop this beat must physically engage (when inventory-led). */
+  physical_anchor_prop?: string;
+  /** Printable why + where narrative for build teams. */
+  narrative_justification?: string;
+  /** Procurement list for this puzzle (parts + anchor prop). */
+  bill_of_materials?: string[];
+  /** Official wiring / fabrication guide URL. */
+  build_documentation_url?: string;
   electronicDetails?: {
     parts: string[];
     wiringDiagram: string[];
     wiringDiagramSvg: string;
     buildSteps: string[];
     arduinoCode: string;
+    pinoutTable?: Array<{ pin: string; function: string; connectsTo: string }>;
   };
   /** Puzzle QA department report (links scrubbed; copy/diagram checks). */
   puzzleQa?: PuzzleQaReport;
@@ -1827,6 +1840,9 @@ const injectItemsIntoThemeDescription = (theme: Theme, session: SessionState): T
       ...lines,
       "",
       "_Generator note: Prefer beats you can stage from this inventory before you buy niche specialty props._",
+      "",
+      "### Puzzle generation policy",
+      PUZZLE_GENERATION_INVENTORY_POLICY,
     ].join("\n");
     description = `${description}\n\n${block}`;
     const tldrExtra = ` Uses your listed props (${inv.slice(0, 3).join(", ")}).`;
@@ -1882,41 +1898,17 @@ const scoreInventoryForPuzzle = (puzzle: Puzzle, item: string): number => {
 
 const MIN_INVENTORY_ANCHOR_SCORE = 10;
 
-const annotatePuzzlesWithInventoryAnchors = (session: SessionState, puzzles: Puzzle[]): Puzzle[] => {
-  const inv = normalizePlanningInventory(session.planningInput.availableItems);
-  if (inv.length === 0) return puzzles;
-  const env = session.planningInput.environmentType;
-  const usage = new Map<string, number>();
-  const takePick = (puzzle: Puzzle): string | null => {
-    let best = inv[0]!;
-    let bestKey = -1;
-    for (const item of inv) {
-      const k = item.toLowerCase();
-      const uses = usage.get(k) ?? 0;
-      const tieBreak = 1000 - uses * 7;
-      const score = scoreInventoryForPuzzle(puzzle, item);
-      const key = score * 10_000 + tieBreak;
-      if (key > bestKey) {
-        bestKey = key;
-        best = item;
-      }
-    }
-    if (scoreInventoryForPuzzle(puzzle, best) < MIN_INVENTORY_ANCHOR_SCORE) return null;
-    usage.set(best.toLowerCase(), (usage.get(best.toLowerCase()) ?? 0) + 1);
-    return best;
-  };
-
-  return puzzles.map((puzzle) => {
-    const pick = takePick(puzzle);
-    if (!pick) return puzzle;
-    const { placement, puzzleUses } = describeInventoryItem(pick, env);
-    const tag = `${sentenceCaseLead(`Inventory tie-in (“${pick}”): ${puzzleUses}`)} ${sentenceCaseLead(`Placement hint: ${placement}`)}`;
-    return {
-      ...puzzle,
-      themeFitReason: puzzle.themeFitReason ? `${puzzle.themeFitReason} ${tag}` : tag,
-    };
+const annotatePuzzlesWithInventoryAnchors = (session: SessionState, puzzles: Puzzle[]): Puzzle[] =>
+  enrichPuzzlesWithManufacturingSchema(puzzles, {
+    normalizeInventory: normalizePlanningInventory,
+    describeItem: describeInventoryItem,
+    scoreItemForPuzzle: (puzzle, item) => scoreInventoryForPuzzle(puzzle as Puzzle, item),
+    minAnchorScore: MIN_INVENTORY_ANCHOR_SCORE,
+    sentenceCaseLead,
+    environmentType: session.planningInput.environmentType,
+    themeName: session.selectedTheme?.name ?? "Selected theme",
+    availableItems: session.planningInput.availableItems,
   });
-};
 
 const buildSuggestedAdditionLists = (
   session: SessionState,
@@ -5076,6 +5068,10 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
     solveSteps: puzzle.solveSteps ?? [],
     referenceLinks: puzzle.referenceLinks ?? [],
     electronicDetails: puzzle.electronicDetails,
+    physical_anchor_prop: puzzle.physical_anchor_prop,
+    narrative_justification: puzzle.narrative_justification,
+    bill_of_materials: puzzle.bill_of_materials,
+    build_documentation_url: puzzle.build_documentation_url,
   }));
   const lines = [
     "# Escape Room Plan",

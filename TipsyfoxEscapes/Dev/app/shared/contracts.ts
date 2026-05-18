@@ -47,6 +47,10 @@ export interface Puzzle {
   objective: string;
   solveSteps: string[];
   difficulty: Difficulty;
+  physical_anchor_prop?: string;
+  narrative_justification?: string;
+  bill_of_materials?: string[];
+  build_documentation_url?: string;
 }
 
 export interface CreateSessionResponse {
