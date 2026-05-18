@@ -61,10 +61,10 @@ type RoomDetailsStepProps = {
 };
 
 const selectClass =
-  "flex h-10 w-full rounded-md border border-slate-800/50 bg-input/80 px-3 py-2 text-sm backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-ring";
+  "flex h-10 w-full rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-50 focus:outline-none focus:ring-2 focus:ring-ring";
 
 const textareaClass =
-  "flex min-h-[7.5rem] w-full resize-y rounded-md border border-slate-800/50 bg-input/80 px-3 py-2 text-sm leading-relaxed backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-ring";
+  "flex min-h-[7.5rem] w-full resize-y rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-sm leading-relaxed text-slate-50 focus:outline-none focus:ring-2 focus:ring-ring";
 
 export function RoomDetailsStep(props: RoomDetailsStepProps) {
   const invalid = (key: string) => Boolean(props.validationFlags[key]);
@@ -73,7 +73,7 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
 
   return (
     <div className="flow-content flow-content--blueprint">
-      <div className="room-details-form-card overflow-hidden rounded-2xl border border-slate-600/50 bg-slate-950/95 shadow-2xl backdrop-blur-md">
+      <div className="room-details-form-card overflow-hidden rounded-xl border border-slate-600 bg-slate-950 shadow-lg">
         <header className="room-setup-command-bar" aria-label="Room details setup">
           <div className="room-setup-command-bar__primary">
             <h2 className="room-details-title">Room details</h2>
@@ -289,7 +289,7 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             onKindsChange={props.setPropFabricationKinds}
           />
 
-          <Accordion type="single" collapsible className="form-field-panel rounded-md border border-slate-800/50 bg-card/30 px-4 backdrop-blur-md">
+          <Accordion type="single" collapsible className="form-field-panel rounded-md border border-slate-600 bg-slate-900 px-4">
             <AccordionItem value="advanced">
               <AccordionTrigger>Advanced configuration (difficulty)</AccordionTrigger>
               <AccordionContent className="space-y-4">

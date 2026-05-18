@@ -19,12 +19,12 @@ export function MissionFlowMap({
   const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const n = stepLabels.length;
   const compact = n >= 6;
-  const segW = compact ? 72 : n <= 5 ? 132 : 96;
-  const w = Math.max(520, 56 + (n - 1) * segW);
+  const segW = compact ? 52 : n <= 5 ? 88 : 68;
+  const w = Math.max(420, 48 + (n - 1) * segW);
   const useFork = youthAddOnEnabled && forkSegmentIndex !== null && forkSegmentIndex >= 0 && forkSegmentIndex < n - 1;
-  const h = useFork ? 118 : 104;
-  const nodeY = useFork ? 56 : 48;
-  const nodeR = compact ? 9 : 11;
+  const h = useFork ? 72 : 60;
+  const nodeY = useFork ? 30 : 26;
+  const nodeR = compact ? 6.5 : 7.5;
   const lineEndInset = nodeR + 4;
   const xs = stepLabels.map((_, i) => 40 + i * ((w - 80) / Math.max(1, n - 1)));
 
@@ -58,17 +58,16 @@ export function MissionFlowMap({
   return (
     <div
       className={cn(
-        "mission-flow-map mission-flow-map--header",
+        "mission-flow-map mission-flow-map--header mission-flow-map--compact-sticky",
         compact && "mission-flow-map--compact",
         useFork && "mission-flow-map--fork",
       )}
       role="navigation"
       aria-label="Mission progress map"
       data-testid="mission-flow-map"
-      style={{ minHeight: `${h + (useFork ? 28 : 18)}px` }}
     >
       <svg
-        className="mission-flow-svg block max-h-none w-full overflow-visible"
+        className="mission-flow-svg mission-flow-svg--compact block w-full max-h-[4.25rem] overflow-visible"
         viewBox={`0 0 ${w} ${h}`}
         preserveAspectRatio="xMidYMid meet"
         aria-hidden="true"
@@ -97,7 +96,7 @@ export function MissionFlowMap({
                 className="mission-flow-path-track"
                 fill="none"
                 stroke={upcoming ? "rgba(40, 52, 82, 0.65)" : "rgba(52, 68, 108, 0.95)"}
-                strokeWidth={6}
+                strokeWidth={4.5}
                 strokeLinecap="round"
               />
               <path
@@ -110,7 +109,7 @@ export function MissionFlowMap({
                 )}
                 fill="none"
                 stroke={segStroke(done, active)}
-                strokeWidth={active ? 4.1 : done ? 3.5 : 2.6}
+                strokeWidth={active ? 3.2 : done ? 2.8 : 2.2}
                 strokeLinecap="round"
                 filter={active ? `url(#${glowId})` : undefined}
               />
@@ -118,7 +117,7 @@ export function MissionFlowMap({
                 const x0 = xs[i] ?? 0;
                 const x1 = xs[i + 1] ?? 0;
                 const mid = (x0 + x1) / 2;
-                const chev = 5;
+                const chev = 4;
                 const fill = active ? "hsl(187 92% 48%)" : done ? "hsl(187 70% 62%)" : "rgba(88, 108, 148, 0.55)";
                 return (
                   <polygon
@@ -168,7 +167,7 @@ export function MissionFlowMap({
               <text y={4} textAnchor="middle" className="mission-flow-node-num">
                 {i + 1}
               </text>
-              <text y={nodeR + 22} textAnchor="middle" className="mission-flow-node-label">
+              <text y={nodeR + 15} textAnchor="middle" className="mission-flow-node-label">
                 {label}
               </text>
             </g>
@@ -176,9 +175,8 @@ export function MissionFlowMap({
         })}
       </svg>
       {useFork ? (
-        <p className="muted mission-flow-fork-caption" role="note">
-          <span className="mission-flow-fork-badge">Junior add-on</span> Parallel easy–medium track on the Build → Review
-          leg (same fiction as the main crew).
+        <p className="mission-flow-fork-caption" role="note">
+          <span className="mission-flow-fork-badge">Junior add-on</span> Parallel track on Build → Review
         </p>
       ) : null}
     </div>

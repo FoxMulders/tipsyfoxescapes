@@ -5772,10 +5772,10 @@ export default function App() {
       <>
       <div className="builder-workspace">
         <section className="stage-main">
-          <section className="card mission-panel flow-shell glass-panel builder-workspace-shell">
+          <section className="card mission-panel flow-shell builder-workspace-shell">
             <div
               id="flow-shell-error-anchor"
-              className={`flow-shell-map-bar workspace-stepper${youthAddOnEnabled && juniorForkSegmentIndex !== null ? " flow-shell-map-bar--fork" : ""}`}
+              className={`flow-shell-map-bar workspace-stepper sticky top-0 z-50${youthAddOnEnabled && juniorForkSegmentIndex !== null ? " flow-shell-map-bar--fork" : ""}`}
               aria-live="polite"
             >
               <MissionFlowMap

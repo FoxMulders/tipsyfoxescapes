@@ -721,14 +721,14 @@ pre.code-inline {
   display: flex;
   flex-direction: column;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid rgba(72, 130, 140, 0.55);
-  background: hsl(220 28% 5% / 0.98);
+  background: hsl(220 28% 5%);
   box-shadow:
     0 18px 48px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  max-height: calc(100dvh - var(--builder-chrome-offset, 11.5rem));
-  min-height: min(28rem, 72dvh);
+  max-height: none;
+  min-height: 0;
   isolation: isolate;
 }
 
@@ -743,36 +743,30 @@ pre.code-inline {
 }
 
 .flow-shell-scroll-region {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 0.5rem 1rem 1.25rem;
-  -webkit-overflow-scrolling: touch;
+  flex: 0 0 auto;
+  overflow: visible;
+  padding: 0 1rem 1.5rem;
   position: relative;
   z-index: 1;
-  isolation: isolate;
 }
 
 .flow-shell-map-bar {
-  position: relative;
-  top: auto;
-  z-index: 20;
+  position: sticky;
+  top: 0;
+  z-index: 50;
   flex: 0 0 auto;
   width: 100%;
-  min-height: 10rem;
-  height: auto;
-  padding: 0.75rem 1rem 1.25rem;
-  margin: 0 0 2rem;
-  border-bottom: 1px solid rgba(72, 130, 140, 0.45);
-  background: hsl(220 26% 7% / 0.99);
+  min-height: 0;
+  padding: 0.35rem 0.85rem 0.5rem;
+  margin: 0;
+  border-bottom: 1px solid rgba(72, 130, 140, 0.5);
+  background: hsl(220 28% 5%);
   overflow: hidden;
   isolation: isolate;
 }
 
 .flow-shell-map-bar--fork {
-  min-height: 11.5rem;
+  padding-bottom: 0.65rem;
 }
 
 .flow-shell .flow-controls {
@@ -814,14 +808,10 @@ pre.code-inline {
   width: 100%;
   margin: 0;
   padding: 0.85rem 1rem;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid rgba(72, 130, 140, 0.52);
-  background: hsl(220 22% 8% / 0.96);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: hsl(220 28% 5%);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
   overflow: hidden;
 }
 
@@ -903,12 +893,8 @@ pre.code-inline {
   padding: 0.85rem 1rem;
   border-radius: 12px;
   border: 1px solid rgba(72, 130, 140, 0.52);
-  background: hsl(220 24% 9% / 0.82);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: hsl(220 28% 5%);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
 }
 
 .theme-dock-toolbar {
@@ -2973,16 +2959,20 @@ label.checkbox-field {
 }
 
 .mission-flow-map {
-  margin: 0.15rem 0 0.5rem;
-  min-height: 6.75rem;
+  margin: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
 }
 
+.mission-flow-map--compact-sticky {
+  gap: 0.15rem;
+}
+
 .mission-flow-map--header {
   width: 100%;
-  padding-bottom: 0.5rem;
+  padding: 0;
   overflow: hidden;
 }
 
@@ -2993,7 +2983,7 @@ label.checkbox-field {
 }
 
 .mission-flow-map--fork {
-  min-height: 7.5rem;
+  min-height: 0;
 }
 
 .mission-flow-map--header .mission-flow-svg {
@@ -3011,9 +3001,13 @@ label.checkbox-field {
 
 .mission-flow-svg {
   width: 100%;
-  max-width: 640px;
+  max-width: 100%;
   height: auto;
   display: block;
+}
+
+.mission-flow-svg--compact {
+  max-height: 4.25rem;
 }
 
 .mission-flow-segment {
@@ -3099,8 +3093,13 @@ label.checkbox-field {
   filter: drop-shadow(0 0 6px rgba(55, 210, 200, 0.35));
 }
 
-.mission-flow-map--compact .mission-flow-node-label {
-  font-size: 8.5px;
+.mission-flow-map--compact .mission-flow-node-label,
+.mission-flow-map--compact-sticky .mission-flow-node-label {
+  font-size: 7.5px;
+}
+
+.mission-flow-map--compact-sticky .mission-flow-node-num {
+  font-size: 9px;
 }
 
 .mission-flow-node-ring {
@@ -3137,8 +3136,10 @@ label.checkbox-field {
 }
 
 .mission-flow-fork-caption {
-  margin: 0.25rem 0 0;
-  font-size: 0.78rem;
+  margin: 0.1rem 0 0;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: hsl(210 18% 78%);
 }
 
 .glass-hud-strip {
@@ -4852,7 +4853,11 @@ ul.auth-hero-para {
 }
 
 .mission-panel.flow-shell {
-  overflow: hidden;
+  overflow: visible;
+}
+
+.builder-workspace .stage-main {
+  overflow: visible;
 }
 
 .flow-shell .flow-content {
@@ -4946,10 +4951,8 @@ ul.auth-hero-para {
   padding: 1.25rem 1.35rem 1.5rem;
   border-radius: 14px;
   border: 1px solid rgba(100, 150, 165, 0.55);
-  background: hsl(220 24% 6% / 0.98);
-  box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  background: hsl(220 28% 5%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   overflow: hidden;
   isolation: isolate;
 }
@@ -5035,12 +5038,12 @@ ul.auth-hero-para {
   padding: 0.9rem 1rem;
   border-radius: 12px;
   border: 1px solid rgba(100, 140, 160, 0.42);
-  background: hsl(220 22% 8% / 0.92);
+  background: hsl(220 26% 7%);
 }
 
 .room-details-form-card .form-field-panel--primary {
   border-color: rgba(56, 189, 198, 0.5);
-  background: hsl(200 28% 10% / 0.94);
+  background: hsl(200 30% 9%);
 }
 
 .room-details-form-card .form-field-panel label,

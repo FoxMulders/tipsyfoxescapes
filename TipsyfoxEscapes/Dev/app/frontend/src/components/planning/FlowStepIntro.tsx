@@ -21,7 +21,7 @@ export function FlowStepIntro({
   return (
     <section
       className={cn(
-        "flow-step-intro-card mb-0 rounded-xl border border-slate-600/55 bg-slate-950/95 px-4 py-3.5 shadow-lg backdrop-blur-md",
+        "flow-step-intro-card mb-0 rounded-lg border border-slate-600 bg-slate-950 px-4 py-3 shadow-md",
         className,
       )}
       aria-label={`Step ${stepIndex + 1}: ${title}`}
