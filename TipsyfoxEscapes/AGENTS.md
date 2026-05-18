@@ -60,6 +60,7 @@ Match the TypeScript types in `server.ts` and `App.tsx` when editing:
 
 ## Implementation conventions
 
+- **Ship on every change**: after any completed change, run build/QA as needed, commit `TipsyfoxEscapes/` only, push `main`, and deploy (see `.cursor/rules/ship-on-change.mdc`). Do not wait for the user to request release.
 - Prefer **small, focused changes**; do not refactor unrelated modules.
 - Keep **frontend and backend types** consistent when touching puzzle or theme payloads; update `shared/contracts.ts` only when you are intentionally aligning the shared contract.
 - **Validate** JSON bodies on the server before mutating session state; preserve session invariants (selected theme, current puzzles, skip sets) documented in `server.ts`.

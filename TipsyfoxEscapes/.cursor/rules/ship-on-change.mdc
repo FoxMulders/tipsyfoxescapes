@@ -1,0 +1,34 @@
+---
+description: After every change — build, commit, push, and deploy to production
+alwaysApply: true
+---
+
+# Ship on every change
+
+For **any** completed code or UI change in this workspace, finish the task with a full release — do not wait for the user to ask.
+
+## Required release loop
+
+1. **Verify** — Run the smallest check that proves the change is safe:
+   - Frontend-only: `npm run build` from `Dev/app/frontend`
+   - Backend or cross-cutting: `npm run qa` from `TipsyfoxEscapes` (or backend `npm run build` + `npm run test:unit` when QA is heavy)
+2. **Version** — Frontend releases bump via `npm run bump:patch` in `Dev/app/frontend` when shipping UI (or rely on `prebuild` if build already ran).
+3. **Commit** — From git root `MyProjects/`, stage **only** `TipsyfoxEscapes/` (never accidental `MyProject/` deletions).
+4. **Push** — `git push origin main` to trigger Vercel production deploy.
+5. **Confirm** — Tell the user commit hash, version (e.g. v1.0.44), and that push completed.
+
+## Commit message style
+
+One short sentence on **why**, include `(vX.Y.Z)` when the frontend version changed:
+
+```
+Compact sticky wizard bar and solid workspace backgrounds (v1.0.44).
+```
+
+## Do not
+
+- Stop after editing files without commit/push unless the user explicitly says **do not deploy** or **local only**.
+- Stage unrelated paths outside `TipsyfoxEscapes/`.
+- Force-push `main` or amend pushed commits unless the user explicitly requests it.
+
+This rule applies to this Escape Room Builder repo and overrides generic “only commit when asked” guidance for routine shipping here.
