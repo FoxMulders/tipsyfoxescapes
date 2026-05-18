@@ -9,7 +9,7 @@
 ## Automation
 
 - `QA/automation/code-qa.mjs` — invoked by `npm run qa` at repo root
-- Backend: `npm run test:unit` in `Dev/app/backend` (tsx self-tests)
+- Backend: `npm run test:unit` in `Dev/app/backend` (Vitest: puzzle/story/catalog + live ops gating/state/sync)
 
 ## Manual triggers
 

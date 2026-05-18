@@ -19,6 +19,8 @@ npm run qa
 
 Individual departments: `npm run qa:code`, `qa:workflow`, `qa:story`, `qa:puzzle`.
 
+Unit tests (Vitest): `cd Dev/app/backend && npm run test:unit` — puzzle/story/catalog plus Home vs Venue gating, live state, clue sync, snapshot parity, reset checklist.
+
 ## CI
 
 GitHub Actions workflow `.github/workflows/qa-suite.yml` runs the full suite on every push and pull request.

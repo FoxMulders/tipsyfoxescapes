@@ -124,7 +124,7 @@ export function GmConsolePage() {
                 type="button"
                 size="sm"
                 variant="secondary"
-                onClick={() => void postLiveTimer(sessionId, "pause", -1).then((s) => applyState(s.state, s.elapsedMs, s.remainingMs))}
+                onClick={() => void postLiveTimer(sessionId, "adjust", 1).then((s) => applyState(s.state, s.elapsedMs, s.remainingMs))}
               >
                 −1 min
               </Button>
@@ -132,7 +132,7 @@ export function GmConsolePage() {
                 type="button"
                 size="sm"
                 variant="secondary"
-                onClick={() => void postLiveTimer(sessionId, "pause", 1).then((s) => applyState(s.state, s.elapsedMs, s.remainingMs))}
+                onClick={() => void postLiveTimer(sessionId, "adjust", -1).then((s) => applyState(s.state, s.elapsedMs, s.remainingMs))}
               >
                 +1 min
               </Button>

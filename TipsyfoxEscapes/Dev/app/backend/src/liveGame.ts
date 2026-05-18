@@ -1,13 +1,16 @@
 import type { Request, Response } from "express";
 import type { Express } from "express";
 import { readJsonBlob, writeJsonBlob } from "./kvJsonStore.js";
-import type {
-  LeaderboardEntry,
-  LiveEvent,
-  LiveGameState,
-  LivePuzzleRow,
-  OperatingMode,
-} from "../../shared/liveContracts.js";
+import type { LeaderboardEntry, LiveGameState, LivePuzzleRow, OperatingMode } from "../../shared/liveContracts.js";
+import { validateClueForOperatingMode } from "./qa/cluePolicy.js";
+import { buildResetChecklistSteps } from "./qa/resetChecklist.js";
+import {
+  applyClue,
+  applyPuzzleComplete,
+  applyTimerAction,
+  computeElapsedMs,
+  computeRemainingMs,
+} from "./qa/liveStateEngine.js";
 
 const liveMemory = new Map<string, LiveGameState>();
 const subscribers = new Map<string, Set<(state: LiveGameState) => void>>();
@@ -49,25 +52,7 @@ const persistLive = async (state: LiveGameState): Promise<void> => {
   notify(state.sessionId, state);
 };
 
-const newEvent = (type: LiveEvent["type"], detail?: Record<string, unknown>): LiveEvent => ({
-  id: `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-  type,
-  atMs: Date.now(),
-  detail,
-});
-
-export const computeElapsedMs = (state: LiveGameState, now = Date.now()): number => {
-  let elapsed = state.timerPausedElapsedMs + state.timerAdjustmentMs;
-  if (state.timerRunning && state.timerStartedAtMs != null) {
-    elapsed += now - state.timerStartedAtMs;
-  }
-  return Math.max(0, elapsed);
-};
-
-export const computeRemainingMs = (state: LiveGameState, now = Date.now()): number => {
-  const total = state.durationMinutes * 60_000;
-  return Math.max(0, total - computeElapsedMs(state, now));
-};
+export { computeElapsedMs, computeRemainingMs } from "./qa/liveStateEngine.js";
 
 export const initLiveState = async (input: {
   sessionId: string;
@@ -95,7 +80,14 @@ export const initLiveState = async (input: {
     currentClue: "",
     preSavedHints: input.preSavedHints ?? [],
     puzzles: input.puzzles,
-    events: [newEvent("session_init", { operatingMode: input.operatingMode })],
+    events: [
+      {
+        id: `ev_${Date.now()}_init`,
+        type: "session_init",
+        atMs: Date.now(),
+        detail: { operatingMode: input.operatingMode },
+      },
+    ],
     gameResult: "in_progress",
     updatedAtMs: Date.now(),
   };
@@ -216,28 +208,20 @@ export const registerLiveRoutes = (
   app.post("/api/live/:sessionId/timer", async (req, res) => {
     const sessionId = String(req.params.sessionId ?? "").trim();
     const action = String(req.body?.action ?? "");
+    const deltaMin = Number(req.body?.deltaMinutes);
     const state = await patchLive(sessionId, (s) => {
-      const now = Date.now();
-      if (action === "start") {
-        if (!s.timerRunning) {
-          s.timerStartedAtMs = now;
-          s.timerRunning = true;
-          s.events.push(newEvent("timer_start"));
-        }
-      } else if (action === "pause") {
-        if (s.timerRunning && s.timerStartedAtMs != null) {
-          s.timerPausedElapsedMs += now - s.timerStartedAtMs;
-          s.timerStartedAtMs = null;
-          s.timerRunning = false;
-          s.events.push(newEvent("timer_pause"));
-        }
-      } else if (action === "adjust") {
-        const deltaMin = Number(req.body?.deltaMinutes);
-        if (Number.isFinite(deltaMin)) {
-          s.timerAdjustmentMs += deltaMin * 60_000;
-          s.events.push(newEvent("timer_adjust", { deltaMinutes: deltaMin }));
-        }
+      if (Number.isFinite(deltaMin) && deltaMin !== 0) {
+        const updated = applyTimerAction(s, "adjust", { deltaMinutes: deltaMin });
+        Object.assign(s, updated);
+        return;
       }
+      const timerAction =
+        action === "start" || action === "pause" || action === "adjust" ? action : null;
+      if (!timerAction) return;
+      const updated = applyTimerAction(s, timerAction, {
+        deltaMinutes: action === "adjust" ? deltaMin : undefined,
+      });
+      Object.assign(s, updated);
     });
     if (!state) {
       res.status(404).json({ error: { code: "NOT_FOUND", message: "Live session not found.", details: [] } });
@@ -252,7 +236,12 @@ export const registerLiveRoutes = (
     const state = await patchLive(sessionId, (s) => {
       if (Number.isFinite(count) && count >= 0 && count <= 99) {
         s.activePlayerCount = count;
-        s.events.push(newEvent("player_count", { count }));
+        s.events.push({
+          id: `ev_${Date.now()}_pc`,
+          type: "player_count",
+          atMs: Date.now(),
+          detail: { count },
+        });
       }
     });
     if (!state) {
@@ -266,12 +255,8 @@ export const registerLiveRoutes = (
     const sessionId = String(req.params.sessionId ?? "").trim();
     const puzzleId = String(req.params.puzzleId ?? "").trim();
     const state = await patchLive(sessionId, (s) => {
-      const row = s.puzzles.find((p) => p.id === puzzleId);
-      if (row && !row.completed) {
-        row.completed = true;
-        row.completedAtMs = Date.now();
-        s.events.push(newEvent("puzzle_complete", { puzzleId, title: row.title }));
-      }
+      const updated = applyPuzzleComplete(s, puzzleId);
+      Object.assign(s, updated);
     });
     if (!state) {
       res.status(404).json({ error: { code: "NOT_FOUND", message: "Live session not found.", details: [] } });
@@ -282,10 +267,22 @@ export const registerLiveRoutes = (
 
   app.post("/api/live/:sessionId/clue", async (req, res) => {
     const sessionId = String(req.params.sessionId ?? "").trim();
-    const clue = String(req.body?.clue ?? "").trim().slice(0, 500);
+    const clueRaw = String(req.body?.clue ?? "");
+    const stateBefore = await getLiveState(sessionId);
+    if (!stateBefore) {
+      res.status(404).json({ error: { code: "NOT_FOUND", message: "Live session not found.", details: [] } });
+      return;
+    }
+    const clueCheck = validateClueForOperatingMode(clueRaw, stateBefore.operatingMode, stateBefore.preSavedHints);
+    if (!clueCheck.ok) {
+      res.status(422).json({
+        error: { code: clueCheck.code, message: clueCheck.message, details: [] },
+      });
+      return;
+    }
     const state = await patchLive(sessionId, (s) => {
-      s.currentClue = clue;
-      if (clue) s.events.push(newEvent("clue_sent", { clue }));
+      const updated = applyClue(s, clueCheck.clue);
+      Object.assign(s, updated);
     });
     if (!state) {
       res.status(404).json({ error: { code: "NOT_FOUND", message: "Live session not found.", details: [] } });
@@ -307,7 +304,12 @@ export const registerLiveRoutes = (
           s.timerStartedAtMs = null;
         }
         const elapsedMs = computeElapsedMs(s);
-        s.events.push(newEvent("game_end", { result, elapsedMs }));
+        s.events.push({
+          id: `ev_${Date.now()}_end`,
+          type: "game_end",
+          atMs: Date.now(),
+          detail: { result, elapsedMs },
+        });
         leaderboards.push({
           planName: s.planName,
           sessionId: s.sessionId,
@@ -336,15 +338,14 @@ export const registerLiveRoutes = (
       res.status(404).json({ error: { code: "NOT_FOUND", message: "Planning session not found.", details: [] } });
       return;
     }
-    const steps = [
-      "Power down electronic puzzles and disconnect batteries if required.",
-      "Reset locks, codes, and props to their starting positions.",
-      ...session.currentPuzzles.map(
-        (p, i) => `Puzzle ${i + 1} — ${p.title}: restore props, clear player markings, verify ${p.category} station.`,
-      ),
-      ...session.planningInput.availableItems.map((item) => `Return "${item}" to its documented home position.`),
-      "Run a 60-second walkthrough: timer at zero, clue screen cleared, GM console shows 0 puzzles solved.",
-    ];
+    const steps = buildResetChecklistSteps({
+      puzzles: session.currentPuzzles.map((p) => ({
+        id: p.id,
+        title: p.title,
+        category: p.category as "logic" | "physical" | "electronic",
+      })),
+      availableItems: session.planningInput.availableItems,
+    });
     res.json({ steps });
   });
 };

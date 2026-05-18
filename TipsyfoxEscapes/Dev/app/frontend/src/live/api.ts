@@ -29,7 +29,11 @@ export const fetchLiveSnapshot = async (sessionId: string): Promise<LiveSnapshot
   return data;
 };
 
-export const postLiveTimer = async (sessionId: string, action: "start" | "pause", deltaMinutes?: number) => {
+export const postLiveTimer = async (
+  sessionId: string,
+  action: "start" | "pause" | "adjust",
+  deltaMinutes?: number,
+) => {
   const res = await fetch(`${API_BASE}/api/live/${sessionId}/timer`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
