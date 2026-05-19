@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import { ClipboardList, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -19,23 +20,26 @@ type TopNavBarProps = {
   puzzleCount?: number;
 };
 
-export function TopNavBar({
-  brandName,
-  authName,
-  authEmail,
-  authProviderLabel,
-  billingTierLabel,
-  planStatusDetail,
-  appView,
-  showAdminTab = false,
-  onAppViewChange,
-  onSignOut,
-  onOpenSnapshot,
-  themeName,
-  puzzleCount,
-}: TopNavBarProps) {
+export const TopNavBar = forwardRef<HTMLElement, TopNavBarProps>(function TopNavBar(
+  {
+    brandName,
+    authName,
+    authEmail,
+    authProviderLabel,
+    billingTierLabel,
+    planStatusDetail,
+    appView,
+    showAdminTab = false,
+    onAppViewChange,
+    onSignOut,
+    onOpenSnapshot,
+    themeName,
+    puzzleCount,
+  },
+  ref,
+) {
   return (
-    <header className="app-top-nav glass-panel" role="banner">
+    <header ref={ref} className="app-top-nav glass-panel" role="banner">
       <div className="app-top-nav__inner">
         <div className="app-top-nav__brand">
           <p className="app-top-nav__chip">Escape Room Builder</p>
@@ -108,4 +112,4 @@ export function TopNavBar({
       </div>
     </header>
   );
-}
+});

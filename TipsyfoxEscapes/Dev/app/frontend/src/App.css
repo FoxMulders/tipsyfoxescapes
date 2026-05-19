@@ -740,20 +740,24 @@ pre.code-inline {
   z-index: 1;
 }
 
+.page-shell--layered {
+  --app-top-nav-height: 4.75rem;
+}
+
 .flow-shell-map-bar {
   position: sticky;
-  top: 0.4rem;
-  z-index: 50;
+  top: calc(var(--app-top-nav-height, 4.75rem) + 0.35rem);
+  z-index: 35;
   flex: 0 0 auto;
   width: 100%;
   min-height: 0;
-  padding: 0.12rem 0.65rem 0.22rem;
+  padding: 0.08rem 0.55rem 0.16rem;
   margin: 0;
-  border-bottom: 1px solid rgba(116, 168, 185, 0.32);
-  background: rgba(6, 12, 18, 0.88);
+  border-bottom: 1px solid rgba(116, 168, 185, 0.28);
+  background: rgba(6, 12, 18, 0.92);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
   overflow: hidden;
   isolation: isolate;
 }
@@ -808,7 +812,7 @@ pre.code-inline {
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
   overflow: hidden;
-  scroll-margin-top: 5.5rem;
+  scroll-margin-top: calc(var(--app-top-nav-height, 4.75rem) + 4.5rem);
 }
 
 .flow-step-intro-card__copy {
@@ -3030,7 +3034,15 @@ label.checkbox-field {
 }
 
 .mission-flow-svg--compact {
-  max-height: 3.85rem;
+  max-height: 3rem;
+}
+
+.workspace-stepper .mission-flow-node-label {
+  font-size: 0.68rem;
+}
+
+.workspace-stepper .mission-flow-node-num {
+  font-size: 0.62rem;
 }
 
 .mission-flow-segment {
@@ -5128,13 +5140,17 @@ ul.auth-hero-para {
   max-width: 46rem;
   padding: 1.15rem clamp(1rem, 2.5vw, 1.6rem) 1.45rem;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: hsl(220 28% 7%);
   box-shadow: none;
   overflow: hidden;
   isolation: isolate;
+}
+
+.room-details-form-card input::placeholder,
+.room-details-form-card textarea::placeholder {
+  color: hsl(215 16% 58%);
+  opacity: 0.4;
 }
 
 .room-details-blueprint-form {
@@ -5233,13 +5249,13 @@ ul.auth-hero-para {
 .room-details-form-card .form-field-panel {
   padding: 0.9rem 1rem;
   border-radius: 12px;
-  border: 1px solid rgba(100, 140, 160, 0.36);
-  background: rgba(15, 23, 42, 0.46);
+  border: 1px solid rgba(100, 140, 160, 0.32);
+  background: hsl(220 26% 9%);
 }
 
 .room-details-form-card .form-field-panel--primary {
-  border-color: rgba(56, 189, 198, 0.5);
-  background: rgba(15, 23, 42, 0.5);
+  border-color: rgba(56, 189, 198, 0.45);
+  background: hsl(220 26% 10%);
 }
 
 .room-details-form-card .advanced-config-panel {
@@ -5700,12 +5716,46 @@ ul.auth-hero-para {
 .admin-auth-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.15rem 0.45rem;
+  gap: 0.35rem;
+  padding: 0.15rem 0.5rem;
   border-radius: 6px;
   font-size: 0.78rem;
   font-weight: 600;
   border: 1px solid rgba(56, 189, 248, 0.35);
   background: rgba(14, 165, 233, 0.12);
+}
+
+.admin-auth-badge__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+}
+
+.admin-auth-badge__icon--google {
+  background: #4285f4;
+}
+
+.admin-auth-badge__icon--facebook {
+  background: #1877f2;
+}
+
+.admin-auth-badge__icon--github {
+  background: #24292f;
+}
+
+.admin-auth-badge__icon--local {
+  background: #475569;
+}
+
+.admin-auth-badge__label {
+  white-space: nowrap;
 }
 
 .admin-dashboard__toolbar {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { AuthProviderBadge } from "@/components/admin/AuthProviderBadge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type AdminUserRow = {
@@ -279,7 +280,7 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
                   <th>User ID</th>
                   <th>Email</th>
                   <th>Username</th>
-                  <th>Auth Provider</th>
+                  <th>Auth</th>
                   <th>Created</th>
                   <th>Tier</th>
                   <th>Status</th>
@@ -296,7 +297,7 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
                     <td>{row.email}</td>
                     <td>{row.username}</td>
                     <td>
-                      <span className="admin-auth-badge">{row.authMethodBadge ?? providerLabel(row.provider)}</span>
+                      <AuthProviderBadge provider={row.provider} authMethodBadge={row.authMethodBadge} />
                     </td>
                     <td>{row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—"}</td>
                     <td>{row.tierType}</td>

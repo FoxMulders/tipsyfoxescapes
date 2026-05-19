@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { GlobalFooter } from "@/components/layout/GlobalFooter";
 import { PlanningSnapshotSheet } from "@/components/layout/PlanningSnapshotSheet";
 import { TopNavBar } from "@/components/layout/TopNavBar";
+import { useTopNavHeight } from "@/hooks/useTopNavHeight";
 import { FlowStepIntro } from "@/components/planning/FlowStepIntro";
 import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
 import {
@@ -2594,6 +2595,7 @@ export default function App() {
   const persistAuthRef = useRef<(token: string, user: AuthUser | null) => void>(() => {});
   const themeCoachHydratedForSessionRef = useRef<string>("");
   const builderShellRef = useRef<HTMLElement | null>(null);
+  const topNavRef = useRef<HTMLElement | null>(null);
   const prevCustomThemeCoachPrereqsOkRef = useRef(false);
   const customThemeCoachMessagesRef = useRef<ThemeCoachUiMessage[]>([]);
   const hasSavedPlans = savedPlans.length > 0;
@@ -2629,6 +2631,9 @@ export default function App() {
   useEffect(() => {
     setVenueBuildType(targetInterface === "commercial_venue" ? "professional_empty" : "prebuilt_space");
   }, [targetInterface]);
+
+  useTopNavHeight(topNavRef, builderShellRef, [appView, authUser?.id, authUser?.billingTier]);
+
   const propPresetLabels = useMemo(
     () => getSuggestedPropOptionsForPlanning(environmentType, eventType).map((o) => o.label),
     [environmentType, eventType],
@@ -5716,6 +5721,7 @@ export default function App() {
         </div>
       ) : null}
       <TopNavBar
+        ref={topNavRef}
         brandName={BRAND_NAME}
         authName={authUser.name}
         authEmail={authUser.email}
@@ -6005,7 +6011,7 @@ export default function App() {
           <section className="card mission-panel flow-shell builder-workspace-shell">
             <div
               id="flow-shell-error-anchor"
-              className={`flow-shell-map-bar workspace-stepper sticky top-0 z-50${youthAddOnEnabled && juniorForkSegmentIndex !== null ? " flow-shell-map-bar--fork" : ""}`}
+              className={`flow-shell-map-bar workspace-stepper${youthAddOnEnabled && juniorForkSegmentIndex !== null ? " flow-shell-map-bar--fork" : ""}`}
               aria-live="polite"
             >
               <MissionFlowMap
