@@ -747,13 +747,13 @@ pre.code-inline {
   flex: 0 0 auto;
   width: 100%;
   min-height: 0;
-  padding: 0.18rem 0.72rem 0.28rem;
+  padding: 0.12rem 0.65rem 0.22rem;
   margin: 0;
   border-bottom: 1px solid rgba(116, 168, 185, 0.32);
-  background: rgba(6, 12, 18, 0.9);
+  background: rgba(6, 12, 18, 0.88);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
   overflow: hidden;
   isolation: isolate;
 }
@@ -775,7 +775,7 @@ pre.code-inline {
 }
 
 .flow-controls {
-  margin: 0 0 2rem;
+  margin: 0 0 1rem;
   position: relative;
   z-index: 2;
   flex-shrink: 0;
@@ -802,9 +802,11 @@ pre.code-inline {
   margin: 0;
   padding: 0.85rem 1rem;
   border-radius: 10px;
-  border: 1px solid rgba(72, 130, 140, 0.52);
-  background: hsl(220 28% 5%);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
   overflow: hidden;
   scroll-margin-top: 5.5rem;
 }
@@ -867,6 +869,10 @@ pre.code-inline {
 
 .theme-selection-card {
   margin-bottom: 0;
+  background: rgba(15, 23, 42, 0.45) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .theme-generated-after-selection {
@@ -1259,7 +1265,8 @@ input[type="radio"] {
 
 input::placeholder,
 textarea::placeholder {
-  color: #8ba1c8;
+  color: hsl(215 18% 58%);
+  opacity: 0.72;
 }
 
 .short-input {
@@ -3023,7 +3030,7 @@ label.checkbox-field {
 }
 
 .mission-flow-svg--compact {
-  max-height: 4.25rem;
+  max-height: 3.85rem;
 }
 
 .mission-flow-segment {
@@ -3213,8 +3220,10 @@ label.checkbox-field {
   margin: 0.65rem 0 0.75rem;
   padding: 0.55rem 0.65rem;
   border-radius: 10px;
-  border: 1px solid rgba(146, 185, 255, 0.28);
-  background: rgba(8, 14, 26, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .theme-view-toggle-legend {
@@ -4255,15 +4264,27 @@ label.checkbox-field {
   color: var(--text);
 }
 
+.puzzle-budget-panel,
+.output-review-panel .output-review-story,
+.output-review-panel .output-review-stage-list {
+  background: rgba(15, 23, 42, 0.45) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
 .puzzle-budget-panel {
   margin: 0.75rem 0 1rem;
   padding: 0.85rem 1rem 1rem;
   border-radius: 12px;
   max-width: 58rem;
-  background: rgba(15, 23, 42, 0.45) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+}
+
+.output-review-panel .output-review-story,
+.output-review-panel .output-review-stage-list {
+  margin: 0.65rem 0 0.85rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
 }
 
 .puzzle-budget-heading {

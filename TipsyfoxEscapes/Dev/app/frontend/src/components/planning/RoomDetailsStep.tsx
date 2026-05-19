@@ -72,7 +72,7 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
 
   return (
     <div className="flow-content flow-content--blueprint">
-      <div className="room-details-form-card overflow-hidden rounded-xl border border-slate-600 bg-slate-950 shadow-lg">
+      <div className="room-details-form-card overflow-hidden rounded-xl">
         <header className="room-setup-command-bar" aria-label="Room details setup">
           <div className="room-setup-command-bar__primary">
             <h2 className="room-details-title">Room details</h2>
