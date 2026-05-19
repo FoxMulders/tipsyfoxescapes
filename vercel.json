@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm ci --prefix TipsyfoxEscapes/Dev/app && npm ci --prefix TipsyfoxEscapes/Dev/app/backend && npm ci --prefix TipsyfoxEscapes/Dev/app/frontend",
+  "installCommand": "npm ci --prefix TipsyfoxEscapes/Dev/app && npm ci --prefix TipsyfoxEscapes/Dev/app/backend && npm ci --prefix TipsyfoxEscapes/Dev/app/frontend && ln -sfn TipsyfoxEscapes/Dev/app/api api",
   "buildCommand": "npm run vercel-build --prefix TipsyfoxEscapes/Dev/app",
   "outputDirectory": "TipsyfoxEscapes/Dev/app/frontend/dist",
   "env": {
@@ -15,20 +15,20 @@
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "functions": {
-    "TipsyfoxEscapes/Dev/app/api/health.js": {
+    "api/health.js": {
       "maxDuration": 10
     },
-    "TipsyfoxEscapes/Dev/app/api/version.js": {
+    "api/version.js": {
       "maxDuration": 10
     },
-    "TipsyfoxEscapes/Dev/app/api/index.js": {
+    "api/index.js": {
       "maxDuration": 30,
       "memory": 1024,
-      "includeFiles": "TipsyfoxEscapes/Dev/app/api/*.cjs"
+      "includeFiles": "api/*.cjs"
     },
-    "TipsyfoxEscapes/Dev/app/api/webhook.js": {
+    "api/webhook.js": {
       "maxDuration": 10,
-      "includeFiles": "TipsyfoxEscapes/Dev/app/api/oauth.cjs"
+      "includeFiles": "api/oauth.cjs"
     }
   }
 }
