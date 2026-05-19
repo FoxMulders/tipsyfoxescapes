@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { TargetInterface } from "../../../../shared/contracts";
 
 type TargetInterfaceFieldProps = {
@@ -46,8 +47,17 @@ export function TargetInterfaceField({ value, onChange }: TargetInterfaceFieldPr
                 checked={selected}
                 onChange={() => onChange(opt.value)}
               />
-              <span className="target-interface-card__title">{opt.title}</span>
-              <span className="target-interface-card__desc">{opt.description}</span>
+              <span className="target-interface-card__title">
+                {opt.title}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="target-interface-card__tip" aria-label={`More about ${opt.title}`} tabIndex={0}>
+                      ?
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{opt.description}</TooltipContent>
+                </Tooltip>
+              </span>
             </label>
           );
         })}

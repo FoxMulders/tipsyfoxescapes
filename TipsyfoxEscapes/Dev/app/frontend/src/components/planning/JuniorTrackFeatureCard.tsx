@@ -32,7 +32,11 @@ export function JuniorTrackFeatureCard({
           </h3>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button type="button" className="feature-card__help" aria-label="More about Jr Tracks">
+              <button
+                type="button"
+                className="feature-card__help"
+                aria-label="More about Jr Tracks"
+              >
                 <CircleHelp className="h-3.5 w-3.5" aria-hidden />
               </button>
             </TooltipTrigger>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type AdminUserRow = {
   id: string;
@@ -32,6 +33,38 @@ type AdminDashboardProps = {
   authToken: string;
   deviceId: string;
 };
+
+const AUTH_PROVIDER_LABELS: Record<string, string> = {
+  local: "Local Email/Password",
+  google: "Google",
+  facebook: "Facebook",
+  github: "GitHub",
+};
+
+function providerLabel(provider: string | null | undefined): string {
+  return AUTH_PROVIDER_LABELS[String(provider ?? "local").toLowerCase()] ?? "Local Email/Password";
+}
+
+function auditStatus(row: AuditRow): string {
+  const detailStatus = row.detail?.status;
+  if (typeof detailStatus === "string" && detailStatus.trim()) return detailStatus;
+  if (row.action?.includes("failed") || row.action?.includes("error")) return "Needs review";
+  if (row.action?.includes("cleared") || row.action?.includes("patch")) return "Completed";
+  return "Recorded";
+}
+
+function InfoTip({ label, children }: { label: string; children: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="admin-dashboard__tip" aria-label={label} tabIndex={0}>
+          ?
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-sm">{children}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardProps) {
   const [search, setSearch] = useState("");
@@ -179,6 +212,7 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
             type="search"
             className="blueprint-input admin-dashboard__search"
             value={search}
+            placeholder="Search by User ID, Email, or Username..."
             onChange={(e) => {
               setSearch(e.target.value);
               setPage(1);
@@ -186,7 +220,7 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
             aria-label="Search users"
           />
           <select
-            className="blueprint-input"
+            className="blueprint-input admin-dashboard__compact-control"
             value={tierFilter}
             onChange={(e) => {
               setTierFilter(e.target.value);
@@ -204,7 +238,7 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
             <option value="free">Free</option>
           </select>
           <select
-            className="blueprint-input"
+            className="blueprint-input admin-dashboard__compact-control"
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value);
@@ -218,7 +252,7 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
             <option value="canceled">Canceled</option>
           </select>
           <select
-            className="blueprint-input"
+            className="blueprint-input admin-dashboard__compact-control"
             value={roleFilter}
             onChange={(e) => {
               setRoleFilter(e.target.value);
@@ -244,6 +278,7 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
                   <th>User ID</th>
                   <th>Email</th>
                   <th>Username</th>
+                  <th>Auth</th>
                   <th>Created</th>
                   <th>Tier</th>
                   <th>Status</th>
@@ -259,6 +294,7 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
                     <td>{row.id}</td>
                     <td>{row.email}</td>
                     <td>{row.username}</td>
+                    <td>{providerLabel(row.provider)}</td>
                     <td>{row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—"}</td>
                     <td>{row.tierType}</td>
                     <td>{row.lifecycleStatus}</td>
@@ -285,41 +321,71 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
             {selected ? (
               <div className="admin-dashboard__form space-y-3">
                 <p className="muted text-sm">
-                  <strong>{selected.name}</strong> · {selected.email}
+                  <strong>{selected.name}</strong> · {selected.email} · {providerLabel(selected.provider)}
                 </p>
                 <label className="field-row">
-                  Saved room limit
+                  <span className="admin-dashboard__label-with-tip">
+                    Saved room limit
+                    <InfoTip label="Saved room limit help">
+                      Maximum saved plans this user can keep. Use temporary overrides sparingly and prefer plan purchases for normal increases.
+                    </InfoTip>
+                  </span>
                   <input type="number" min={0} value={roomAllowance} onChange={(e) => setRoomAllowance(e.target.value)} />
                 </label>
                 <label className="field-row">
-                  Export credits
+                  <span className="admin-dashboard__label-with-tip">
+                    Export credits
+                    <InfoTip label="Export credits help">
+                      Full runbook export credits remaining for this account. Admin users may still display unlimited behavior elsewhere.
+                    </InfoTip>
+                  </span>
                   <input type="number" min={0} value={exportCredits} onChange={(e) => setExportCredits(e.target.value)} />
                 </label>
                 <label className="field-row">
-                  Lifecycle status
-                  <select value={lifecycleStatus} onChange={(e) => setLifecycleStatus(e.target.value)}>
+                  <span className="admin-dashboard__label-with-tip">
+                    Lifecycle status
+                    <InfoTip label="Lifecycle status help">
+                      Delinquent and canceled states limit account capabilities; confirm billing records before applying.
+                    </InfoTip>
+                  </span>
+                  <select className="admin-dashboard__compact-control" value={lifecycleStatus} onChange={(e) => setLifecycleStatus(e.target.value)}>
                     <option value="active">Active</option>
                     <option value="delinquent">Delinquent</option>
                     <option value="canceled">Canceled</option>
                   </select>
                 </label>
                 <label className="field-row">
-                  Subscription active
-                  <select value={subscriptionActive} onChange={(e) => setSubscriptionActive(e.target.value)}>
+                  <span className="admin-dashboard__label-with-tip">
+                    Subscription active
+                    <InfoTip label="Subscription active help">
+                      Inactive freezes live operations for operator features while preserving saved plan data.
+                    </InfoTip>
+                  </span>
+                  <select className="admin-dashboard__compact-control" value={subscriptionActive} onChange={(e) => setSubscriptionActive(e.target.value)}>
                     <option value="true">Active</option>
                     <option value="false">Inactive (freeze live ops)</option>
                   </select>
                 </label>
                 <label className="field-row">
-                  Role
-                  <select value={userRole} onChange={(e) => setUserRole(e.target.value)}>
+                  <span className="admin-dashboard__label-with-tip">
+                    Role
+                    <InfoTip label="Role help">
+                      Admin role grants roster, subscription override, and session lock controls.
+                    </InfoTip>
+                  </span>
+                  <select className="admin-dashboard__compact-control" value={userRole} onChange={(e) => setUserRole(e.target.value)}>
                     <option value="user">User</option>
                     <option value="admin">Admin</option>
                   </select>
                 </label>
                 <label className="field-row">
-                  Enterprise fleet provisioned
-                  <select value={enterpriseProvisioned} onChange={(e) => setEnterpriseProvisioned(e.target.value)}>
+                  <span className="admin-dashboard__label-with-tip">
+                    Enterprise fleet provisioned
+                    <InfoTip label="Enterprise fleet help">
+                      Enables multi-room fleet behavior for manually provisioned enterprise accounts.
+                    </InfoTip>
+                  </span>
+                  <select className="admin-dashboard__compact-control" value={enterpriseProvisioned} onChange={(e) => setEnterpriseProvisioned(e.target.value)}>
                     <option value="false">No — single-room only</option>
                     <option value="true">Yes — multi-room fleet enabled</option>
                   </select>
@@ -327,7 +393,13 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
                 <button type="button" className="primary-btn" disabled={busy} onClick={() => void patchSelected()}>
                   {busy ? "Saving…" : "Apply overrides"}
                 </button>
-                <button type="button" className="secondary-btn" disabled={busy} onClick={() => void clearSessionLocks(selected.id)}>
+                <button
+                  type="button"
+                  className="secondary-btn warning-btn"
+                  disabled={busy}
+                  title="Clears only this user's active planning session locks; generated and saved plans remain intact."
+                  onClick={() => void clearSessionLocks(selected.id)}
+                >
                   Clear this user’s session locks
                 </button>
               </div>
@@ -341,17 +413,37 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
                 ? "0"
                 : liveConnections.map((row) => `${row.sessionId} (${row.connections})`).join(", ")}
             </div>
-            <button type="button" className="secondary-btn" disabled={busy} onClick={() => void clearSessionLocks()}>
+            <button
+              type="button"
+              className="secondary-btn danger-btn"
+              disabled={busy}
+              title="Clears all active planning session locks across users. Use when stale sessions block operations."
+              onClick={() => void clearSessionLocks()}
+            >
               Clear all session locks
             </button>
-            <ul className="admin-dashboard__audit list-compact">
-              {audit.slice(0, 40).map((row, i) => (
-                <li key={`${row.ts ?? i}-${row.action ?? ""}`}>
-                  <strong>{row.action}</strong>
-                  <span className="muted"> · {row.email ?? "—"} · {row.ts}</span>
-                </li>
-              ))}
-            </ul>
+            <div className="admin-dashboard__audit-table-wrap" role="region" aria-label="Operational audit log">
+              <table className="admin-dashboard__audit-table">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {audit.slice(0, 80).map((row, i) => (
+                    <tr key={`${row.ts ?? i}-${row.action ?? ""}`}>
+                      <td>{row.ts ? new Date(row.ts).toLocaleString() : "—"}</td>
+                      <td>{row.email ?? "—"}</td>
+                      <td>{row.action ?? "—"}</td>
+                      <td>{auditStatus(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </aside>
         </div>
       </section>

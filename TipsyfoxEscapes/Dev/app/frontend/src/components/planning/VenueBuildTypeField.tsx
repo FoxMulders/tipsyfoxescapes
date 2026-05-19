@@ -1,4 +1,5 @@
 import { FieldHint } from "@/components/planning/FieldHint";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { VenueBuildType } from "../../../../shared/contracts";
 
 const VENUE_OPTIONS: { value: VenueBuildType; label: string; tooltip: string }[] = [
@@ -60,8 +61,17 @@ export function VenueBuildTypeField({ value, onChange, environmentType, compact 
                 onChange={() => onChange(opt.value)}
               />
               <span className="min-w-0 flex-1">
-                <span className="font-medium text-foreground">{opt.label}</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">{opt.tooltip}</span>
+                <span className="venue-build-option-title">
+                  <span className="font-medium text-foreground">{opt.label}</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="venue-build-option-tip" aria-label={`More about ${opt.label}`} tabIndex={0}>
+                        ?
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-sm">{opt.tooltip}</TooltipContent>
+                  </Tooltip>
+                </span>
               </span>
             </label>
           ))}

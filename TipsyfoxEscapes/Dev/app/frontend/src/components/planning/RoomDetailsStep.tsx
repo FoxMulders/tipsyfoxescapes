@@ -293,7 +293,7 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             onKindsChange={props.setPropFabricationKinds}
           />
 
-          <Accordion type="single" collapsible className="form-field-panel rounded-md border border-slate-600 bg-slate-900 px-4">
+          <Accordion type="single" collapsible className="form-field-panel advanced-config-panel rounded-md border border-slate-600 bg-slate-900 px-4">
             <AccordionItem value="advanced">
               <AccordionTrigger>Advanced configuration (difficulty)</AccordionTrigger>
               <AccordionContent className="space-y-4">
