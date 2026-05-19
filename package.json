@@ -1,0 +1,8 @@
+{
+  "name": "tipsyfoxescapes-monorepo-root",
+  "private": true,
+  "description": "Git root shim so Vercel can build TipsyfoxEscapes/Dev/app when Root Directory is not set in the dashboard.",
+  "scripts": {
+    "build": "npm run vercel-build --prefix TipsyfoxEscapes/Dev/app"
+  }
+}
