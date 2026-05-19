@@ -17,10 +17,17 @@ import { GlobalFooter } from "@/components/layout/GlobalFooter";
 import { PlanningSnapshotSheet } from "@/components/layout/PlanningSnapshotSheet";
 import { TopNavBar } from "@/components/layout/TopNavBar";
 import { useTopNavHeight } from "@/hooks/useTopNavHeight";
+import { clearOAuthReturnMarker, hasOAuthReturnMarker, setOAuthReturnMarker } from "./oauthClientCookie.ts";
 import {
   consumeOAuthPlanningStash,
+  peekOAuthPlanningStash,
   stashPlanningSessionForOAuth,
 } from "./oauthPlanningBridge.ts";
+import {
+  consumeWorkspaceDraftForOAuth,
+  stashWorkspaceDraftForOAuth,
+  type OAuthWorkspaceDraft,
+} from "./oauthWorkspaceBridge.ts";
 import { FlowStepIntro } from "@/components/planning/FlowStepIntro";
 import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
 import {
@@ -2587,6 +2594,7 @@ export default function App() {
   const pendingAuthSessionBootstrap = useRef(false);
   const planningSessionRecoveryInFlight = useRef(false);
   const oauthHydratingRef = useRef(false);
+  const oauthReturnBootstrapRef = useRef(false);
   const recoverPlanningSessionRef = useRef<
     (options?: { seedThemes?: boolean }) => Promise<string | undefined>
   >(async () => undefined);
@@ -3292,12 +3300,53 @@ export default function App() {
     setValidationFlags((current) => ({ ...current, ...next }));
   };
 
+  const applyWorkspaceDraftFromOAuth = (draft: OAuthWorkspaceDraft): void => {
+    setPlayersConcurrent(draft.playersConcurrent);
+    setParticipantsTotal(draft.participantsTotal);
+    setSessionDurationMinutes(draft.sessionDurationMinutes);
+    setEnvironmentType(draft.environmentType);
+    setAvailableItems(draft.availableItems);
+    setEventType(draft.eventType);
+    setTargetInterface(draft.targetInterface as TargetInterface);
+    setVenueBuildType(draft.venueBuildType as VenueBuildType);
+    setRoomDifficulty(draft.roomDifficulty as "easy" | "medium" | "hard");
+    setThemeMustMatchEnvironment(draft.themeMustMatchEnvironment);
+    setYouthAddOnEnabled(draft.youthAddOnEnabled);
+    setYouthAddOnGatesAdultFlow(draft.youthAddOnGatesAdultFlow);
+    setYouthAddOnAgeNote(draft.youthAddOnAgeNote);
+    const step = draft.wizardStep as WizardStep;
+    if (
+      step === "setup" ||
+      step === "themes" ||
+      step === "themes-puzzles" ||
+      step === "output-review" ||
+      step === "output-export" ||
+      step === "saved"
+    ) {
+      setWizardStep(step);
+    }
+  };
+
   const persistAuth = (token: string, user: AuthUser | null): void => {
+    const normalized = user ? normalizeAuthUser(user) : null;
+    const oauthResumePending = Boolean(token && normalized && peekOAuthPlanningStash());
+    if (token && normalized) {
+      try {
+        window.localStorage.setItem(
+          AUTH_STORAGE_KEY,
+          JSON.stringify({ authToken: token, authUser: normalized }),
+        );
+      } catch {
+        // Ignore storage errors; in-memory auth state still works for this session.
+      }
+    }
     setAuthToken(token);
-    setAuthUser(user ? normalizeAuthUser(user) : null);
+    setAuthUser(normalized);
     setShowPlanPicker(Boolean(user));
     setActivePanel(Boolean(user?.canSaveRooms) ? "saved" : "plan");
-    setWizardStep("setup");
+    if (!oauthResumePending) {
+      setWizardStep("setup");
+    }
     if (!user || !token) {
       setAppView("builder");
       setBillingNotice("");
@@ -3327,11 +3376,10 @@ export default function App() {
         window.localStorage.removeItem(AUTH_STORAGE_KEY);
         return;
       }
-      const normalized = normalizeAuthUser(user);
       if (normalized) {
-        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authToken: token, authUser: normalized }));
-        // Drop stale planning session ids before OAuth/email login bootstrap (server may have restarted).
-        setSessionId("");
+        if (!oauthResumePending) {
+          setSessionId("");
+        }
         pendingAuthSessionBootstrap.current = true;
       }
     } catch {
@@ -3427,10 +3475,19 @@ export default function App() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate]);
 
-  const refreshProfile = async (opts?: { retryOnStaleToken?: boolean }): Promise<boolean> => {
-    if (!authToken) return false;
+  const refreshProfile = async (opts?: {
+    retryOnStaleToken?: boolean;
+    tokenOverride?: string;
+  }): Promise<boolean> => {
+    const token = (opts?.tokenOverride ?? currentAuthToken()).trim();
+    if (!token) return false;
     try {
-      const response = await fetch(`${API_BASE}/api/me`, { headers: withAuthGetHeaders() });
+      const response = await fetch(`${API_BASE}/api/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Device-Id": deviceId,
+        },
+      });
       const data = (await response.json()) as { user?: AuthUser; error?: { code?: string; message?: string } };
       if (response.status === 401) {
         const staleToken =
@@ -3439,7 +3496,7 @@ export default function App() {
           Boolean(data.error?.message?.toLowerCase().includes("sign-in"));
         if (staleToken && opts?.retryOnStaleToken !== false) {
           await new Promise((resolve) => window.setTimeout(resolve, 450));
-          return refreshProfile({ retryOnStaleToken: false });
+          return refreshProfile({ retryOnStaleToken: false, tokenOverride: token });
         }
         handleAuthExpired(data.error?.message);
         return false;
@@ -3447,9 +3504,10 @@ export default function App() {
       if (data.user) {
         const normalized = normalizeAuthUser(data.user);
         if (normalized) {
+          setAuthToken(token);
           setAuthUser(normalized);
           try {
-            window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authToken, authUser: normalized }));
+            window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authToken: token, authUser: normalized }));
           } catch {
             // ignore
           }
@@ -3833,9 +3891,26 @@ export default function App() {
     setError("");
     setSocialAuthProvider(provider);
     cacheLocalPlanningInputs();
+    stashWorkspaceDraftForOAuth({
+      wizardStep,
+      playersConcurrent,
+      participantsTotal,
+      sessionDurationMinutes,
+      environmentType,
+      availableItems,
+      eventType,
+      targetInterface,
+      venueBuildType,
+      roomDifficulty,
+      themeMustMatchEnvironment,
+      youthAddOnEnabled,
+      youthAddOnGatesAdultFlow,
+      youthAddOnAgeNote,
+    });
     if (sessionId.trim()) {
       stashPlanningSessionForOAuth(sessionId, deviceId);
     }
+    setOAuthReturnMarker();
     const returnTo = `${window.location.origin}${window.location.pathname}`;
     window.location.assign(
       `${API_BASE}/api/auth/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`,
@@ -3856,16 +3931,22 @@ export default function App() {
     const callbackUserRaw = url.searchParams.get("auth_user");
     if (!callbackToken || !callbackUserRaw) return;
     oauthHydratingRef.current = true;
+    oauthReturnBootstrapRef.current = hasOAuthReturnMarker();
     void (async () => {
       try {
         const callbackUser = normalizeAuthUser(JSON.parse(decodeURIComponent(callbackUserRaw)));
         if (!callbackUser) throw new Error("invalid user");
         persistAuth(callbackToken, callbackUser);
-        await refreshProfile({ retryOnStaleToken: true });
+        const profileOk = await refreshProfile({ retryOnStaleToken: true, tokenOverride: callbackToken });
+        if (profileOk) {
+          const workspaceDraft = consumeWorkspaceDraftForOAuth();
+          if (workspaceDraft) applyWorkspaceDraftFromOAuth(workspaceDraft);
+        }
       } catch {
         setError("Social sign in completed, but response could not be parsed.");
       } finally {
         oauthHydratingRef.current = false;
+        clearOAuthReturnMarker();
         url.searchParams.delete("auth_token");
         url.searchParams.delete("auth_user");
         window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
@@ -4121,9 +4202,10 @@ export default function App() {
       const tokenForPlanning = currentAuthToken();
       if (tokenForPlanning) await clearPersistedPlanningSession(tokenForPlanning);
       const freshId = await createSession(undefined, { seedThemes: options?.seedThemes ?? false });
-      if (freshId) {
+      if (freshId && !oauthReturnBootstrapRef.current) {
         toast.message(planningSessionRecoveryNotice, { duration: 4000 });
       }
+      oauthReturnBootstrapRef.current = false;
       return freshId;
     } finally {
       planningSessionRecoveryInFlight.current = false;
@@ -4185,6 +4267,10 @@ export default function App() {
       void (async () => {
         const restored = await tryRestore();
         if (!restored) await createSession({ existingPuzzles: [] }, { seedThemes: true });
+        const workspaceDraft = consumeWorkspaceDraftForOAuth();
+        if (workspaceDraft) applyWorkspaceDraftFromOAuth(workspaceDraft);
+        oauthReturnBootstrapRef.current = false;
+        clearOAuthReturnMarker();
       })().finally(() => {
         pendingAuthSessionBootstrap.current = false;
       });

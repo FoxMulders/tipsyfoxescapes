@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   diagnoseOAuthClientCredentials,
+  githubClientIdFromEnv,
+  githubClientSecretFromEnv,
+  readGitHubOAuthCredentials,
   readOAuthClientCredentials,
 } from "../../oauthConfig.js";
 
@@ -29,6 +32,12 @@ describe("oauthConfig", () => {
     process.env.GITHUB_CLIENT_ID = "  Iv1.realClientId  ";
     process.env.GITHUB_CLIENT_SECRET = "  realSecretValue  ";
     expect(readOAuthClientCredentials("github")).toEqual({
+      clientId: "Iv1.realClientId",
+      clientSecret: "realSecretValue",
+    });
+    expect(githubClientIdFromEnv()).toBe("Iv1.realClientId");
+    expect(githubClientSecretFromEnv()).toBe("realSecretValue");
+    expect(readGitHubOAuthCredentials()).toEqual({
       clientId: "Iv1.realClientId",
       clientSecret: "realSecretValue",
     });

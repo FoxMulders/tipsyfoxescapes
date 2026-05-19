@@ -59,3 +59,13 @@ export const oauthCredentialSetupHint = (provider: OAuthProvider): string => {
   const secretKey = envKey(provider, "CLIENT_SECRET");
   return `Set ${idKey} and ${secretKey} in Vercel → Settings → Environment Variables (Production). Use the live OAuth app credentials from your ${provider} developer console—no placeholder values.`;
 };
+
+/** Explicit GitHub env reads — use in diagnostics and provider setup checks. */
+export const readGitHubOAuthCredentials = (): OAuthClientCredentials | null =>
+  readOAuthClientCredentials("github");
+
+export const githubClientIdFromEnv = (): string =>
+  String(process.env.GITHUB_CLIENT_ID ?? "").trim();
+
+export const githubClientSecretFromEnv = (): string =>
+  String(process.env.GITHUB_CLIENT_SECRET ?? "").trim();
