@@ -106,8 +106,9 @@ const buildMermaidFromProgressionGraph = (
     if (!from || !to) continue;
     if (edge.kind === "contributes") {
       lines.push(`  ${from} -.->|${mermaidLabel(edge.label ?? "fragment", 12)}| ${to}`);
-    } else if (edge.label === "Cross-track clue") {
-      lines.push(`  ${from} -.-> ${to}`);
+    } else if (edge.label?.startsWith("Cross-track:") || edge.label?.startsWith("Cross-stage key:")) {
+      const short = mermaidLabel(edge.label ?? "cross-link", 28);
+      lines.push(`  ${from} -.->|${short}| ${to}`);
     } else {
       lines.push(`  ${from} --> ${to}`);
     }

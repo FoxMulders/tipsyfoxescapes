@@ -58,13 +58,39 @@ describe("progressionGraph", () => {
     expect(finaleEdges.length).toBeGreaterThan(0);
   });
 
-  it("includes cross-track edges when multiple threads exist", () => {
+  it("includes cross-track and cross-stage edges when multiple threads exist", () => {
     const graph = buildProgressionGraph({
       puzzles: samplePuzzles(6),
       playersConcurrent: 6,
       pathKind: "nonlinear",
     });
-    const cross = graph.edges.filter((e) => e.label === "Cross-track clue");
-    expect(cross.length).toBeGreaterThan(0);
+    const crossTrack = graph.edges.filter((e) => e.label?.startsWith("Cross-track:"));
+    const crossStage = graph.edges.filter((e) => e.label?.startsWith("Cross-stage key:"));
+    expect(crossTrack.length).toBeGreaterThan(0);
+    expect(crossStage.length).toBeGreaterThan(0);
+  });
+
+  it("adds asymmetric finale gateway for multi-thread rooms", () => {
+    const graph = buildProgressionGraph({
+      puzzles: samplePuzzles(6),
+      playersConcurrent: 6,
+      pathKind: "multilinear",
+    });
+    expect(graph.nodes.some((n) => n.id === "gateway_asymmetric_finale")).toBe(true);
+    expect(graph.edges.some((e) => e.to === "gateway_asymmetric_finale" && e.label?.includes("Terminal"))).toBe(true);
+  });
+
+  it("derives progression copy describing parallel zones and master codes", () => {
+    const puzzles = samplePuzzles(6);
+    const graph = buildProgressionGraph({
+      puzzles,
+      playersConcurrent: 6,
+      pathKind: "nonlinear",
+    });
+    const views = deriveStoryViewsFromGraph(graph, puzzles, "Escape.", "Living room", {
+      mid: "Mid.",
+      final: "Final.",
+    });
+    expect(views.progressionRule).toMatch(/parallel|Cross-stage|Asymmetric|master sequence/i);
   });
 });

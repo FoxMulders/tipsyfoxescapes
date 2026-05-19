@@ -424,7 +424,7 @@ const saveHistory = (history: InputHistory): void => {
 
 function NarrativeFlowGuide({ storyPlan }: { storyPlan: StoryPlan | null }) {
   return (
-    <section className="narrative-flow-guide glass-panel" aria-label="Narrative flow guide">
+    <section className="narrative-flow-guide glass-panel output-review-glass-surface" aria-label="Narrative flow guide">
       <h3 className="output-review-section-title">Narrative flow — parallel paths &amp; finale</h3>
       <dl className="narrative-flow-guide__dl">
         <div>
@@ -2140,6 +2140,72 @@ function OutputReviewProse({ text }: { text: string }): ReactNode {
         ))}
     </p>
   ));
+}
+
+/** Renders staging diagram markdown (tables + text blocks) on a shared vertical grid. */
+function OutputReviewStagingDiagram({ text }: { text: string }): ReactNode {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return null;
+  const blocks = normalized.split(/\n\n+/).filter((b) => b.trim());
+  return (
+    <div className="output-review-markdown-stack">
+      {blocks.map((block, blockIndex) => {
+        const trimmed = block.trim();
+        if (trimmed.startsWith("|")) {
+          const rows = trimmed.split("\n").filter((line) => line.includes("|"));
+          if (rows.length < 2) {
+            return (
+              <pre key={blockIndex} className="staging-diagram-block output-review-glass-surface">
+                {trimmed}
+              </pre>
+            );
+          }
+          const parseRow = (line: string): string[] =>
+            line
+              .split("|")
+              .map((cell) => cell.trim())
+              .filter((cell, i, arr) => !(i === 0 && cell === "") && !(i === arr.length - 1 && cell === ""));
+          const header = parseRow(rows[0]!);
+          const bodyRows = rows.slice(2).map(parseRow);
+          return (
+            <div key={blockIndex} className="output-review-table-wrap output-review-glass-surface">
+              <table className="output-review-table">
+                <thead>
+                  <tr>
+                    {header.map((cell, i) => (
+                      <th key={i}>{cell}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {bodyRows.map((cells, ri) => (
+                    <tr key={ri}>
+                      {cells.map((cell, ci) => (
+                        <td key={ci}>{cell}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        if (trimmed.startsWith("```")) {
+          const inner = trimmed.replace(/^```\w*\n?/, "").replace(/\n?```$/, "");
+          return (
+            <pre key={blockIndex} className="staging-diagram-block output-review-glass-surface">
+              {inner}
+            </pre>
+          );
+        }
+        return (
+          <p key={blockIndex} className="output-review-prose output-review-glass-surface">
+            {trimmed.replace(/^_+|_+$/g, "")}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 function OutputReviewNarrativeField({ label, text }: { label: string; text: string }): ReactNode {
@@ -6926,7 +6992,8 @@ export default function App() {
             <section className="card mission-panel glass-panel output-review-panel" id="builder-output-anchor">
               <h2>Output: Review</h2>
               {storyPlan ? (
-                <div className="output-review-story">
+                <div className="output-review-body">
+                <div className="output-review-story output-review-glass-surface">
                   <h3 className="output-review-section-title">Storyline and progression</h3>
                   <div className="output-review-narrative-grid">
                     <OutputReviewNarrativeField label="Situation" text={storyPlan.situation} />
@@ -6934,10 +7001,11 @@ export default function App() {
                     <OutputReviewNarrativeField label="Mission objective" text={storyPlan.missionObjective} />
                     <OutputReviewNarrativeField label="Progression rule" text={storyPlan.progressionRule} />
                   </div>
+                </div>
                   {storyPlan.stages && storyPlan.stages.length > 0 ? (
                     <>
                       <h3 className="output-review-section-title">Stage flow</h3>
-                      <ol className="output-review-stage-list">
+                      <ol className="output-review-stage-list output-review-glass-surface">
                         {storyPlan.stages.map((st) => (
                           <li key={st.stage} className="output-review-stage-card">
                             <div className="output-review-stage-head">
@@ -6994,7 +7062,7 @@ export default function App() {
                   {storyPlan.puzzleLinks && storyPlan.puzzleLinks.length > 0 ? (
                     <>
                       <h3 className="output-review-section-title">Puzzle–story links</h3>
-                      <ul className="output-review-puzzle-links">
+                      <ul className="output-review-puzzle-links output-review-glass-surface">
                         {storyPlan.puzzleLinks.map((link) => (
                           <li key={link.puzzleId} className="output-review-puzzle-link-item">
                             <strong>{link.puzzleTitle}</strong>
@@ -7008,14 +7076,14 @@ export default function App() {
                   {storyPlan.stagingDiagram ? (
                     <>
                       <h3 className="output-review-section-title">Room layout sketch</h3>
-                      <pre className="staging-diagram-block">{storyPlan.stagingDiagram}</pre>
+                      <OutputReviewStagingDiagram text={storyPlan.stagingDiagram} />
                     </>
                   ) : null}
                   {targetInterface === "commercial_venue" && selectedTheme && puzzles.length > 0 ? (
                     <EmptyRoomInstallChecklist environmentType={environmentType} themeName={selectedTheme.name} />
                   ) : null}
                   {puzzles.length > 0 ? (
-                    <>
+                    <div className="output-review-flow-block">
                       <h3 className="output-review-section-title">Room flowchart</h3>
                       <p className="muted room-flowchart-lead">
                         Stages, puzzles, and progression from your story plan—download SVG, PNG, or Mermaid source for runbooks.
@@ -7027,7 +7095,7 @@ export default function App() {
                         fileBase="room-flow-review"
                       />
                       <NarrativeFlowGuide storyPlan={storyPlan} />
-                    </>
+                    </div>
                   ) : null}
                 </div>
               ) : null}

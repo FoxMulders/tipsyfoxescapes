@@ -158,6 +158,36 @@ const edgesFrom = (graph: ProgressionGraph, nodeId: string): ProgressionEdge[] =
 
 const puzzleNodeId = (puzzleId: string): string => `puzzle_${puzzleId}`;
 
+const crossTrackEdgeLabel = (
+  donor: GraphPuzzle,
+  recipient: GraphPuzzle,
+  donorZone: string,
+  recipientZone: string,
+): string =>
+  `Cross-track: "${donor.title}" (${donorZone}) → "${recipient.title}" (${recipientZone})`;
+
+const crossStageKeyEdgeLabel = (donor: GraphPuzzle, recipient: GraphPuzzle, donorZone: string): string =>
+  `Cross-stage key: "${donor.title}" at ${donorZone} unlocks "${recipient.title}"`;
+
+/** Pick opening, mid, and terminal beats per track for multi-location master codes. */
+const masterCodeContributorIds = (threads: ProgressionThread[], threadPuzzles: GraphPuzzle[][]): string[] => {
+  const picked: string[] = [];
+  const seen = new Set<string>();
+  threads.forEach((_thread, threadIndex) => {
+    const list = threadPuzzles[threadIndex] ?? [];
+    const indices =
+      list.length <= 1 ? [0] : list.length === 2 ? [0, list.length - 1] : [0, Math.floor(list.length / 2), list.length - 1];
+    for (const idx of indices) {
+      const id = list[idx]?.id;
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        picked.push(id);
+      }
+    }
+  });
+  return picked.slice(0, 6);
+};
+
 export const buildProgressionGraph = (input: BuildProgressionGraphInput): ProgressionGraph => {
   const inventory = (input.inventoryItems ?? []).map((s) => s.trim()).filter(Boolean);
   const main = [...input.puzzles]
@@ -242,13 +272,30 @@ export const buildProgressionGraph = (input: BuildProgressionGraphInput): Progre
         const donorList = threadPuzzles[donorThread] ?? [];
         const donor = donorList[w - 1];
         if (donor && donor.id !== puzzle.id) {
+          const donorZone = threads[donorThread]?.zoneLabel ?? "track";
+          const recipientZone = threads[threadIndex]?.zoneLabel ?? "track";
           edges.push({
             from: puzzleNodeId(donor.id),
             to: nid,
             kind: "requires",
-            label: "Cross-track clue",
+            label: crossTrackEdgeLabel(donor, puzzle, donorZone, recipientZone),
           });
         }
+      }
+    }
+    if (parallelWidth > 1 && list.length > 1) {
+      const donorThread = (threadIndex + 1) % parallelWidth;
+      const donorList = threadPuzzles[donorThread] ?? [];
+      const earlyDonor = donorList[0];
+      const lateRecipient = list[list.length - 1];
+      if (earlyDonor && lateRecipient && earlyDonor.id !== lateRecipient.id) {
+        const donorZone = threads[donorThread]?.zoneLabel ?? "track";
+        edges.push({
+          from: puzzleNodeId(earlyDonor.id),
+          to: puzzleNodeId(lateRecipient.id),
+          kind: "requires",
+          label: crossStageKeyEdgeLabel(earlyDonor, lateRecipient, donorZone),
+        });
       }
     }
   });
@@ -286,34 +333,63 @@ export const buildProgressionGraph = (input: BuildProgressionGraphInput): Progre
   let masterCodeLabel = "";
   let codeNodeId: string | undefined;
   if (main.length >= 3 && gatewayIds.length > 0) {
-    const contributors = threads
-      .map((t) => t.puzzleIds[0])
-      .filter(Boolean)
-      .slice(0, 4);
+    const contributors = masterCodeContributorIds(threads, threadPuzzles);
     masterCodeLabel = contributors.map((id) => fragmentByPuzzleId.get(id) ?? "?").join("");
     codeNodeId = "code_master";
     nodes.push({ id: codeNodeId, kind: "code", label: `Master sequence ${masterCodeLabel}` });
     const lastGateway = gatewayIds[gatewayIds.length - 1]!;
     edges.push({ from: lastGateway, to: codeNodeId, kind: "requires" });
     for (const pid of contributors) {
+      const thread = threads.find((t) => t.puzzleIds.includes(pid));
       edges.push({
         from: puzzleNodeId(pid),
         to: codeNodeId,
         kind: "contributes",
-        label: fragmentByPuzzleId.get(pid),
+        label: `${thread?.zoneLabel ?? "Zone"}:${fragmentByPuzzleId.get(pid) ?? "?"}`,
       });
     }
   }
 
-  nodes.push({ id: "finale", kind: "finale", label: "Finale / exit sequence" });
-  if (codeNodeId) {
-    edges.push({ from: codeNodeId, to: "finale", kind: "requires" });
-    const terminalPuzzles = threadPuzzles.map((list) => list[list.length - 1]).filter(Boolean) as GraphPuzzle[];
-    for (const p of terminalPuzzles) {
-      edges.push({ from: puzzleNodeId(p.id), to: "finale", kind: "requires", label: "Terminal input" });
+  let finaleEntryId: string | undefined = codeNodeId ?? gatewayIds[gatewayIds.length - 1];
+  if (parallelWidth > 1 && (codeNodeId || gatewayIds.length > 0)) {
+    const asymId = "gateway_asymmetric_finale";
+    nodes.push({ id: asymId, kind: "gateway", label: "Asymmetric finale gateway" });
+    if (codeNodeId) {
+      edges.push({ from: codeNodeId, to: asymId, kind: "requires", label: "Master code accepted" });
+    } else if (gatewayIds.length > 0) {
+      edges.push({
+        from: gatewayIds[gatewayIds.length - 1]!,
+        to: asymId,
+        kind: "requires",
+        label: "Merge convergence",
+      });
     }
-  } else if (gatewayIds.length > 0) {
-    edges.push({ from: gatewayIds[gatewayIds.length - 1]!, to: "finale", kind: "requires" });
+    for (const thread of threads) {
+      const terminalId = thread.puzzleIds[thread.puzzleIds.length - 1];
+      if (terminalId) {
+        edges.push({
+          from: puzzleNodeId(terminalId),
+          to: asymId,
+          kind: "requires",
+          label: `Terminal — ${thread.zoneLabel}`,
+        });
+      }
+      if (thread.puzzleIds.length >= 3) {
+        const midId = thread.puzzleIds[Math.floor(thread.puzzleIds.length / 2)]!;
+        edges.push({
+          from: puzzleNodeId(midId),
+          to: asymId,
+          kind: "requires",
+          label: `Mid-branch — ${thread.zoneLabel}`,
+        });
+      }
+    }
+    finaleEntryId = asymId;
+  }
+
+  nodes.push({ id: "finale", kind: "finale", label: "Finale / exit sequence" });
+  if (finaleEntryId) {
+    edges.push({ from: finaleEntryId, to: "finale", kind: "requires" });
   } else {
     const last = main[main.length - 1]!;
     edges.push({ from: puzzleNodeId(last.id), to: "finale", kind: "requires" });
@@ -405,10 +481,10 @@ export const deriveStoryViewsFromGraph = (
           ),
           wave === 0
             ? "Split crews across parallel tracks; no single lock should block all teams."
-            : `Cross-check outputs; combined fragment slice: ${fragments || "—"}.`,
+            : `Cross-check outputs across zones; combined fragment slice: ${fragments || "—"}.`,
           isLast
-            ? "Verify every thread has fed the finale gate before declaring victory."
-            : "Route at least one clue from this stage into a different track (asymmetric gateway).",
+            ? "Feed every branch terminal plus the master sequence into the asymmetric finale gateway before declaring victory."
+            : "Route at least one cross-stage key from an early beat on another track into this wave (narrative permission, UV clue, or code fragment).",
         ],
         requiredPuzzleIds: wavePuzzleIds,
         requiredPuzzleTitles: wavePuzzleIds.map((id) => puzzleById.get(id)?.title ?? id),
@@ -430,15 +506,18 @@ export const deriveStoryViewsFromGraph = (
       (e) => e.to.startsWith("gateway_") || e.to.startsWith("puzzle_") || e.to === "finale" || e.to === "code_master",
     );
     const frag = fragmentByPuzzleId.get(node.puzzleId) ?? "?";
-    const cross = requires.some((e) => e.label === "Cross-track clue");
+    const crossTrack = requires.some((e) => e.label?.startsWith("Cross-track:"));
+    const crossStage = requires.some((e) => e.label?.startsWith("Cross-stage key:"));
     puzzleLinks.push({
       puzzleId: node.puzzleId,
       puzzleTitle: title,
-      storyRole: cross
-        ? `Cross-track link on ${thread?.label ?? "parallel track"}`
-        : node.waveIndex === 0
-          ? `Opening beat — ${thread?.label ?? "track"}`
-          : `Mid-run beat — ${thread?.label ?? "track"}`,
+      storyRole: crossStage
+        ? `Cross-stage dependency on ${thread?.label ?? "parallel track"}`
+        : crossTrack
+          ? `Cross-track bridge on ${thread?.label ?? "parallel track"}`
+          : node.waveIndex === 0
+            ? `Opening beat — ${thread?.label ?? "track"}`
+            : `Mid-run beat — ${thread?.label ?? "track"}`,
       unlocks:
         unlocks.length > 0
           ? `Contributes fragment ${frag}; ${unlocks
@@ -476,7 +555,21 @@ export const deriveStoryViewsFromGraph = (
     "```",
   );
 
-  const progressionRule = `${progressionCoreLine(graph.pathKind, graph.parallelWidth)} Parallel tracks may advance independently; merge gates require every live track at that wave. Fragments from separate tracks combine${graph.masterCodeLabel ? ` into master sequence ${graph.masterCodeLabel}` : ""}; the finale requires inputs from multiple preceding branches when more than one track exists.`;
+  const zoneList = graph.threads.map((t) => t.zoneLabel).join(", ");
+  const progressionParts = [
+    progressionCoreLine(graph.pathKind, graph.parallelWidth),
+    graph.threads.length > 1
+      ? `Parallel/open threads (${zoneList}) may advance independently so multiple crews stay busy without a single bottleneck loop.`
+      : "",
+    "Cross-stage keys force beats on one track to consume narrative or physical outputs from another track before late-game locks open.",
+    graph.masterCodeLabel
+      ? `Multi-layer code gate: compile fragments from distinct zones into master sequence ${graph.masterCodeLabel} before the terminal unlock.`
+      : "Merge gates require every live track at that wave before the next beat opens.",
+    graph.parallelWidth > 1
+      ? "Asymmetric finale gateway: the exit sequence waits for terminal nodes from multiple branching paths—not one rigid linear checkpoint."
+      : "",
+  ].filter(Boolean);
+  const progressionRule = progressionParts.join(" ");
 
   return {
     stages,

@@ -754,9 +754,9 @@ pre.code-inline {
   padding: 0.08rem 0.55rem 0.16rem;
   margin: 0;
   border-bottom: 1px solid rgba(116, 168, 185, 0.28);
-  background: rgba(6, 12, 18, 0.92);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(6, 12, 18, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
   overflow: hidden;
   isolation: isolate;
@@ -812,7 +812,13 @@ pre.code-inline {
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
   overflow: hidden;
-  scroll-margin-top: calc(var(--app-top-nav-height, 4.75rem) + 4.5rem);
+  scroll-margin-top: calc(var(--app-top-nav-height, 4.75rem) + 3.85rem);
+}
+
+.flow-shell-scroll-region--body > .flow-controls--step-intro {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 0.65rem;
 }
 
 .flow-step-intro-card__copy {
@@ -4277,12 +4283,23 @@ label.checkbox-field {
 }
 
 .puzzle-budget-panel,
+.output-review-glass-surface,
 .output-review-panel .output-review-story,
-.output-review-panel .output-review-stage-list {
+.output-review-panel .output-review-stage-list,
+.output-review-panel .output-review-puzzle-links {
   background: rgba(15, 23, 42, 0.45) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+#builder-output-anchor.output-review-panel.card {
+  background: rgba(15, 23, 42, 0.28) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+  scroll-margin-top: calc(var(--app-top-nav-height, 4.75rem) + 3.85rem);
 }
 
 .puzzle-budget-panel {
@@ -4292,11 +4309,75 @@ label.checkbox-field {
   max-width: 58rem;
 }
 
+.output-review-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-width: 58rem;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.output-review-body > .output-review-section-title,
+.output-review-flow-block > .output-review-section-title,
+.output-review-panel > h2,
+.output-review-panel > h3.output-review-section-title {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: 100%;
+}
+
 .output-review-panel .output-review-story,
-.output-review-panel .output-review-stage-list {
-  margin: 0.65rem 0 0.85rem;
+.output-review-panel .output-review-stage-list,
+.output-review-panel .output-review-puzzle-links,
+.output-review-markdown-stack .output-review-glass-surface,
+.output-review-flow-block .room-flowchart-panel,
+.output-review-flow-block .narrative-flow-guide {
+  margin: 0;
   padding: 0.85rem 1rem;
   border-radius: 12px;
+}
+
+.output-review-flow-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  max-width: 100%;
+}
+
+.output-review-markdown-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+}
+
+.output-review-table-wrap {
+  overflow-x: auto;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+}
+
+.output-review-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.output-review-table th,
+.output-review-table td {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: left;
+  vertical-align: top;
+}
+
+.output-review-table thead th {
+  background: rgba(8, 14, 26, 0.55);
+  color: rgba(220, 240, 245, 0.95);
+  font-weight: 650;
 }
 
 .puzzle-budget-heading {
@@ -4333,11 +4414,11 @@ label.field-row.field-row--checkbox {
 }
 
 .staging-diagram-block {
-  margin: 0.35rem 0 0;
+  margin: 0;
   padding: 0.75rem 1rem;
-  border-radius: 10px;
-  background: rgba(6, 10, 20, 0.72);
-  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  border: none;
   font-size: 0.88rem;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -4385,8 +4466,8 @@ label.field-row.field-row--checkbox {
   margin: 0;
   padding: 0.75rem 0.9rem;
   border-radius: 12px;
-  border: 1px solid rgba(70, 145, 155, 0.2);
-  background: rgba(8, 12, 24, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 12, 24, 0.32);
 }
 
 .output-review-field-label {
@@ -4436,8 +4517,8 @@ label.field-row.field-row--checkbox {
   margin: 0;
   padding: 0.85rem 1rem;
   border-radius: 12px;
-  border: 1px solid rgba(70, 160, 170, 0.22);
-  background: rgba(6, 10, 22, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 12, 24, 0.28);
 }
 
 .output-review-stage-head {
@@ -4801,7 +4882,7 @@ ul.auth-hero-para {
 /* Room flowchart (Mermaid) */
 .room-flowchart-lead {
   margin: 0 0 0.75rem;
-  max-width: 52rem;
+  max-width: 100%;
 }
 
 .export-flowchart-block {
@@ -4830,9 +4911,11 @@ ul.auth-hero-para {
 .room-flowchart-canvas {
   overflow-x: auto;
   padding: 0.75rem;
-  border-radius: 8px;
-  background: rgba(6, 12, 22, 0.55);
-  border: 1px solid var(--glass-edge);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   min-height: 120px;
 }
 
