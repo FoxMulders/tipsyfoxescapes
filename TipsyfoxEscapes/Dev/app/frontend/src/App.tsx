@@ -178,6 +178,7 @@ type StoryPlan = {
     storyRole: string;
     unlocks: string;
   }>;
+  progressionGraph?: import("./roomFlowchart").ProgressionGraph;
   stagingDiagram?: string;
 };
 type AuthUser = {

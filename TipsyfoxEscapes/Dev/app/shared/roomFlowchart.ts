@@ -1,5 +1,7 @@
 /** Mermaid room-flow source from story plan + puzzles (shared by export + UI). */
 
+import type { ProgressionGraph } from "./progressionGraph.js";
+
 export type FlowchartPuzzle = {
   id: string;
   title: string;
@@ -11,6 +13,7 @@ export type FlowchartPuzzle = {
 export type FlowchartStoryPlan = {
   missionObjective: string;
   progressionRule?: string;
+  progressionGraph?: ProgressionGraph;
   stages: Array<{
     stage: number;
     title: string;
@@ -57,6 +60,62 @@ const chunkByTwo = <T>(items: T[]): T[][] => {
   return chunks;
 };
 
+const buildMermaidFromProgressionGraph = (
+  graph: ProgressionGraph,
+  mission: string,
+  puzzles: FlowchartPuzzle[],
+): string => {
+  const titleById = new Map(puzzles.map((p) => [p.id, p.title] as const));
+  const lines: string[] = ["flowchart TD", `  start([${mission}])`];
+
+  for (const thread of graph.threads) {
+    const sgId = nodeId("sg", thread.id);
+    lines.push(`  subgraph ${sgId}["${mermaidLabel(thread.label, 48)}"]`);
+    for (const pid of thread.puzzleIds) {
+      const nid = nodeId("p", pid);
+      const label = mermaidLabel(titleById.get(pid) ?? pid);
+      lines.push(`    ${nid}["${label}"]`);
+    }
+    lines.push("  end");
+  }
+
+  const mermaidNode = (graphNodeId: string): string | null => {
+    const n = graph.nodes.find((x) => x.id === graphNodeId);
+    if (!n) return null;
+    if (n.kind === "puzzle" && n.puzzleId) return nodeId("p", n.puzzleId);
+    if (n.kind === "start") return "start";
+    if (n.kind === "gateway") return nodeId("g", n.id);
+    if (n.kind === "code") return nodeId("c", n.id);
+    if (n.kind === "finale") return "finale";
+    return nodeId("n", n.id);
+  };
+
+  for (const n of graph.nodes) {
+    if (n.kind === "gateway") {
+      lines.push(`  ${nodeId("g", n.id)}(("${mermaidLabel(n.label, 40)}"))`);
+    }
+    if (n.kind === "code") {
+      lines.push(`  ${nodeId("c", n.id)}["${mermaidLabel(n.label, 44)}"]`);
+    }
+  }
+  lines.push(`  finale([${mermaidLabel("Finale / exit", 40)}])`);
+
+  for (const edge of graph.edges) {
+    const from = mermaidNode(edge.from);
+    const to = mermaidNode(edge.to);
+    if (!from || !to) continue;
+    if (edge.kind === "contributes") {
+      lines.push(`  ${from} -.->|${mermaidLabel(edge.label ?? "fragment", 12)}| ${to}`);
+    } else if (edge.label === "Cross-track clue") {
+      lines.push(`  ${from} -.-> ${to}`);
+    } else {
+      lines.push(`  ${from} --> ${to}`);
+    }
+  }
+
+  return lines.join("\n");
+};
+
 export const buildRoomFlowchartMermaid = (
   storyPlan: FlowchartStoryPlan | null | undefined,
   puzzles: FlowchartPuzzle[],
@@ -65,8 +124,24 @@ export const buildRoomFlowchartMermaid = (
   const junior = puzzles.filter((p) => p.audienceTrack === "youth_addon");
   if (main.length === 0 && junior.length === 0) return null;
 
-  const orderedMain = [...main].sort((a, b) => puzzleStageOrderWeight(a) - puzzleStageOrderWeight(b));
   const mission = mermaidLabel(storyPlan?.missionObjective ?? "Complete the escape room mission");
+
+  if (storyPlan?.progressionGraph && storyPlan.progressionGraph.nodes.length > 0) {
+    const graphSource = buildMermaidFromProgressionGraph(storyPlan.progressionGraph, mission, puzzles);
+    if (junior.length === 0) return graphSource;
+    const lines = graphSource.split("\n");
+    const jgId = nodeId("sg", "junior_track");
+    lines.push(`  subgraph ${jgId}["Junior add-on (parallel)"]`);
+    for (const puzzle of junior) {
+      const pid = nodeId("j", puzzle.id);
+      lines.push(`    ${pid}["${mermaidLabel(puzzle.title)}"]`);
+      lines.push(`  start -.-> ${pid}`);
+    }
+    lines.push("  end");
+    return lines.join("\n");
+  }
+
+  const orderedMain = [...main].sort((a, b) => puzzleStageOrderWeight(a) - puzzleStageOrderWeight(b));
   const lines: string[] = ["flowchart TD", `  start([${mission}])`];
 
   const stages =

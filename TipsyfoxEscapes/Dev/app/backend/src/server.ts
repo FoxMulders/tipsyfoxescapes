@@ -37,6 +37,11 @@ import { issueAuthToken, resolveAuthUserId } from "./authSession.js";
 import { registerAdminRoutes } from "./adminRoutes.js";
 import { buildRoomFlowchartMermaid } from "../../shared/roomFlowchart.js";
 import {
+  buildProgressionGraph,
+  deriveStoryViewsFromGraph,
+  type ProgressionGraph,
+} from "../../shared/progressionGraph.js";
+import {
   consumeManifestCredit,
   defaultRoomManifest,
   normalizeRoomManifest,
@@ -191,6 +196,8 @@ type StoryPlan = {
   progressionRule: string;
   stages: StoryStage[];
   puzzleLinks: StoryPuzzleLink[];
+  /** Session-scoped dependency graph (puzzles, gates, codes, finale). */
+  progressionGraph?: ProgressionGraph;
   /** Markdown: table + short ASCII hint for host staging (main track). */
   stagingDiagram?: string;
 };
@@ -2224,61 +2231,6 @@ const resolveGeneratedCategoryCounts = (session: SessionState, remaining: number
   return computeDefaultCategoryCounts(remaining, sessionMinutes);
 };
 
-const buildStagingDiagram = (
-  environmentType: string,
-  mainOrdered: Puzzle[],
-  puzzleLinks: StoryPuzzleLink[],
-): string => {
-  const env = environmentType.trim() || "your play space";
-  const zones = [
-    "Entry / greeting zone",
-    "Side wall or shelf",
-    "Central hub table",
-    "Back corner / closet",
-    "Finale — exit cluster",
-  ];
-  const lines: string[] = [
-    "### Recommended staging map (conceptual)",
-    "",
-    `_Adapt zones to your **${env}** footprint (supervision, trip hazards, real doors). Numbers are **main-track** puzzles in story order._`,
-    "",
-    "| # | Puzzle | Suggested zone | Where it leads (story) |",
-    "|---:|---|---|---|",
-  ];
-  if (mainOrdered.length === 0) {
-    lines.push("| — | _(none yet)_ | — | — |");
-  } else {
-    for (let i = 0; i < mainOrdered.length; i += 1) {
-      const puzzle = mainOrdered[i]!;
-      const z = zones[Math.min(i, zones.length - 1)]!;
-      const link = puzzleLinks.find((l) => l.puzzleId === puzzle.id);
-      const leadRaw = (link?.unlocks ?? "Advances staged reveals per progression above.").replace(/\|/g, "/");
-      const lead = leadRaw.replace(/\s+/g, " ").trim().slice(0, 160);
-      const title = puzzle.title.replace(/\|/g, "/");
-      lines.push(`| ${i + 1} | ${title} | ${z} | ${lead}${lead.length >= 160 ? "…" : ""} |`);
-    }
-  }
-  lines.push(
-    "",
-    "```text",
-    "  [1]──────[2]     (spread stations so concurrent players are not stacked on one table)",
-    "    \\      /",
-    "     \\[3]/       (merge / cross-check zone — see Stage flow)",
-    "       │",
-    "      [4+]       (finale: aim clear sightlines to exit / prop vault)",
-    "```",
-  );
-  return lines.join("\n");
-};
-
-const chunkByTwo = <T>(items: T[]): T[][] => {
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += 2) {
-    chunks.push(items.slice(i, i + 2));
-  }
-  return chunks;
-};
-
 const createStoryPlan = (theme: Theme | undefined, puzzles: Puzzle[], session: SessionState): StoryPlan => {
   // Stage hints control where user-provided puzzles appear in progression.
   const themeName = theme?.name ?? "Unknown Theme";
@@ -2317,87 +2269,30 @@ const createStoryPlan = (theme: Theme | undefined, puzzles: Puzzle[], session: S
       : pathKind === "multilinear"
         ? "Merges split tracks into one closing beat—verify timing so both sides arrive with clues in hand."
         : "Converges open branches into a single ending sequence so chaotic mid-game energy still lands one exit story.";
-  const progressionCore =
-    pathKind === "linear"
-      ? "Linear / path-of-one bias: aim for a deliberate sequence (A→B→C) so the whole team shares one timeline; if you branch, keep branches short and bottleneck clearly."
-      : pathKind === "multilinear"
-        ? "Multi-linear bias: design explicit split/remerge moments; balance pacing between cohorts—your junior add-on (if any) is a built-in parallel track."
-        : "Non-linear / open-path bias: keep several puzzles live whenever staffing allows; converge on one final meta reveal so freedom mid-game still yields a single ending.";
-  const orderedPuzzles = [...puzzles].sort(
-    (a, b) => puzzleStageOrderWeight(a) - puzzleStageOrderWeight(b),
-  );
-  const mainForDiagram = puzzles
-    .filter((p) => (p.audienceTrack ?? "main") !== "youth_addon")
-    .sort((a, b) => puzzleStageOrderWeight(a) - puzzleStageOrderWeight(b));
-  const groups = chunkByTwo(orderedPuzzles);
-  const stageBeatTemplates = [
-    "Initial discovery and orientation",
-    "Information synthesis under pressure",
-    "System activation and control",
-    "Final containment and escape",
-  ];
-  const stages: StoryStage[] = groups.map((group, index) => {
-    const nextGroup = groups[index + 1] ?? [];
-    const reveals =
-      nextGroup.length > 0
-        ? `Completing both required puzzles reveals ${nextGroup.map((p) => `"${p.title}"`).join(" and ")}, advancing the mission: ${missionObjectiveClipped}.`
-        : `Completing both required puzzles unlocks the final sequence needed to complete the mission: ${missionObjectiveClipped}.`;
-    const stageLabel = stageBeatTemplates[index] ?? "Escalation and resolution";
-    return {
-      stage: index + 1,
-      title: `Stage ${index + 1}`,
-      storyBeat: stageLabel,
-      whyThisStageExists: nextGroup.length > 0 ? stageWhyMid : stageWhyFinal,
-      objective:
-        nextGroup.length > 0
-          ? `Solve both parallel elements to progress toward: ${missionObjectiveClipped}.`
-          : `Solve both final elements to complete: ${missionObjectiveClipped}.`,
-      whatPlayersMustDo: [
-        `Complete "${group[0]?.title ?? "Puzzle A"}" and "${group[1]?.title ?? "Puzzle B"}".`,
-        "Cross-check outputs from both puzzles to confirm the reveal condition.",
-        nextGroup.length > 0
-          ? `Trigger next-stage reveal mechanism that moves the team closer to: ${missionObjectiveClipped}.`
-          : `Trigger final door release condition and resolve: ${missionObjectiveClipped}.`,
-      ],
-      requiredPuzzleIds: group.map((puzzle) => puzzle.id),
-      requiredPuzzleTitles: group.map((puzzle) => puzzle.title),
-      reveals,
-    };
+  const progressionGraph = buildProgressionGraph({
+    puzzles,
+    playersConcurrent: session.planningInput.playersConcurrent,
+    environmentType: session.planningInput.environmentType,
+    inventoryItems: inv,
+    pathKind,
   });
-
-  const puzzleLinks: StoryPuzzleLink[] = groups.flatMap((group, index) => {
-    const nextGroup = groups[index + 1] ?? [];
-    return group.map((puzzle) => ({
-      puzzleId: puzzle.id,
-      puzzleTitle: puzzle.title,
-      storyRole:
-        index === 0
-          ? "Opening discovery puzzle"
-          : index === groups.length - 1
-            ? "Final lock path puzzle"
-            : "Mid-game escalation puzzle",
-      unlocks:
-        nextGroup.length > 0
-          ? `Acts as one of two required solves to reveal ${nextGroup.map((p) => `"${p.title}"`).join(" and ")}, supporting the mission: ${missionObjectiveClipped}.`
-          : `Acts as one of two required solves that reveals the final exit mechanism to complete: ${missionObjectiveClipped}.`,
-    }));
-  });
-
-  const stagingDiagram = buildStagingDiagram(
+  const derived = deriveStoryViewsFromGraph(
+    progressionGraph,
+    puzzles,
+    missionObjectiveClipped,
     session.planningInput.environmentType,
-    mainForDiagram,
-    puzzleLinks,
+    { mid: stageWhyMid, final: stageWhyFinal },
   );
 
   return {
     situation: `Players are cast inside a ${themeName} scenario and must decode layered clues before the environment reaches failure state.${eventSnippet}${invSituation}`,
     premise: `${themeName}: ${missionObjectiveClipped}`,
     missionObjective: missionObjectiveClipped,
-    progressionRule: `${progressionCore} At least two puzzle elements must be solved in each stage before the next stage is revealed.` +
-      (invProgression ? ` ${invProgression}` : ""),
-    stages,
-    puzzleLinks,
-    stagingDiagram,
+    progressionRule: derived.progressionRule + (invProgression ? ` ${invProgression}` : ""),
+    stages: derived.stages,
+    puzzleLinks: derived.puzzleLinks,
+    progressionGraph,
+    stagingDiagram: derived.stagingDiagram,
   };
 };
 
