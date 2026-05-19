@@ -48,12 +48,20 @@ import {
   sessionHasFullPuzzleAccess,
   type RoomManifest,
 } from "./roomManifest.js";
-import { redactPuzzlesForClient, redactStoryPlanForClient } from "./puzzlePresentation.js";
+import { hasMakerElectronicsAccessForUser } from "./billing/entitlements.js";
+import { shouldRedactElectronicForExportUser } from "./exportRunbook.js";
+import {
+  redactPuzzlesForClient,
+  redactStoryPlanForClient,
+  stripMakerElectronicsFromPuzzles,
+  type PuzzlePreview,
+} from "./puzzlePresentation.js";
 import {
   EXPORT_PDF_PRINT_GUIDE,
   buildConsolidatedBomTable,
   buildGmLiveOpsBriefing,
   buildTechnicalPuzzleSections,
+  sanitizeExportPuzzlesForBilling,
   type ExportPuzzleRef,
   type ExportSessionContext,
 } from "./exportRunbook.js";
@@ -436,6 +444,7 @@ type PublicUser = {
   subscriptionInactive: boolean;
   readOnlyMode: boolean;
   canExportRunbook: boolean;
+  hasMakerElectronics: boolean;
   isEnterpriseProvisioned: boolean;
 };
 type SavedPlan = {
@@ -734,6 +743,16 @@ const hasFullCatalogAccessUser = (user: StoredUser | undefined): boolean => {
   return user.roomAllowance > FREE_TIER_ROOM_ALLOWANCE;
 };
 
+const puzzlesForClientResponse = (
+  puzzles: Puzzle[],
+  fullAccess: boolean,
+  billingUser: StoredUser | undefined,
+): Puzzle[] | PuzzlePreview[] => {
+  const gated = redactPuzzlesForClient(puzzles, fullAccess);
+  if (!fullAccess || !Array.isArray(gated)) return gated as PuzzlePreview[];
+  return stripMakerElectronicsFromPuzzles(gated as Puzzle[], hasMakerElectronicsAccessForUser(billingUser));
+};
+
 const PLAN_TIER_RANK: Record<BillingPlanId, number> = {
   free: 0,
   casual_hobbyist: 1,
@@ -822,6 +841,7 @@ const toPublicUser = (user: StoredUser): PublicUser => {
       user.isAdmin ||
       (isTrialTierUser(user) && !user.trialUsedAt) ||
       (hasFullCatalogAccessUser(user) && exportCreditsRemaining > 0),
+    hasMakerElectronics: hasMakerElectronicsAccessForUser(user),
     isEnterpriseProvisioned: Boolean(user.isAdmin || user.isEnterpriseProvisioned),
   };
 };
@@ -1320,7 +1340,7 @@ const applyTrialExportRedaction = (lines: string[], redact: boolean): string[] =
     "",
     "## Electronic Puzzle Implementation Details",
     "",
-    "_Export omitted electronics: wiring diagrams, wiring notes, build steps, and Arduino sketches (complete your one trial export with electronics, or add room slots + export credits for paid-tier exports)._",
+    "_Export omitted maker electronics: wiring diagrams, pinouts, build steps, and Arduino sketches. Upgrade to **Home Host Enthusiast** or **Creative Studio** for full maker packs, or use a Casual Hobbyist pass for host-only runbooks._",
     "",
     "_Third-party tutorials are credited under “Puzzle Video and Build References”; use the listed support / affiliate links to compensate original creators._",
     "",
@@ -4683,7 +4703,7 @@ app.post("/api/puzzles/generate", async (req, res) => {
     },
   });
   const fullAccess = sessionHasFullPuzzleAccess(session.roomManifest);
-  const clientPuzzles = redactPuzzlesForClient(generatedForResponse, fullAccess);
+  const clientPuzzles = puzzlesForClientResponse(generatedForResponse, fullAccess, billingUser);
   const clientStory = redactStoryPlanForClient(
     session.currentStoryPlan as unknown as Record<string, unknown>,
     fullAccess,
@@ -4788,7 +4808,7 @@ app.post("/api/puzzles/:puzzleId/replace", (req, res) => {
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
   );
   const fullAccess = sessionHasFullPuzzleAccess(session.roomManifest);
-  const clientReplacement = redactPuzzlesForClient([mergedReplacement], fullAccess)[0];
+  const clientReplacement = puzzlesForClientResponse([mergedReplacement], fullAccess, billingUser)[0];
   res.json({
     replacedPuzzleId: puzzleId,
     puzzleQaPassed: allPuzzlesPassedPuzzleQa(session.currentPuzzles),
@@ -4852,7 +4872,7 @@ app.post("/api/puzzles/:puzzleId/reject", (req, res) => {
   res.json({
     rejectedPuzzleId: puzzleId,
     refusedSlot,
-    puzzles: redactPuzzlesForClient(session.currentPuzzles, fullAccess),
+    puzzles: puzzlesForClientResponse(session.currentPuzzles, fullAccess, billingUser),
     compatibilityPassed,
     storyPlan: fullAccess ? session.currentStoryPlan : redactStoryPlanForClient(
       session.currentStoryPlan as unknown as Record<string, unknown>,
@@ -4953,8 +4973,8 @@ app.post("/api/puzzles/fill-slot", (req, res) => {
   );
   const fullAccess = sessionHasFullPuzzleAccess(session.roomManifest);
   res.json({
-    newPuzzle: redactPuzzlesForClient([mergedReplacement], fullAccess)[0],
-    puzzles: redactPuzzlesForClient(session.currentPuzzles, fullAccess),
+    newPuzzle: puzzlesForClientResponse([mergedReplacement], fullAccess, billingUser)[0],
+    puzzles: puzzlesForClientResponse(session.currentPuzzles, fullAccess, billingUser),
     compatibilityPassed,
     storyPlan: fullAccess ? session.currentStoryPlan : redactStoryPlanForClient(
       session.currentStoryPlan as unknown as Record<string, unknown>,
@@ -4995,16 +5015,12 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
   const hasCatalog = Boolean(billingUser && hasFullCatalogAccessUser(billingUser));
   const creditsBefore =
     billingUser && !billingUser.isAdmin && hasCatalog ? Math.max(0, billingUser.exportCreditsRemaining) : 0;
-  /** Active trial (before first export): full electronics in the one-time trial export. */
-  const signedInFreeTier = Boolean(
-    billingUser && !billingUser.isAdmin && isTrialTierUser(billingUser) && !billingUser.trialUsedAt,
-  );
-  const allowFullElectronics =
+  const exportCapacityOk =
     Boolean(billingUser?.isAdmin) ||
     creditReservedAtManifest ||
     (hasCatalog && creditsBefore > 0) ||
-    signedInFreeTier;
-  const redactElectronicBuild = !allowFullElectronics;
+    Boolean(billingUser && isTrialTierUser(billingUser) && !billingUser.trialUsedAt);
+  const redactElectronicBuild = shouldRedactElectronicForExportUser(billingUser) || !exportCapacityOk;
   session.currentPuzzles = withThemeFitReasons(session.currentPuzzles, session.selectedTheme, session);
   session.currentPuzzles = withPuzzleQaForSession(session, session.currentPuzzles);
   session.currentPuzzles = annotatePuzzlesWithInventoryAnchors(session, session.currentPuzzles);
@@ -5023,25 +5039,28 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
     playersConcurrent: session.planningInput.playersConcurrent,
     operatingMode: operatingModeForExport,
   };
-  const exportPuzzles: ExportPuzzleRef[] = session.currentPuzzles.map((puzzle) => ({
-    id: puzzle.id,
-    title: puzzle.title,
-    category: puzzle.category,
-    difficulty: puzzle.difficulty,
-    objective: puzzle.objective,
-    howItWorks: puzzle.howItWorks,
-    themeFitReason: puzzle.themeFitReason,
-    stageHint: puzzle.stageHint,
-    audienceTrack: puzzle.audienceTrack,
-    gatesAdultProgression: puzzle.gatesAdultProgression,
-    solveSteps: puzzle.solveSteps ?? [],
-    referenceLinks: puzzle.referenceLinks ?? [],
-    electronicDetails: puzzle.electronicDetails,
-    physical_anchor_prop: puzzle.physical_anchor_prop,
-    narrative_justification: puzzle.narrative_justification,
-    bill_of_materials: puzzle.bill_of_materials,
-    build_documentation_url: puzzle.build_documentation_url,
-  }));
+  const exportPuzzles: ExportPuzzleRef[] = sanitizeExportPuzzlesForBilling(
+    session.currentPuzzles.map((puzzle) => ({
+      id: puzzle.id,
+      title: puzzle.title,
+      category: puzzle.category,
+      difficulty: puzzle.difficulty,
+      objective: puzzle.objective,
+      howItWorks: puzzle.howItWorks,
+      themeFitReason: puzzle.themeFitReason,
+      stageHint: puzzle.stageHint,
+      audienceTrack: puzzle.audienceTrack,
+      gatesAdultProgression: puzzle.gatesAdultProgression,
+      solveSteps: puzzle.solveSteps ?? [],
+      referenceLinks: puzzle.referenceLinks ?? [],
+      electronicDetails: puzzle.electronicDetails,
+      physical_anchor_prop: puzzle.physical_anchor_prop,
+      narrative_justification: puzzle.narrative_justification,
+      bill_of_materials: puzzle.bill_of_materials,
+      build_documentation_url: puzzle.build_documentation_url,
+    })),
+    billingUser,
+  );
   const lines = [
     "# Escape Room Plan",
     "",

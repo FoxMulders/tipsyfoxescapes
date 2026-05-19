@@ -48,6 +48,42 @@ export const toPuzzlePreview = (puzzle: PuzzleLike, index: number): PuzzlePrevie
   };
 };
 
+type ElectronicDetailsLike = {
+  parts?: string[];
+  wiringDiagram?: string[];
+  buildSteps?: string[];
+  arduinoCode?: string;
+  wiringDiagramSvg?: string;
+  pinoutTable?: unknown[];
+};
+
+type PuzzleWithElectronics = PuzzleLike & {
+  category?: string;
+  electronicDetails?: ElectronicDetailsLike;
+};
+
+/** Strip maker-only fields for trial / Casual Hobbyist while keeping parts list visible. */
+export const stripMakerElectronicsFromPuzzles = <T extends PuzzleWithElectronics>(
+  puzzles: T[],
+  makerAccess: boolean,
+): T[] => {
+  if (makerAccess) return puzzles;
+  return puzzles.map((puzzle) => {
+    if (puzzle.category !== "electronic" || !puzzle.electronicDetails) return puzzle;
+    return {
+      ...puzzle,
+      electronicDetails: {
+        parts: puzzle.electronicDetails.parts ?? [],
+        wiringDiagram: [],
+        buildSteps: [],
+        arduinoCode: "",
+        wiringDiagramSvg: "",
+        pinoutTable: [],
+      },
+    };
+  });
+};
+
 export const redactPuzzlesForClient = (
   puzzles: PuzzleLike[],
   fullAccess: boolean,

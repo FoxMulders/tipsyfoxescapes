@@ -18,13 +18,17 @@ import { PlanningSnapshotSheet } from "@/components/layout/PlanningSnapshotSheet
 import { TopNavBar } from "@/components/layout/TopNavBar";
 import { FlowStepIntro } from "@/components/planning/FlowStepIntro";
 import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
+import {
+  PlansAndBillingSection,
+  PricingValueFocus,
+  pricingCtaLabel,
+  type BillingPlan,
+} from "@/components/account/PlansAndBillingSection";
 import { PricingPlanCard } from "@/components/PricingPlanCard";
-import { SquareCheckout } from "@/components/SquareCheckout";
 import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
 import { RoomDetailsStep } from "@/components/planning/RoomDetailsStep";
 import { ThemeCuratedCard } from "@/components/planning/ThemeCuratedCard";
-import { VenueEscapePlanBuilder } from "@/components/planning/VenueEscapePlanBuilder";
 import {
   calculateEscapePlanPrice,
   createEscapePlanRoom,
@@ -207,6 +211,7 @@ type AuthUser = {
   subscriptionInactive: boolean;
   readOnlyMode: boolean;
   canExportRunbook: boolean;
+  hasMakerElectronics: boolean;
 };
 
 const formatBillingTierLabel = (tier: AuthUser["billingTier"]): string => {
@@ -221,52 +226,6 @@ const AUTH_PROVIDER_LABELS: Record<AuthUser["provider"], string> = {
   google: "Google",
   facebook: "Facebook",
   github: "GitHub",
-};
-
-type BillingPlan = {
-  id: string;
-  name: string;
-  tagline: string;
-  priceLabel: string;
-  priceSubtitle?: string | null;
-  perRoomPriceLabel?: string | null;
-  priceCents: number;
-  currency: string;
-  billingInterval?: string;
-  tierLane?: string;
-  valueHeadline?: string | null;
-  roomsToAdd: number;
-  exportCreditsToAdd: number;
-  features: string[];
-  comparedTo: string;
-  purchasable: boolean;
-  highlight?: boolean;
-  scalableRoomPricing?: {
-    includedLayoutRooms: number;
-    perAdditionalRoomCents: number;
-    exportCreditsPerRoom?: number;
-  };
-};
-
-const PricingValueFocus = ({ text }: { text: string }) => {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  return (
-    <p className="pricing-value-focus muted" role="note">
-      {trimmed}
-    </p>
-  );
-};
-
-const pricingCtaLabel = (plan: BillingPlan, busy: boolean, checkoutTotalCents?: number): string => {
-  if (busy) return "Opening Square…";
-  if (plan.billingInterval === "monthly" && checkoutTotalCents && checkoutTotalCents > plan.priceCents) {
-    return `Subscribe — ${formatCentsUsd(checkoutTotalCents)}/mo`;
-  }
-  if (plan.billingInterval === "monthly") return `Subscribe — ${plan.priceLabel}`;
-  if (plan.billingInterval === "one_time" && plan.id === "home_enthusiast") return `Buy — ${plan.priceLabel}`;
-  if (plan.id === "casual_hobbyist") return `Get event pass — ${plan.priceLabel}`;
-  return `Choose ${plan.name}`;
 };
 
 const normalizeAuthUser = (raw: unknown): AuthUser | null => {
@@ -333,6 +292,12 @@ const normalizeAuthUser = (raw: unknown): AuthUser | null => {
     canExportRunbook = isAdmin || (hasFullCatalog && exportCreditsRemaining > 0) || (billingTier === "trial" && trialRemaining);
   }
   if (subscriptionInactive || lifecycleStatus === "canceled") canExportRunbook = false;
+  let hasMakerElectronics = Boolean(o.hasMakerElectronics);
+  if (o.hasMakerElectronics === undefined) {
+    const tier = typeof o.tierType === "string" ? o.tierType : "";
+    hasMakerElectronics =
+      isAdmin || tier === "enthusiast" || tier === "studio" || tier === "venue" || tier === "admin";
+  }
   const tierType = typeof o.tierType === "string" ? o.tierType : billingTier;
   return {
     id: o.id,
@@ -359,6 +324,7 @@ const normalizeAuthUser = (raw: unknown): AuthUser | null => {
     subscriptionInactive,
     readOnlyMode,
     canExportRunbook,
+    hasMakerElectronics,
   };
 };
 type SavedPlanSummary = {
@@ -684,6 +650,10 @@ function PuzzleWindowCard({
   rejectBusy: boolean;
 }) {
   const previewLocked = isPuzzlePreviewLocked(puzzle);
+  const makerElectronicsLocked = Boolean(authUser && !authUser.hasMakerElectronics);
+  const electronicsBlurLabel = !authUser
+    ? "Sign in to see wiring diagrams, build steps, and diagram SVG for your room."
+    : "Upgrade to Home Host Enthusiast or Creative Studio to unlock wiring diagrams, Arduino sketches, and schematic SVGs.";
   const titleId = `puzzle-win-${puzzle.id}-title`;
   const heading = puzzleCardHeading(puzzle, puzzleNumber);
   return (
@@ -781,8 +751,12 @@ function PuzzleWindowCard({
           </button>
           {arduinoPreviewPuzzleId === puzzle.id ? (
             <TrialBlur
-              active={!authUser}
-              label="Sign in for the full sketch in export plus complete wiring and build steps below."
+              active={!authUser || makerElectronicsLocked}
+              label={
+                !authUser
+                  ? "Sign in for the full sketch in export plus complete wiring and build steps below."
+                  : electronicsBlurLabel
+              }
             >
               <pre className="code-inline arduino-preview-panel">
                 {authUser
@@ -807,7 +781,7 @@ function PuzzleWindowCard({
               <li key={part}>{part}</li>
             ))}
           </ul>
-          <TrialBlur active={!authUser} label="Sign in to see wiring diagrams, build steps, and diagram SVG for your room.">
+          <TrialBlur active={!authUser || makerElectronicsLocked} label={electronicsBlurLabel}>
             <p className="muted impl-heading">
               <strong>Wiring notes</strong>
             </p>
@@ -2602,6 +2576,7 @@ export default function App() {
   const [showExistingPuzzleForm, setShowExistingPuzzleForm] = useState<boolean>(false);
   const [validationFlags, setValidationFlags] = useState<Record<string, boolean>>({});
   const [appView, setAppView] = useState<"builder" | "account" | "admin">("builder");
+  const [accountSection, setAccountSection] = useState<"overview" | "plans">("overview");
   const [snapshotOpen, setSnapshotOpen] = useState(false);
   const lastPlanningAuthTokenRef = useRef(initialAuth.authToken);
   const pendingAuthSessionBootstrap = useRef(false);
@@ -3394,6 +3369,8 @@ export default function App() {
       message ??
         "Your free trial is complete. Purchase a room pack to design more rooms, save plans, and export again.",
     );
+    setAccountSection("plans");
+    setAppView("account");
     setUpgradePromptOpen(true);
   };
 
@@ -5515,7 +5492,7 @@ export default function App() {
   const savedPlansManageList: ReactNode =
     authUser && !authUser.canSaveRooms ? (
       <p className="muted">
-        Saving plans is not included in the free trial. Purchase a room pack below to save rooms to your account.
+        Saving plans is not included in the free trial. Open <strong>Account → Plans &amp; billing</strong> to purchase a room pack.
       </p>
     ) : savedPlans.length === 0 ? (
       <p className="muted">No saved plans yet. Approve and save a plan from the builder export step.</p>
@@ -5551,17 +5528,17 @@ export default function App() {
                 <h1>{BRAND_NAME}</h1>
                 <p className="auth-hero-para">{BRAND_INTRO}</p>
                 <p className="auth-hero-para muted">
-                  Sign up to try the builder: one <strong>free trial</strong> with the same three curated themes every time, a full
-                  export, and no saved rooms until you purchase a <strong>room pack</strong>.
+                  Sign up for a <strong>free trial</strong>: three curated themes, narrative story-beat alignment, and a host runbook
+                  preview—no maker electronics pack until you upgrade.
                 </p>
                 <ul className="auth-bullets auth-hero-para">
-                  <li>Generate cinematic room concepts quickly</li>
-                  <li>One full trial export; room packs add save slots for future builds</li>
-                  <li>Export complete host-ready run sheets</li>
-                  <li>Room packs unlock the full theme library plus “bring your own theme”</li>
+                  <li>Quick cinematic room generation from your space and guest count</li>
+                  <li>Narrative story beats aligned to every puzzle in your run</li>
+                  <li>Easy host run sheets you can print for game night</li>
+                  <li>Paid plans unlock saves, full theme library, and maker wiring packs</li>
                 </ul>
                 <p className="muted promo-footnote auth-hero-para">
-                  One trial per account: the same three curated themes, one full export, and no saved rooms until you purchase a room pack.
+                  Plans and checkout live inside your account after sign-in—start designing first, upgrade when you need saves or Arduino detail.
                 </p>
               </div>
             </div>
@@ -5680,30 +5657,6 @@ export default function App() {
           </nav>
         </section>
         </div>
-        {billingPlans.length > 0 ? (
-          <section className="card subscription-card pricing-section pricing-section--login glass-panel" aria-label="Pricing plans">
-            <h2 className="subscription-title">Plans &amp; subscriptions</h2>
-            <p className="muted pricing-lead">
-              Start free, then pick a <strong>home hosting</strong> pass for backyard events or an{" "}
-              <strong>operator subscription</strong> for live consoles, white-label staff run sheets, and fleet management.
-              Sign in to checkout with Square.
-            </p>
-            <div className="pricing-grid">
-              {billingPlans.map((plan) => (
-                <PricingPlanCard
-                  key={plan.id}
-                  plan={plan}
-                  comparedToSlot={<PricingValueFocus text={plan.comparedTo ?? ""} />}
-                  footer={
-                    <p className="muted pricing-included">
-                      {plan.purchasable ? "Available after sign-in" : "Free to start"}
-                    </p>
-                  }
-                />
-              ))}
-            </div>
-          </section>
-        ) : null}
         <GlobalFooter buildStamp={APP_BUILD_STAMP} />
       </main>
       </>
@@ -5720,8 +5673,8 @@ export default function App() {
       >
       {authUser.billingTier === "trial" && appView === "builder" ? (
         <div className="slot-utilization-warning trial-active-banner" role="status">
-          <strong>Free trial:</strong> the same three curated themes load every time. You get one full export; saving to your account
-          requires a paid pack.
+          <strong>Free trial:</strong> the same three curated themes load every time. You get one host runbook export (no maker
+          electronics pack). Saving requires a paid plan—see <strong>Account → Plans &amp; billing</strong>.
         </div>
       ) : null}
       {authUser.trialUsed && !authUser.canSaveRooms && appView === "builder" ? (
@@ -5827,6 +5780,50 @@ export default function App() {
       />
       {appView === "account" ? (
         <div className="account-view-wrap">
+          <nav className="account-section-tabs" aria-label="Account sections">
+            <button
+              type="button"
+              className={accountSection === "overview" ? "primary-btn" : "secondary-btn"}
+              onClick={() => setAccountSection("overview")}
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              className={accountSection === "plans" ? "primary-btn" : "secondary-btn"}
+              onClick={() => setAccountSection("plans")}
+            >
+              Plans &amp; billing
+            </button>
+          </nav>
+          {accountSection === "plans" && !authUser.isAdmin && billingPlans.length > 0 ? (
+            <PlansAndBillingSection
+              authUser={authUser}
+              billingPlans={billingPlans}
+              selectedBillingPlanId={selectedBillingPlanId ?? ""}
+              selectedBillingPlan={selectedBillingPlan}
+              onSelectPlan={setSelectedBillingPlanId}
+              squarePaymentsReady={squarePaymentsReady}
+              squareSetupHint={squareSetupHint}
+              authToken={authToken}
+              squareWebConfig={squareWebConfig}
+              billingNotice={billingNotice}
+              onBillingNotice={(message) => {
+                setBillingNotice(message);
+                setError("");
+              }}
+              onBillingError={(message) => setError(message)}
+              checkoutPlanId={checkoutPlanId}
+              onPurchasePlan={(planId) => void handlePurchasePlan(planId)}
+              escapePlanRooms={escapePlanRooms}
+              activeEscapePlanRoomId={activeEscapePlanRoomId}
+              onEscapePlanRoomsChange={setEscapePlanRooms}
+              onActiveEscapePlanRoomChange={setActiveEscapePlanRoomId}
+              operatorPlanQuote={operatorPlanQuote}
+            />
+          ) : null}
+          {accountSection === "overview" ? (
+          <>
           <section className="card mission-panel">
             <h2 className="subscription-title">Account</h2>
             <p className="muted">
@@ -5855,92 +5852,9 @@ export default function App() {
               saved-room capacity. Consider adding slots or deleting drafts you no longer need.
             </div>
           ) : null}
-          {!authUser.isAdmin ? (
-            <section className="card subscription-card pricing-section" aria-label="Pricing plans">
-              <h2 className="subscription-title">Plans &amp; subscriptions</h2>
-              <p className="muted pricing-lead">
-                <strong>Home hosting</strong> plans unlock saved rooms, runbooks, and player screens.{" "}
-                <strong>Operator subscriptions</strong> add the Gamemaster Live Console, white-label staff sheets, scalable
-                layout rooms (+$39/mo each beyond the first), and leaderboards. Pick <strong>Home Party</strong> or{" "}
-                <strong>Commercial Venue</strong> in Room details
-                to match how you run each build. Checkout is powered by <strong>Square</strong>.
-              </p>
-              {!squarePaymentsReady ? (
-                <p className="muted pricing-square-hint" role="status">
-                  {squareSetupHint ??
-                    "Square checkout is not configured yet. Set SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID in Vercel → Environment Variables (Production & Preview), then redeploy."}
-                </p>
-              ) : null}
-              {squarePaymentsReady && authToken && selectedBillingPlan?.purchasable ? (
-                <SquareCheckout
-                  planId={selectedBillingPlan.id}
-                  planLabel={
-                    operatorPlanQuote
-                      ? `${selectedBillingPlan.name} — ${formatCentsUsd(operatorPlanQuote.totalCents)}/mo`
-                      : selectedBillingPlan.name
-                  }
-                  authToken={authToken}
-                  square={squareWebConfig}
-                  onNotice={(message) => {
-                    setBillingNotice(message);
-                    setError("");
-                  }}
-                  onError={(message) => setError(message)}
-                />
-              ) : null}
-              {showEscapePlanBuilder && selectedBillingPlan?.scalableRoomPricing ? (
-                <VenueEscapePlanBuilder
-                  rooms={escapePlanRooms}
-                  activeRoomId={activeEscapePlanRoomId}
-                  onRoomsChange={setEscapePlanRooms}
-                  onActiveRoomChange={setActiveEscapePlanRoomId}
-                  basePriceCents={selectedBillingPlan.priceCents}
-                  includedLayoutRooms={selectedBillingPlan.scalableRoomPricing.includedLayoutRooms}
-                  perAdditionalRoomCents={selectedBillingPlan.scalableRoomPricing.perAdditionalRoomCents}
-                  planName={selectedBillingPlan.name}
-                />
-              ) : null}
-              <div className="pricing-grid">
-                {billingPlans.map((plan) => {
-                  const isCurrent = plan.id === "free" ? authUser.billingTier === "trial" : false;
-                  const isSelected = plan.id === selectedBillingPlanId;
-                  return (
-                    <PricingPlanCard
-                      key={plan.id}
-                      plan={plan}
-                      selected={isSelected}
-                      isCurrent={isCurrent}
-                      interactive={plan.purchasable}
-                      onSelect={plan.purchasable ? setSelectedBillingPlanId : undefined}
-                      comparedToSlot={<PricingValueFocus text={plan.comparedTo ?? ""} />}
-                      footer={
-                        plan.purchasable ? (
-                          <button
-                            type="button"
-                            className={isSelected || plan.highlight ? "primary-btn" : "secondary-btn"}
-                            disabled={!squarePaymentsReady || checkoutPlanId === plan.id}
-                            aria-busy={checkoutPlanId === plan.id}
-                            onClick={() => void handlePurchasePlan(plan.id)}
-                          >
-                            {pricingCtaLabel(
-                              plan,
-                              checkoutPlanId === plan.id,
-                              plan.id === SCALABLE_OPERATOR_PLAN_ID ? operatorPlanQuote?.totalCents : undefined,
-                            )}
-                          </button>
-                        ) : (
-                          <p className="muted pricing-included">
-                            {authUser.billingTier === "trial" ? "Your current plan" : "Included baseline"}
-                          </p>
-                        )
-                      }
-                    />
-                  );
-                })}
-              </div>
-              {billingNotice ? <p className="success-inline pricing-notice">{billingNotice}</p> : null}
-            </section>
-          ) : null}
+          <p className="muted account-plans-hint">
+            Room packs and checkout are on the <button type="button" className="link-btn" onClick={() => setAccountSection("plans")}>Plans &amp; billing</button> tab.
+          </p>
           {authUser.isAdmin ? (
             <section className="card mission-panel" aria-label="Admin tier">
               <h2 className="subscription-title">Admin tier</h2>
@@ -5974,8 +5888,8 @@ export default function App() {
                   </p>
                 ) : (
                   <p className="muted">
-                    Trial: one full export with electronics; plans are not saved to your account. A paid home or operator plan adds
-                    save slots, catalog access, and export credits for additional rooms.
+                    Trial: one host runbook export without maker electronics. Paid plans add save slots, catalog access, and
+                    export credits. <strong>Home Host Enthusiast</strong> unlocks wiring diagrams and Arduino packs.
                   </p>
                 )}
                 <p className="muted">
@@ -5986,8 +5900,8 @@ export default function App() {
                       : authUser.isAdmin
                         ? "Admin — unlimited catalog and exports"
                         : authUser.trialUsed
-                          ? "Trial used — choose a plan under Plans & subscriptions"
-                          : "Trial — same 3 curated themes, one export, no saved rooms"}
+                          ? "Trial used — choose a plan under Plans & billing"
+                          : "Trial — 3 curated themes, one host export (no maker pack), no saved rooms"}
                   </strong>
                 </p>
                 <p className="muted anti-abuse-note">
@@ -6080,6 +5994,8 @@ export default function App() {
               Open room builder
             </button>
           </div>
+          </>
+          ) : null}
         </div>
       ) : null}
       {appView === "builder" ? (
@@ -7599,6 +7515,7 @@ export default function App() {
                 className="primary-btn"
                 onClick={() => {
                   setUpgradePromptOpen(false);
+                  setAccountSection("plans");
                   setAppView("account");
                 }}
               >

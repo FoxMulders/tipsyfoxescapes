@@ -1,3 +1,4 @@
+import { hasMakerElectronicsAccessForUser } from "./billing/entitlements.js";
 import { isTrialTierUser } from "./billing/trial.js";
 import { hasFullCatalogAccess, type LifecycleUser } from "./userLifecycle.js";
 
@@ -28,6 +29,10 @@ export const normalizeRoomManifest = (raw: unknown): RoomManifest => {
 
 export const sessionHasFullPuzzleAccess = (manifest: RoomManifest | undefined): boolean =>
   manifest?.status === "manifested" && Boolean(manifest.creditConsumedAt);
+
+/** Balanced Growth: interactive wiring diagrams require Home Host Enthusiast or Creative Studio (or higher). */
+export const shouldBlurInteractiveElectronicsForUser = (user: LifecycleUser | undefined): boolean =>
+  !hasMakerElectronicsAccessForUser(user);
 
 export type ManifestConsumeResult = {
   alreadyManifested: boolean;

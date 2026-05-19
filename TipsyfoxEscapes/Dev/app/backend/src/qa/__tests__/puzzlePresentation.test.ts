@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { redactPuzzlesForClient, toPuzzlePreview } from "../../puzzlePresentation.js";
+import { redactPuzzlesForClient, stripMakerElectronicsFromPuzzles, toPuzzlePreview } from "../../puzzlePresentation.js";
 
 const samplePuzzle = {
   id: "pz_1",
@@ -23,5 +23,26 @@ describe("puzzlePresentation", () => {
   it("returns full puzzles when access granted", () => {
     const out = redactPuzzlesForClient([samplePuzzle], true);
     expect(out[0]).toMatchObject({ objective: samplePuzzle.objective });
+  });
+
+  it("stripMakerElectronicsFromPuzzles removes wiring and firmware", () => {
+    const electronic = {
+      id: "pz_e",
+      category: "electronic",
+      title: "Panel",
+      objective: "Wire it",
+      difficulty: "medium",
+      electronicDetails: {
+        parts: ["Arduino"],
+        wiringDiagram: ["D2 in"],
+        buildSteps: ["Solder"],
+        arduinoCode: "void setup(){}",
+        wiringDiagramSvg: "<svg/>",
+      },
+    };
+    const stripped = stripMakerElectronicsFromPuzzles([electronic], false)[0];
+    expect(stripped.electronicDetails?.parts).toEqual(["Arduino"]);
+    expect(stripped.electronicDetails?.wiringDiagram).toEqual([]);
+    expect(stripped.electronicDetails?.arduinoCode).toBe("");
   });
 });

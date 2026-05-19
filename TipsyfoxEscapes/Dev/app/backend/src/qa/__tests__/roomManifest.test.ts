@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { consumeManifestCredit, defaultRoomManifest, sessionHasFullPuzzleAccess } from "../../roomManifest.js";
+import {
+  consumeManifestCredit,
+  defaultRoomManifest,
+  sessionHasFullPuzzleAccess,
+  shouldBlurInteractiveElectronicsForUser,
+} from "../../roomManifest.js";
 
 describe("roomManifest", () => {
   it("deducts export credit at manifest time", () => {
@@ -29,6 +34,36 @@ describe("roomManifest", () => {
     expect(again.alreadyManifested).toBe(true);
     expect(again.creditConsumed).toBe(false);
     expect(user.exportCreditsRemaining).toBe(1);
+  });
+
+  it("shouldBlurInteractiveElectronicsForUser follows maker tier policy", () => {
+    expect(
+      shouldBlurInteractiveElectronicsForUser({
+        isAdmin: false,
+        lastPurchasedPlanId: "casual_hobbyist",
+        exportCreditsRemaining: 1,
+        roomAllowance: 1,
+        trialUsedAt: "2026-01-01T00:00:00.000Z",
+      } as never),
+    ).toBe(true);
+    expect(
+      shouldBlurInteractiveElectronicsForUser({
+        isAdmin: false,
+        lastPurchasedPlanId: "home_enthusiast",
+        exportCreditsRemaining: 1,
+        roomAllowance: 1,
+        trialUsedAt: "2026-01-01T00:00:00.000Z",
+      } as never),
+    ).toBe(false);
+    expect(
+      shouldBlurInteractiveElectronicsForUser({
+        isAdmin: false,
+        lastPurchasedPlanId: "creative_studio",
+        exportCreditsRemaining: 2,
+        roomAllowance: 1,
+        trialUsedAt: null,
+      } as never),
+    ).toBe(false);
   });
 
   it("does not manifest when no credit can be captured", () => {

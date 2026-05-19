@@ -100,10 +100,11 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
     exportCreditsToAdd: 0,
     purchasable: false,
     valueHeadline: "One curated design pass",
-    valueFocus: "Low-risk way to test the builder before choosing a host or operator plan.",
+    valueFocus:
+      "Text-only narrative planning — story beats, puzzle objectives, and a printable host runbook preview. No maker electronics packs.",
     features: [
       "Same three curated themes every trial",
-      "One full export with electronics (one-time)",
+      "One narrative runbook export (text-only — no wiring diagrams, pinouts, or Arduino source)",
       "Replace puzzles during your trial run",
       "Home Mode: standard runbook + basic player screen",
       "Saving to your account requires a paid plan",
@@ -124,11 +125,13 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
     purchasable: true,
     highlight: true,
     valueHeadline: "1 active room · full catalog · standard runbook",
-    valueFocus: "Low-barrier hosting for casual events — print and play without operator tooling.",
+    valueFocus:
+      "Low-barrier hosting for casual events — narrative runbooks and host sheets only, without maker electronics detail.",
     features: [
       "1 active room slot",
       "Full theme catalog",
       "Standard runbook export (Home Mode)",
+      "Electronics completely omitted — no wiring diagrams, pinouts, SVG schematics, or Arduino source in exports",
       "Player screen with timer + preset hints",
       "No Gamemaster Live Console or multi-room ops",
     ],

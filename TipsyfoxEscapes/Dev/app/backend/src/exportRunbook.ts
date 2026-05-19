@@ -2,7 +2,19 @@
  * Technical Director export sections — printable runbook structure, BOM, narrative justification, GM briefing.
  */
 
+import { hasMakerElectronicsAccessForUser, shouldRedactMakerElectronicsExport } from "./billing/entitlements.js";
+import type { TrialBillingUser } from "./billing/trial.js";
 import { formatPinoutTableMarkdown } from "./arduinoResourceRouter.js";
+import type { LifecycleUser } from "./userLifecycle.js";
+
+export type ExportBillingUser = (LifecycleUser & TrialBillingUser) | undefined;
+
+/** Balanced Growth: trial and Casual Hobbyist exports omit maker electronics; Enthusiast+ include full packs. */
+export const shouldRedactElectronicForExportUser = (user: ExportBillingUser): boolean =>
+  shouldRedactMakerElectronicsExport(user);
+
+export const exportIncludesMakerElectronicsForUser = (user: ExportBillingUser): boolean =>
+  hasMakerElectronicsAccessForUser(user);
 
 export type ExportPuzzleRef = {
   title: string;
@@ -28,6 +40,38 @@ export type ExportPuzzleRef = {
     arduinoCode: string;
     pinoutTable?: Array<{ pin: string; function: string; connectsTo: string }>;
   };
+};
+
+const emptyElectronicDetails = (): NonNullable<ExportPuzzleRef["electronicDetails"]> => ({
+  parts: [],
+  wiringDiagram: [],
+  buildSteps: [],
+  arduinoCode: "",
+  pinoutTable: [],
+});
+
+/**
+ * Balanced Growth: strip maker electronics from export payloads for trial and Casual Hobbyist tiers
+ * before runbook sections are compiled.
+ */
+export const sanitizeExportPuzzlesForBilling = (
+  puzzles: ExportPuzzleRef[],
+  user: ExportBillingUser,
+): ExportPuzzleRef[] => {
+  if (!shouldRedactElectronicForExportUser(user)) return puzzles;
+  return puzzles.map((puzzle) => {
+    const isElectronic = puzzle.category === "electronic" || Boolean(puzzle.electronicDetails);
+    if (!isElectronic) return puzzle;
+    return {
+      ...puzzle,
+      build_documentation_url: undefined,
+      bill_of_materials: (puzzle.bill_of_materials ?? []).filter((line) => {
+        const lower = line.toLowerCase();
+        return !/(arduino|mcu|wiring|pinout|breadboard|sensor|relay|gpio|i2c|spi|usb)/i.test(lower);
+      }),
+      electronicDetails: emptyElectronicDetails(),
+    };
+  });
 };
 
 export type ExportSessionContext = {
@@ -125,7 +169,9 @@ const buildResourceLines = (puzzle: ExportPuzzleRef, redactElectronic: boolean):
       }
       rows.push("- **Firmware:** See **Electronic Puzzle Implementation Details** for the full Arduino sketch (host QA required before live play).");
     } else if (redactElectronic) {
-      rows.push("- _Full wiring maps and firmware are omitted until export credits are available — purchase credits to unlock build-ready electronics._");
+      rows.push(
+        "- _Maker electronics omitted on your plan (trial or Casual Hobbyist). Upgrade to **Home Host Enthusiast** or **Creative Studio** for wiring diagrams, pinouts, SVG schematics, and Arduino source in exports._",
+      );
     }
   } else if (puzzle.category === "physical") {
     rows.push("- **Fabrication logic flow:**");

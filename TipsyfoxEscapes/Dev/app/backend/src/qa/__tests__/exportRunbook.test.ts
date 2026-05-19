@@ -4,6 +4,7 @@ import {
   buildGmLiveOpsBriefing,
   buildNarrativeJustification,
   buildTechnicalPuzzleSections,
+  sanitizeExportPuzzlesForBilling,
   type ExportPuzzleRef,
   type ExportSessionContext,
 } from "../../exportRunbook.js";
@@ -62,6 +63,77 @@ describe("exportRunbook", () => {
     expect(body).toContain("Narrative justification");
     expect(body).toContain("Build resources");
     expect(body).toContain("roomescapeartist.com");
+  });
+
+  it("redacts electronic wiring when redactElectronic is true", () => {
+    const electronic: ExportPuzzleRef = {
+      ...samplePuzzle,
+      id: "pz_e1",
+      title: "Sensor Panel",
+      category: "electronic",
+      electronicDetails: {
+        parts: ["Arduino Uno"],
+        wiringDiagram: ["D2 → sensor signal"],
+        buildSteps: ["Mount board"],
+        arduinoCode: "void setup() {}",
+        pinoutTable: [{ pin: "D2", function: "IN", connectsTo: "Sensor" }],
+      },
+    };
+    const lines = buildTechnicalPuzzleSections([electronic], ctx, true);
+    const body = lines.join("\n");
+    expect(body).toContain("Maker electronics omitted");
+    expect(body).not.toContain("void setup()");
+    expect(body).not.toContain("D2 → sensor signal");
+  });
+
+  it("sanitizeExportPuzzlesForBilling strips maker metadata for trial users", () => {
+    const electronic: ExportPuzzleRef = {
+      ...samplePuzzle,
+      id: "pz_e2",
+      title: "Relay Gate",
+      category: "electronic",
+      bill_of_materials: ["Arduino Uno", "Printed clue set"],
+      build_documentation_url: "https://example.com/build",
+      electronicDetails: {
+        parts: ["Arduino Uno"],
+        wiringDiagram: ["D2 → relay IN"],
+        buildSteps: ["Mount relay"],
+        arduinoCode: "void setup() {}",
+        pinoutTable: [{ pin: "D2", function: "OUT", connectsTo: "Relay" }],
+      },
+    };
+    const sanitized = sanitizeExportPuzzlesForBilling([electronic], {
+      isAdmin: false,
+      trialUsedAt: null,
+      exportCreditsRemaining: 0,
+      roomAllowance: 0,
+    } as never);
+    expect(sanitized[0].build_documentation_url).toBeUndefined();
+    expect(sanitized[0].bill_of_materials).toEqual(["Printed clue set"]);
+    expect(sanitized[0].electronicDetails?.arduinoCode).toBe("");
+    expect(sanitized[0].electronicDetails?.wiringDiagram).toEqual([]);
+  });
+
+  it("sanitizeExportPuzzlesForBilling leaves electronics for enthusiast tier", () => {
+    const electronic: ExportPuzzleRef = {
+      ...samplePuzzle,
+      id: "pz_e3",
+      category: "electronic",
+      electronicDetails: {
+        parts: ["Arduino Uno"],
+        wiringDiagram: ["D2 → relay IN"],
+        buildSteps: ["Mount relay"],
+        arduinoCode: "void setup() {}",
+      },
+    };
+    const sanitized = sanitizeExportPuzzlesForBilling([electronic], {
+      isAdmin: false,
+      lastPurchasedPlanId: "home_enthusiast",
+      trialUsedAt: "2026-01-01T00:00:00.000Z",
+      exportCreditsRemaining: 1,
+      roomAllowance: 1,
+    } as never);
+    expect(sanitized[0].electronicDetails?.arduinoCode).toContain("void setup");
   });
 
   it("buildGmLiveOpsBriefing includes clue and recovery columns", () => {
