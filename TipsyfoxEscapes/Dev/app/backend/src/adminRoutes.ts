@@ -1,4 +1,5 @@
 import type express from "express";
+import { formatAuthMethodBadge } from "./authLabels.js";
 import type { BillingPlanId } from "./billing/catalog.js";
 import { resolveBillingPlanId } from "./billing/catalog.js";
 import {
@@ -65,6 +66,7 @@ const adminUserRow = (user: AdminStoredUser) => ({
   subscriptionExpiresAt: user.subscriptionExpiresAt ?? null,
   lastPurchasedPlanId: user.lastPurchasedPlanId ?? null,
   provider: user.provider,
+  authMethodBadge: formatAuthMethodBadge(undefined, user.provider),
   trialUsedAt: user.trialUsedAt ?? null,
   isEnterpriseProvisioned: Boolean(user.isEnterpriseProvisioned),
   createdAt: user.createdAt ?? null,

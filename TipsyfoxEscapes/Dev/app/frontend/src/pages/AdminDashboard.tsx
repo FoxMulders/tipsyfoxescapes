@@ -15,6 +15,7 @@ type AdminUserRow = {
   subscriptionExpiresAt: string | null;
   lastPurchasedPlanId: string | null;
   provider: string;
+  authMethodBadge: string;
   trialUsedAt: string | null;
   isEnterpriseProvisioned: boolean;
   createdAt: string | null;
@@ -278,7 +279,7 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
                   <th>User ID</th>
                   <th>Email</th>
                   <th>Username</th>
-                  <th>Auth</th>
+                  <th>Auth Provider</th>
                   <th>Created</th>
                   <th>Tier</th>
                   <th>Status</th>
@@ -294,7 +295,9 @@ export function AdminDashboard({ apiBase, authToken, deviceId }: AdminDashboardP
                     <td>{row.id}</td>
                     <td>{row.email}</td>
                     <td>{row.username}</td>
-                    <td>{providerLabel(row.provider)}</td>
+                    <td>
+                      <span className="admin-auth-badge">{row.authMethodBadge ?? providerLabel(row.provider)}</span>
+                    </td>
                     <td>{row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "—"}</td>
                     <td>{row.tierType}</td>
                     <td>{row.lifecycleStatus}</td>

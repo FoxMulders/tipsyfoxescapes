@@ -23,13 +23,6 @@ function narrativeHook(description: string): string {
   return flat.length > 220 ? `${flat.slice(0, 217)}…` : flat;
 }
 
-function formatCategory(category: string): string {
-  if (category === "logic") return "Logic";
-  if (category === "physical") return "Physical";
-  if (category === "electronic") return "Electronic";
-  return category;
-}
-
 export function ThemeCuratedCard({
   theme,
   tldr,
@@ -100,24 +93,6 @@ export function ThemeCuratedCard({
               <span className="theme-idea-tldr-label">Your room</span>
               <span>{planningContext}</span>
             </p>
-            {theme.recommendedPuzzles?.length ? (
-              <div className="theme-idea-loadout">
-                <p className="theme-idea-loadout-title">Puzzle loadout</p>
-                <ul className="theme-idea-loadout-list">
-                  {theme.recommendedPuzzles.map((puzzle) => (
-                    <li key={puzzle.id} className="theme-idea-loadout-item">
-                      <strong>{puzzle.title}</strong>
-                      <span className="muted">
-                        {" "}
-                        · {formatCategory(puzzle.category)}
-                        {puzzle.difficulty ? ` · ${puzzle.difficulty}` : ""}
-                      </span>
-                      <p className="muted theme-idea-loadout-blurb">{puzzle.objective}</p>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
             {!simpleView && fullBrief ? (
               <div className="theme-idea-full-brief">
                 {editorPass ? <div className="theme-idea-card__toolbar">{editorPass}</div> : null}

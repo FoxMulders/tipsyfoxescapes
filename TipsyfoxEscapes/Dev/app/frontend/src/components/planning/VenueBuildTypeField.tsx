@@ -51,12 +51,12 @@ export function VenueBuildTypeField({ value, onChange, environmentType, compact 
           {VENUE_OPTIONS.map((opt) => (
             <label
               key={opt.value}
-              className="flex cursor-pointer items-start gap-2 rounded-md border border-slate-800/50 bg-card/20 p-3 text-sm backdrop-blur-md has-[:checked]:border-primary/50 has-[:checked]:bg-primary/5"
+              className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-800/50 bg-card/20 p-3 text-sm backdrop-blur-md has-[:checked]:border-primary/50 has-[:checked]:bg-primary/5"
             >
               <input
                 type="radio"
                 name="venue-build-type"
-                className="mt-1"
+                className="m-0 shrink-0 self-center"
                 checked={value === opt.value}
                 onChange={() => onChange(opt.value)}
               />

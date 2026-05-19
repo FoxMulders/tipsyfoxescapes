@@ -56,6 +56,7 @@ import {
   isBrowserAiAvailable,
   polishThemeBriefInBrowser,
   probeBrowserLanguageModel,
+  refineThemeFitReasonInBrowser,
   type ContextualInspirationResult,
   type CustomThemeCoachContext,
   type CustomThemeCoachMessage,
@@ -443,6 +444,85 @@ const saveHistory = (history: InputHistory): void => {
   }
 };
 
+function NarrativeFlowGuide({ storyPlan }: { storyPlan: StoryPlan | null }) {
+  return (
+    <section className="narrative-flow-guide glass-panel" aria-label="Narrative flow guide">
+      <h3 className="output-review-section-title">Narrative flow — parallel paths &amp; finale</h3>
+      <dl className="narrative-flow-guide__dl">
+        <div>
+          <dt>Deduction stations</dt>
+          <dd>
+            Mid-game <strong>deduction stations</strong> are parallel logic beats where different squads work themed puzzles at the
+            same time. Each station yields a partial code, clue object, or story permission that cannot finish the room alone.
+          </dd>
+        </div>
+        <div>
+          <dt>Merge gate</dt>
+          <dd>
+            The <strong>merge gate</strong> (finale) requires artifacts from every open parallel path. Players combine branch outputs
+            into one final meta-solve that unlocks the exit or boss beat.
+          </dd>
+        </div>
+      </dl>
+      {storyPlan?.puzzleLinks && storyPlan.puzzleLinks.length > 0 ? (
+        <div className="narrative-flow-guide__prose">
+          <p>
+            <strong>What players earn per path:</strong>{" "}
+            {storyPlan.puzzleLinks
+              .slice(0, 6)
+              .map((link) => `${link.puzzleTitle} → ${link.unlocks}`)
+              .join("; ")}
+            {storyPlan.puzzleLinks.length > 6 ? " …" : ""}
+          </p>
+          {storyPlan.missionObjective ? (
+            <p>
+              <strong>Final meta-puzzle:</strong> {storyPlan.missionObjective}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="muted narrative-flow-guide__prose">Generate puzzles to populate branch unlocks in this summary.</p>
+      )}
+    </section>
+  );
+}
+
+function ThemeFitReasonLine({
+  themeName,
+  themeDescription,
+  puzzle,
+}: {
+  themeName: string;
+  themeDescription: string;
+  puzzle: Puzzle;
+}) {
+  const raw = puzzle.themeFitReason ?? deriveThemeFitFallback(themeName, themeDescription, puzzle);
+  const [display, setDisplay] = useState(raw);
+  useEffect(() => {
+    setDisplay(raw);
+    if (!isBrowserAiAvailable()) return;
+    let cancelled = false;
+    void refineThemeFitReasonInBrowser({
+      themeName,
+      themeDescription,
+      puzzleTitle: puzzle.title,
+      puzzleCategory: puzzle.category,
+      objective: puzzle.objective,
+      rawThemeFitReason: raw,
+    }).then((refined) => {
+      if (!cancelled && refined) setDisplay(refined);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [raw, themeName, themeDescription, puzzle.id, puzzle.title, puzzle.category, puzzle.objective]);
+  return (
+    <p className="inline-space">
+      <strong>Why this fits the theme:</strong> {display}
+    </p>
+  );
+}
+
 const deriveThemeFitFallback = (themeName: string, themeDescription: string, puzzle: Puzzle): string => {
   const themeText = `${themeName} ${themeDescription}`.toLowerCase();
   const objective = puzzle.objective.toLowerCase();
@@ -604,7 +684,6 @@ function PuzzleWindowCard({
   rejectBusy: boolean;
 }) {
   const previewLocked = isPuzzlePreviewLocked(puzzle);
-  const themeFit = puzzle.themeFitReason ?? deriveThemeFitFallback(selectedThemeName, selectedThemeDescription, puzzle);
   const titleId = `puzzle-win-${puzzle.id}-title`;
   const heading = puzzleCardHeading(puzzle, puzzleNumber);
   return (
@@ -668,9 +747,11 @@ function PuzzleWindowCard({
       <p className="inline-space">
         <strong>How it works:</strong> {puzzle.howItWorks}
       </p>
-      <p className="inline-space">
-        <strong>Why this fits the theme:</strong> {themeFit}
-      </p>
+      <ThemeFitReasonLine
+        themeName={selectedThemeName}
+        themeDescription={selectedThemeDescription}
+        puzzle={puzzle}
+      />
       {puzzle.puzzleQa && !puzzle.puzzleQa.passed ? (
         <div className="puzzle-qa-callout" role="note">
           <p className="puzzle-qa-callout__title">
@@ -1999,6 +2080,12 @@ const formatDifficultyLabel = (difficulty: string): string => {
   return d.charAt(0).toUpperCase() + d.slice(1).toLowerCase();
 };
 
+const formatTargetInterfaceLabel = (kind: TargetInterface): string => {
+  if (kind === "commercial_venue") return "Commercial Venue";
+  if (kind === "home_party") return "Home Party";
+  return "Not set";
+};
+
 function ThemeRecommendedPuzzles({
   puzzles,
   sectionTitle = "Suggested puzzles (matched to this theme)",
@@ -2443,10 +2530,12 @@ export default function App() {
   const [storyPlan, setStoryPlan] = useState<StoryPlan | null>(null);
   const [compatibilityPassed, setCompatibilityPassed] = useState<boolean | null>(null);
   const [exportContent, setExportContent] = useState<string>("");
+  const [exportPdfBase64, setExportPdfBase64] = useState<string | null>(null);
   const [exportWasRedacted, setExportWasRedacted] = useState<boolean>(false);
   type ExportReadFormat = "markdown" | "plaintext" | "html";
   const [exportReadFormat, setExportReadFormat] = useState<ExportReadFormat>("markdown");
   const [exportBusy, setExportBusy] = useState(false);
+  const [planSavedSuccessfully, setPlanSavedSuccessfully] = useState(false);
   const [postExportOpen, setPostExportOpen] = useState(false);
   const [liveOperatingMode, setLiveOperatingMode] = useState<OperatingMode>("home");
   const [liveHasGmConsole, setLiveHasGmConsole] = useState(false);
@@ -2802,6 +2891,23 @@ export default function App() {
 
   const selectedThemeName = selectedTheme?.name ?? "Selected Theme";
   const selectedThemeDescription = selectedTheme?.description ?? "";
+  const builderSelectionSummary = useMemo(() => {
+    const venue =
+      targetInterface === "commercial_venue" || commercialVenueContext
+        ? "Commercial Venue"
+        : formatTargetInterfaceLabel(targetInterface);
+    const duration = sessionDurationMinutes.trim() ? `${sessionDurationMinutes.trim()} min` : "—";
+    const players = playersConcurrent.trim() ? `${playersConcurrent.trim()} players` : "—";
+    const theme = selectedTheme?.name ?? (selectedThemeId ? "Theme selected" : "No theme yet");
+    return { venue, duration, players, theme };
+  }, [
+    targetInterface,
+    commercialVenueContext,
+    sessionDurationMinutes,
+    playersConcurrent,
+    selectedTheme,
+    selectedThemeId,
+  ]);
   const coachCoverage = useMemo(() => getCoachCoverageStatus(customThemeCoachMessages), [customThemeCoachMessages]);
   const customThemeCoachPrereqsOk = useMemo(() => {
     if (!buildPlanningBody("strict")) return false;
@@ -3126,6 +3232,10 @@ export default function App() {
     if (!synced) return;
     setWizardStep("themes-puzzles");
     setActivePanel("themes");
+    if (puzzles.length === 0) {
+      const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
+      await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
+    }
   };
 
   const proceedToOutputReview = async (): Promise<void> => {
@@ -3225,6 +3335,7 @@ export default function App() {
       setCompatibilityPassed(null);
       setExportContent("");
       setApprovedForBuild(false);
+      setPlanSavedSuccessfully(false);
     }
     try {
       if (!user || !token) {
@@ -3992,6 +4103,7 @@ export default function App() {
       setCompatibilityPassed(null);
       setExportContent("");
       setApprovedForBuild(false);
+      setPlanSavedSuccessfully(false);
       if (seedThemes) {
         await requestThemes(data.sessionId, "/api/themes/generate", []);
       }
@@ -4059,6 +4171,7 @@ export default function App() {
       setCompatibilityPassed(null);
       setExportContent("");
       setApprovedForBuild(false);
+      setPlanSavedSuccessfully(false);
       setThemePath(null);
       setExistingPuzzles([]);
       void (async () => {
@@ -4796,21 +4909,31 @@ export default function App() {
   };
 
   const exportPlan = async () => {
-    // Request full markdown export for runbook/host usage.
     setError("");
+    if (!approvedForBuild) {
+      setError("Mark the plan as approved for build before exporting.");
+      return;
+    }
+    if (!planSavedSuccessfully) {
+      setError("Save the plan successfully before exporting (step 2 in the export flow).");
+      return;
+    }
     setBillingNotice("");
     setExportBusy(true);
+    setExportPdfBase64(null);
     try {
       const activeSessionId = await ensureSession();
       if (!activeSessionId) return;
-      void (await syncPlanningInputToServer(activeSessionId, "draft"));
+      const synced = await syncPlanningInputToServer(activeSessionId, "strict");
+      if (!synced) return;
       const response = await fetch(`${API_BASE}/api/plans/${activeSessionId}/export`, {
         method: "POST",
         headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
-        body: JSON.stringify({ format: "markdown" }),
+        body: JSON.stringify({ format: "both" }),
       });
       const data = (await response.json()) as {
         content?: string;
+        pdfBase64?: string;
         exportRedacted?: boolean;
         exportCreditConsumed?: boolean;
         trialConsumed?: boolean;
@@ -4824,11 +4947,12 @@ export default function App() {
         setError(data.error?.message ?? "Export failed.");
         return;
       }
-      if (!data.content) {
+      if (!data.content && !data.pdfBase64) {
         setError("Export response was incomplete.");
         return;
       }
-      setExportContent(data.content);
+      setExportContent(data.content ?? "");
+      setExportPdfBase64(data.pdfBase64 ?? null);
       setExportWasRedacted(Boolean(data.exportRedacted));
       setExportReadFormat("markdown");
       if (data.exportCreditConsumed || data.trialConsumed) {
@@ -4891,11 +5015,30 @@ export default function App() {
     [exportRunbookHtml],
   );
 
-  const downloadExportFile = (ext: "md" | "txt" | "html"): void => {
-    if (!exportContent) return;
+  const downloadExportFile = (ext: "md" | "txt" | "html" | "pdf"): void => {
     const idPart = (sessionId || "session").replace(/[^\w-]+/g, "").slice(-14) || "session";
     const base = `escape-room-plan-${idPart}`;
-    const payloads: Record<typeof ext, { mime: string; body: string; name: string }> = {
+    if (ext === "pdf") {
+      if (!exportPdfBase64) return;
+      try {
+        const binary = atob(exportPdfBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${base}.pdf`;
+        a.rel = "noopener";
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch {
+        setError("Could not download the PDF export.");
+      }
+      return;
+    }
+    if (!exportContent) return;
+    const payloads: Record<"md" | "txt" | "html", { mime: string; body: string; name: string }> = {
       md: { mime: "text/markdown;charset=utf-8", body: exportContent, name: `${base}.md` },
       txt: { mime: "text/plain;charset=utf-8", body: exportPlainBody, name: `${base}.txt` },
       html: { mime: "text/html;charset=utf-8", body: exportHtmlDoc, name: `${base}.html` },
@@ -4977,6 +5120,7 @@ export default function App() {
       }
       await refreshSavedPlans();
       void refreshProfile();
+      setPlanSavedSuccessfully(true);
       setActivePanel("saved");
       setWizardStep("saved");
     } catch {
@@ -6048,8 +6192,7 @@ export default function App() {
                   <p className="muted theme-view-toggle-hint">
                     {simpleThemeView ? (
                       <>
-                        Showing name, TL;DR, and puzzle loadout only. Use <strong>Full brief</strong> for the long write-up and editor
-                        tools.
+                        Showing name and TL;DR only. Use <strong>Full brief</strong> for the long write-up and editor tools.
                       </>
                     ) : (
                       <>
@@ -6344,13 +6487,17 @@ export default function App() {
                   </div>
                   <p className="muted theme-view-toggle-hint">
                     {simpleThemeView ? (
-                      <>Name, TL;DR, and loadout only—open <strong>Full brief</strong> for markdown and editor tools.</>
+                      <>Name and TL;DR only—open <strong>Full brief</strong> for markdown and editor tools.</>
                     ) : (
                       <>Full brief for your selected theme is in the panel below.</>
                     )}
                   </p>
                 </div>
                 <h2>Build puzzle set</h2>
+                <p className="puzzle-pool-selection-note" role="note">
+                  The generator drafted these thematic puzzles to match your room capacity. Select the active pool, toggle
+                  variations, or leave unselected puzzles as backups—the set updates when you continue to review.
+                </p>
                 {commercialVenueContext ? (
                   <p className="commercial-venue-callout commercial-venue-callout--inline" role="note">
                     <strong>Commercial context:</strong> treat generated puzzles as drafts—change beats, props, and wiring so the room feels{" "}
@@ -6465,11 +6612,6 @@ export default function App() {
                         <span className="theme-idea-tldr-text">{resolveThemeTldr(selectedTheme)}</span>
                       </div>
                     </div>
-                    {selectedTheme.recommendedPuzzles?.length ? (
-                      <div className="theme-dock-loadout">
-                        <ThemeRecommendedPuzzles puzzles={selectedTheme.recommendedPuzzles} sectionTitle="Puzzle loadout" />
-                      </div>
-                    ) : null}
                     {!simpleThemeView ? (
                       <>
                         <div className="theme-dock-toolbar">
@@ -6850,6 +6992,7 @@ export default function App() {
                         themeName={selectedTheme?.name}
                         fileBase="room-flow-review"
                       />
+                      <NarrativeFlowGuide storyPlan={storyPlan} />
                     </>
                   ) : null}
                 </div>
@@ -7006,6 +7149,7 @@ export default function App() {
                     themeName={selectedTheme?.name}
                     fileBase="room-flow-export"
                   />
+                  <NarrativeFlowGuide storyPlan={storyPlan} />
                 </div>
               ) : null}
               <div className="export-action-flow" role="group" aria-label="Approve, save, then export">
@@ -7017,7 +7161,13 @@ export default function App() {
                     <button
                       type="button"
                       className={approvedForBuild ? "primary-btn export-action-flow__btn" : "secondary-btn export-action-flow__btn"}
-                      onClick={() => setApprovedForBuild((current) => !current)}
+                      onClick={() => {
+                        setApprovedForBuild((current) => {
+                          const next = !current;
+                          if (!next) setPlanSavedSuccessfully(false);
+                          return next;
+                        });
+                      }}
                     >
                       {approvedForBuild ? "Approved for build" : "Mark approved for build"}
                     </button>
@@ -7045,12 +7195,16 @@ export default function App() {
                     <button
                       type="button"
                       className="primary-btn export-action-flow__btn"
-                      disabled={exportBusy || !authUser?.canExportRunbook}
+                      disabled={exportBusy || !authUser?.canExportRunbook || !approvedForBuild || !planSavedSuccessfully}
                       aria-busy={exportBusy}
                       title={
-                        authUser?.canExportRunbook
-                          ? undefined
-                          : "Purchase an export credit or upgrade to export a full runbook."
+                        !authUser?.canExportRunbook
+                          ? "Purchase an export credit or upgrade to export a full runbook."
+                          : !approvedForBuild
+                            ? "Approve the plan for build first."
+                            : !planSavedSuccessfully
+                              ? "Save the plan successfully before exporting."
+                              : undefined
                       }
                       onClick={() =>
                         authUser?.canExportRunbook ? void exportPlan() : openUpgradePrompt()
@@ -7061,8 +7215,8 @@ export default function App() {
                   </div>
                 </div>
                 <p className="muted export-action-flow__hint">
-                  Saving still requires approval first. Export pulls the latest draft from the server (planning is synced when you run
-                  export).
+                  Complete all three steps in order: approve, save without errors, then export. Planning syncs with strict validation when
+                  you export (markdown + PDF).
                 </p>
               </div>
               <div className="button-row export-back-row">
@@ -7191,6 +7345,14 @@ export default function App() {
                     </button>
                     <button type="button" className="secondary-btn" onClick={() => downloadExportFile("html")}>
                       .html
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      disabled={!exportPdfBase64}
+                      onClick={() => downloadExportFile("pdf")}
+                    >
+                      .pdf
                     </button>
                   </div>
                   <div className="export-split">

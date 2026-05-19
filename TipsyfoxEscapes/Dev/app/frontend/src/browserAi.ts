@@ -548,3 +548,40 @@ export const customThemeCoachSynthesize = async (
   }
 };
 
+export type ThemeFitQaInput = {
+  themeName: string;
+  themeDescription: string;
+  puzzleTitle: string;
+  puzzleCategory: string;
+  objective: string;
+  rawThemeFitReason: string;
+};
+
+/** QA pass on theme-fit copy before showing in the puzzle card. */
+export async function refineThemeFitReasonInBrowser(input: ThemeFitQaInput): Promise<string | null> {
+  const model = await createLanguageModel();
+  if (!model) return null;
+  try {
+    const prompt = [
+      "You are the onboard Escape Room Builder QA designer.",
+      "Evaluate and refine the theme-fit explanation for structural escape room design quality.",
+      "Rules:",
+      "- Keep 1–2 sentences, practical, no marketing fluff.",
+      "- Must reference the theme by name and tie puzzle type to room fiction.",
+      "- Reject generic lines; replace with specific props, beats, or player actions.",
+      "- Do not invent electronics unless category is electronic.",
+      'Return ONLY JSON: {"themeFitReason":"..."}',
+      "",
+      JSON.stringify(input),
+    ].join("\n");
+    const raw = await promptWithTimeout(model, prompt);
+    const parsed = JSON.parse(extractJson(raw)) as { themeFitReason?: string };
+    const line = typeof parsed.themeFitReason === "string" ? parsed.themeFitReason.trim() : "";
+    return line.length > 0 ? line : null;
+  } catch {
+    return null;
+  } finally {
+    model.destroy?.();
+  }
+}
+

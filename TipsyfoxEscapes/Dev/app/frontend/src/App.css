@@ -4848,6 +4848,14 @@ ul.auth-hero-para {
   margin-left: auto;
 }
 
+.app-top-nav__utility > * {
+  align-self: center;
+}
+
+.app-top-nav__utility button {
+  margin: 0;
+}
+
 .app-top-nav__plan-tier {
   display: inline-flex;
   align-items: center;
@@ -5608,6 +5616,75 @@ ul.auth-hero-para {
   padding: 0.75rem 0;
   border-bottom: 1px solid var(--border);
   margin-bottom: 0.75rem;
+}
+
+.builder-selection-strip {
+  margin: 0;
+  padding: 0.45rem 1rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.builder-selection-strip strong {
+  font-weight: 600;
+}
+
+.builder-selection-strip__sep {
+  margin: 0 0.35rem;
+  opacity: 0.55;
+}
+
+.puzzle-pool-selection-note {
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  background: rgba(14, 165, 233, 0.08);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.narrative-flow-guide {
+  margin: 0.85rem 0;
+  padding: 0.75rem 0.9rem;
+}
+
+.narrative-flow-guide dl {
+  margin: 0.5rem 0 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.narrative-flow-guide dt {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0;
+}
+
+.narrative-flow-guide dd {
+  margin: 0.2rem 0 0;
+  line-height: 1.5;
+}
+
+.narrative-flow-guide__prose {
+  margin: 0.75rem 0 0;
+  line-height: 1.55;
+}
+
+.admin-auth-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(14, 165, 233, 0.12);
 }
 
 .admin-dashboard__toolbar {

@@ -5221,7 +5221,8 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
       ]),
   ];
   const exportLines = applyTrialExportRedaction(lines, redactElectronicBuild);
-  const format = req.body?.format ?? "markdown";
+  const formatRaw = String(req.body?.format ?? "markdown").toLowerCase();
+  const format = formatRaw === "pdf" || formatRaw === "both" ? formatRaw : "markdown";
   const content = exportLines.join("\n");
   let exportCreditConsumed = creditReservedAtManifest;
   if (
@@ -5247,10 +5248,16 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
   }
   const operatingMode = deriveSessionOperatingMode(session, req);
   session.operatingMode = operatingMode;
+  let pdfBase64: string | undefined;
+  if (format === "pdf" || format === "both") {
+    const { markdownExportToPdfBuffer } = await import("./export/pdfFromMarkdown.js");
+    pdfBase64 = (await markdownExportToPdfBuffer(content)).toString("base64");
+  }
   res.json({
     planId: `plan_${sessionId}`,
-    format,
-    content,
+    format: format === "both" ? "both" : format === "pdf" ? "pdf" : "markdown",
+    content: format === "pdf" ? undefined : content,
+    pdfBase64,
     exportRedacted: redactElectronicBuild,
     exportCreditConsumed,
     exportCreditsRemaining: billingUser ? billingUser.exportCreditsRemaining : 0,
