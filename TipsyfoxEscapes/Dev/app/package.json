@@ -2,7 +2,7 @@
   "name": "escape-room-builder-app",
   "private": true,
   "scripts": {
-    "vercel-build": "node scripts/bundle-oauth.mjs && node scripts/bundle-server.mjs && node scripts/write-app-version.mjs && npm run build --prefix frontend && node scripts/verify-build.mjs"
+    "vercel-build": "node scripts/bundle-oauth.mjs && node scripts/bundle-server.mjs && npm run build --prefix frontend && node scripts/write-app-version.mjs && node scripts/verify-build.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.0"
