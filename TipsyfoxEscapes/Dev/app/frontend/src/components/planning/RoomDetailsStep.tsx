@@ -1,6 +1,5 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { AvailableItemsChips } from "@/components/planning/AvailableItemsChips";
 import { EnvironmentSelect } from "@/components/planning/EnvironmentSelect";
 import { FieldHint } from "@/components/planning/FieldHint";
@@ -257,17 +256,22 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             </FieldHint>
           </div>
 
-          <div className="form-field-panel flex items-start gap-2">
-            <input
-              id="enforce-env-fit"
-              type="checkbox"
-              className="mt-1"
-              checked={props.themeMustMatchEnvironment}
-              onChange={(e) => props.setThemeMustMatchEnvironment(e.target.checked)}
-            />
-            <Label htmlFor="enforce-env-fit" className="cursor-pointer font-normal leading-snug">
-              Enforce environmental fit
-            </Label>
+          <div className="form-field-panel">
+            <FieldHint
+              label="Enforce Environmental Fit"
+              htmlFor="enforce-env-fit"
+              tooltip="Forces the AI to strictly anchor all puzzles to the physical objects and layout constraints of your chosen room environment."
+            >
+              <label className="feature-card__toggle-row room-details-checkbox-row">
+                <input
+                  id="enforce-env-fit"
+                  type="checkbox"
+                  checked={props.themeMustMatchEnvironment}
+                  onChange={(e) => props.setThemeMustMatchEnvironment(e.target.checked)}
+                />
+                <span>Strictly match generated ideas to this environment.</span>
+              </label>
+            </FieldHint>
           </div>
 
           <div className="junior-track-standalone">

@@ -1,5 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { FieldHint } from "@/components/planning/FieldHint";
+import { CircleHelp } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type JuniorTrackFeatureCardProps = {
   enabled: boolean;
@@ -24,9 +26,21 @@ export function JuniorTrackFeatureCard({
     <section className="feature-card feature-card--junior" aria-labelledby="junior-track-feature-title">
       <header className="feature-card__header">
         <p className="feature-card__eyebrow">Premium differentiator</p>
-        <h3 id="junior-track-feature-title" className="feature-card__title">
-          Activate Multi-Generation Play (Junior Track Parallel Escape)
-        </h3>
+        <div className="feature-card__title-row">
+          <h3 id="junior-track-feature-title" className="feature-card__title">
+            Activate Multi-Generation Play (Junior Track Parallel Escape)
+          </h3>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" className="feature-card__help" aria-label="More about Jr Tracks">
+                <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-left">
+              Generates a parallel, simplified puzzle pathway running alongside the main game, allowing younger players to actively participate simultaneously.
+            </TooltipContent>
+          </Tooltip>
+        </div>
         <p className="feature-card__lead">
           Dynamically appends a synchronized, kid-friendly puzzle layer to this room so families and mixed-age groups can play
           together without compromising the adult experience.

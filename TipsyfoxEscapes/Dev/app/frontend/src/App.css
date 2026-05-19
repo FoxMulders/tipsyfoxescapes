@@ -837,8 +837,16 @@ pre.code-inline {
 }
 
 .flow-step-intro-card__actions {
-  flex-shrink: 0;
+  flex: 0 1 auto;
   align-self: flex-start;
+}
+
+.theme-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
 }
 
 .flow-back-btn:disabled {
@@ -864,6 +872,16 @@ pre.code-inline {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+}
+
+.theme-session-expired-card {
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 190, 110, 0.55);
+  background: rgba(110, 68, 20, 0.28);
+  color: #ffe4b8;
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .theme-custom-submit-row {
@@ -1976,6 +1994,10 @@ button:hover {
 }
 
 .theme-ideas-actions--no-back {
+  justify-content: flex-end;
+}
+
+.theme-ideas-actions--continue {
   justify-content: flex-end;
 }
 
@@ -5132,16 +5154,11 @@ ul.auth-hero-para {
 }
 
 .room-setup-command-bar__actions {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   width: 100%;
   gap: 0.65rem;
   align-items: stretch;
-}
-
-@media (min-width: 480px) {
-  .room-setup-command-bar__actions {
-    grid-template-columns: minmax(9.5rem, auto) minmax(0, 1fr);
-  }
 }
 
 .room-details-title {
@@ -5153,11 +5170,26 @@ ul.auth-hero-para {
 }
 
 .inspiration-drawer-trigger {
+  display: inline-flex;
+  flex: 1 1 16rem;
+  align-items: center;
+  justify-content: center;
   width: 100%;
-  min-height: 2.75rem;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  height: auto;
+  padding: 0.5rem 1rem;
   text-align: center;
   line-height: 1.3;
   white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 768px) {
+  .inspiration-drawer-trigger {
+    width: auto;
+  }
 }
 
 .room-details-form-card .form-field-panel {
@@ -5241,6 +5273,41 @@ ul.auth-hero-para {
 
 .feature-card__toggle-row--primary {
   font-weight: 600;
+}
+
+.room-details-checkbox-row {
+  align-items: center;
+}
+
+.feature-card__title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.feature-card__title-row .feature-card__title {
+  flex: 1 1 auto;
+}
+
+.feature-card__help {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.12rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: help;
+}
+
+.feature-card__help:hover,
+.feature-card__help:focus-visible {
+  color: hsl(187 92% 62%);
 }
 
 .feature-card__body {
@@ -5364,7 +5431,8 @@ ul.auth-hero-para {
   align-items: flex-start;
   justify-content: center;
   gap: 0.15rem;
-  width: 100%;
+  flex: 1 1 9.5rem;
+  width: auto;
   min-width: 9.5rem;
   padding: 0.55rem 0.7rem;
   border-radius: 10px;

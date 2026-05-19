@@ -403,6 +403,7 @@ type SavedPlanPayload = {
   themeCoachChat?: Array<{ id: string; role: "user" | "assistant"; content: string }>;
 };
 const API_BASE = "";
+const THEME_SESSION_EXPIRED_MESSAGE = "Session expired. Please log in to view and save your theme ideas,";
 /** Curated reading for hosts building physical / logic puzzles (Room details). */
 const INSPIRATION_DRAWER_CATEGORY_ORDER: InspirationCatalogEntry["category"][] = [
   "Tech & DIY",
@@ -2398,6 +2399,8 @@ export default function App() {
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
 
   const [themes, setThemes] = useState<Theme[]>([]);
+  const [themeIdeasLoading, setThemeIdeasLoading] = useState(false);
+  const [themeSessionExpiredNotice, setThemeSessionExpiredNotice] = useState("");
   const [selectedThemeId, setSelectedThemeId] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [sessionId, setSessionId] = useState<string>("");
@@ -2684,6 +2687,13 @@ export default function App() {
     );
     current[field] = next;
     saveHistory(current);
+  };
+  const cacheLocalPlanningInputs = (): void => {
+    rememberInput("environmentType", environmentType);
+    rememberInput("availableItems", availableItems);
+    rememberInput("eventType", eventType);
+    rememberInput("customThemeName", customThemeName);
+    rememberInput("customThemeDescription", customThemeDescription);
   };
 
   type PlanningApiBody = {
@@ -3356,6 +3366,45 @@ export default function App() {
   const hasFullCatalogAccess = Boolean(authUser?.hasFullCatalog);
   const canNavigateToOutputReview = Boolean(selectedThemeId.trim());
 
+  const isGenerationAuthExpired = (
+    response: Response,
+    data?: { error?: { code?: string; message?: string } },
+  ): boolean => {
+    const code = data?.error?.code;
+    return (
+      response.status === 401 ||
+      code === "UNAUTHORIZED" ||
+      code === "TOKEN_EXPIRED" ||
+      code === "TOKEN_INVALID"
+    );
+  };
+
+  const handleThemeGenerationAuthExpired = (): void => {
+    cacheLocalPlanningInputs();
+    themesAutoFetchInFlight.current = false;
+    setThemeIdeasLoading(false);
+    setThemeSessionExpiredNotice(THEME_SESSION_EXPIRED_MESSAGE);
+    setError("");
+    setSessionId("");
+    setSelectedThemeId("");
+    setPuzzles([]);
+    setRefusedPuzzleSlots([]);
+    setSuggestedAdditions([]);
+    setSuggestedAdditionsRequired([]);
+    setStoryPlan(null);
+    setCompatibilityPassed(null);
+    setExportContent("");
+    setApprovedForBuild(false);
+    const staleToken = currentAuthToken();
+    setAuthToken("");
+    try {
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+      if (staleToken) void clearPersistedPlanningSession(staleToken);
+    } catch {
+      // Keep in-memory planning inputs even if storage cleanup fails.
+    }
+  };
+
   const showSlotUtilizationWarning = Boolean(
     authUser &&
       !authUser.isAdmin &&
@@ -3719,6 +3768,10 @@ export default function App() {
     endpoint: "/api/themes/generate" | "/api/themes/refresh",
     currentThemes: Theme[],
   ): Promise<Theme[] | undefined> => {
+    if (authUser && !hasAuthToken()) {
+      handleThemeGenerationAuthExpired();
+      return undefined;
+    }
     const response = await fetch(`${API_BASE}${endpoint}`, {
       method: "POST",
       headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
@@ -3729,6 +3782,10 @@ export default function App() {
     });
     const data = (await response.json()) as { themes?: Theme[]; error?: { message?: string; code?: string } };
     if (!response.ok || !data.themes) {
+      if (isGenerationAuthExpired(response, data)) {
+        handleThemeGenerationAuthExpired();
+        return undefined;
+      }
       if (handleBillingGate(data.error?.code, data.error?.message)) return undefined;
       if (isInvalidPlanningSessionResponse(response, data)) {
         const freshId = await recoverPlanningSessionRef.current({ seedThemes: true });
@@ -3747,11 +3804,16 @@ export default function App() {
       if (prev && nextThemes.some((theme) => theme.id === prev)) return prev;
       return "";
     });
+    setThemeSessionExpiredNotice("");
     return nextThemes;
   };
 
   const requestPuzzles = async (activeSessionId: string, themeId: string, themeForEnhance?: Theme | null): Promise<boolean> => {
     try {
+      if (authUser && !hasAuthToken()) {
+        handleThemeGenerationAuthExpired();
+        return false;
+      }
       const response = await fetch(`${API_BASE}/api/puzzles/generate`, {
         method: "POST",
         headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
@@ -3768,6 +3830,10 @@ export default function App() {
         error?: { message?: string; code?: string };
       };
       if (!response.ok || !data.puzzles) {
+        if (isGenerationAuthExpired(response, data)) {
+          handleThemeGenerationAuthExpired();
+          return false;
+        }
         if (handleBillingGate(data.error?.code, data.error?.message)) return false;
         if (isInvalidPlanningSessionResponse(response, data)) {
           const freshId = await recoverPlanningSessionRef.current({ seedThemes: false });
@@ -4088,19 +4154,24 @@ export default function App() {
   const loadThemes = async (endpoint: "/api/themes/generate" | "/api/themes/refresh") => {
     // Load initial or refreshed theme options for the active session.
     setError("");
-    const activeSessionId = await ensureSession();
-    if (!activeSessionId) {
-      return;
-    }
+    setThemeSessionExpiredNotice("");
+    setThemeIdeasLoading(true);
     try {
+      const activeSessionId = await ensureSession();
+      if (!activeSessionId) {
+        setThemeIdeasLoading(false);
+        return;
+      }
       await requestThemes(activeSessionId, endpoint, themes);
     } catch (err) {
       setError(classifyApiCatchError(err));
+    } finally {
+      setThemeIdeasLoading(false);
     }
   };
 
   useEffect(() => {
-    if (wizardStep !== "themes" || !sessionId || themePath === "custom") {
+    if (wizardStep !== "themes" || themePath === "custom") {
       themesAutoFetchInFlight.current = false;
       return;
     }
@@ -4119,9 +4190,12 @@ export default function App() {
     let cancelled = false;
     void (async () => {
       setError("");
-      const activeSessionId = await ensureSession();
+      setThemeSessionExpiredNotice("");
+      setThemeIdeasLoading(true);
+      const activeSessionId = sessionId || (await createSession(undefined, { seedThemes: false }));
       if (cancelled || !activeSessionId) {
         themesAutoFetchInFlight.current = false;
+        setThemeIdeasLoading(false);
         return;
       }
       try {
@@ -4132,6 +4206,7 @@ export default function App() {
         }
       } finally {
         if (!cancelled) themesAutoFetchInFlight.current = false;
+        if (!cancelled) setThemeIdeasLoading(false);
       }
     })();
     return () => {
@@ -5271,6 +5346,26 @@ export default function App() {
                 : null;
 
   const showBackInFlowHeader = !(flowWizardStep === "themes" && themePath === "generated");
+  const themeHeaderActions =
+    flowWizardStep === "themes" && themePath === "generated" ? (
+      <div className="theme-header-actions" role="group" aria-label="Theme navigation">
+        {canGoWizardBack ? (
+          <button type="button" className="secondary-btn flow-back-btn" onClick={goWizardBack}>
+            ← Back
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="secondary-btn"
+          disabled={!hasFullCatalogAccess || themeIdeasLoading}
+          title={hasFullCatalogAccess ? undefined : "Features unlocked with subscription"}
+          aria-busy={themeIdeasLoading}
+          onClick={() => void loadThemes("/api/themes/refresh")}
+        >
+          {themeIdeasLoading ? "Refreshing…" : "Refresh Ideas"}
+        </button>
+      </div>
+    ) : null;
 
   const savedPlansManageList: ReactNode =
     authUser && !authUser.canSaveRooms ? (
@@ -5870,11 +5965,11 @@ export default function App() {
                   title={wizardLabel}
                   helper={flowMutedHelper}
                   actions={
-                    showBackInFlowHeader && canGoWizardBack ? (
+                    themeHeaderActions ?? (showBackInFlowHeader && canGoWizardBack ? (
                       <button type="button" className="secondary-btn flow-back-btn" onClick={goWizardBack}>
                         ← Back
                       </button>
-                    ) : undefined
+                    ) : undefined)
                   }
                 />
               ) : null}
@@ -6139,7 +6234,17 @@ export default function App() {
                 {themePath === "generated" ? (
                   <>
                     <div className="subcard compact-block theme-selection-card">
-                      {themes.length === 0 ? <p className="muted">Generating theme ideas...</p> : null}
+                      {themeSessionExpiredNotice ? (
+                        <div className="theme-session-expired-card" role="alert">
+                          {themeSessionExpiredNotice}
+                        </div>
+                      ) : null}
+                      {themes.length === 0 && themeIdeasLoading && !themeSessionExpiredNotice ? (
+                        <p className="muted">Generating theme ideas...</p>
+                      ) : null}
+                      {themes.length === 0 && !themeIdeasLoading && !themeSessionExpiredNotice ? (
+                        <p className="muted">Theme ideas will appear here automatically once your session is ready.</p>
+                      ) : null}
                       {themes.length > 0 ? (
                         <ul className={`theme-ideas-list ${validationFlags.selectedThemeId ? "invalid-list" : ""}`}>
                           {themes.map((theme) => (
@@ -6195,21 +6300,7 @@ export default function App() {
                           </>
                         )}
                       </p>
-                      <div className={`theme-ideas-actions${canGoWizardBack ? "" : " theme-ideas-actions--no-back"}`}>
-                        {canGoWizardBack ? (
-                          <button type="button" className="secondary-btn flow-back-btn" onClick={goWizardBack}>
-                            ← Back
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="secondary-btn"
-                          disabled={!hasFullCatalogAccess}
-                          title={hasFullCatalogAccess ? undefined : "Features unlocked with subscription"}
-                          onClick={() => loadThemes("/api/themes/refresh")}
-                        >
-                          Refresh Ideas
-                        </button>
+                      <div className="theme-ideas-actions theme-ideas-actions--continue">
                         {selectedThemeId ? (
                           <button type="button" className="primary-btn" onClick={() => void proceedFromThemesToPuzzles()}>
                             Continue to puzzle builder →
