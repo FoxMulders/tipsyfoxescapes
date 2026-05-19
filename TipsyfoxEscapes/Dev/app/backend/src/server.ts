@@ -1292,7 +1292,7 @@ const deriveThemeFitReason = (puzzle: Puzzle, theme?: Theme, session?: SessionSt
   } else if (usesElectronics) {
     core = `For "${themeName}", this puzzle fits because its interactive electronic behavior supports the room's technical systems feel and staged reveals.`;
   } else {
-    core = `For "${themeName}", this puzzle supports the theme through story-consistent clue style, pacing, and progression role.`;
+    core = `For "${themeName}", this puzzle's mechanic maps directly onto a story beat in that scenario — players should re-skin every prop and clue label to reference "${themeName}" fiction so the interaction feels native to the world, not a generic worksheet dropped into the room.`;
   }
   return `${core}${envTail}`;
 };
