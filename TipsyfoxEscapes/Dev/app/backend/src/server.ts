@@ -21,6 +21,10 @@ import {
 } from "./billing/trial.js";
 import { ensureDataDir, getDataDir } from "./dataDir.js";
 import { buildOAuthCallbackUrl, resolveAuthCallbackBaseUrl } from "./oauthCallbackUrl.js";
+import {
+  oauthCredentialSetupHint,
+  readOAuthClientCredentials,
+} from "./oauthConfig.js";
 import { exchangeOAuthCode } from "./oauthTokenExchange.js";
 import { createOAuthState, verifyOAuthState } from "./oauthState.js";
 import { createVercelDiskSyncMiddleware } from "./vercelDiskSync.js";
@@ -3966,15 +3970,14 @@ app.get("/api/auth/oauth/:provider/start", (req, res) => {
 
     const returnTo = String(req.query.returnTo ?? "").trim() || "http://localhost:5173/";
     const callbackBaseUrl = resolveAuthCallbackBaseUrl();
-    const clientId = String(process.env[`${provider.toUpperCase()}_CLIENT_ID`] ?? "").trim();
-    const clientSecret = String(process.env[`${provider.toUpperCase()}_CLIENT_SECRET`] ?? "").trim();
-    if (!callbackBaseUrl || !clientId || !clientSecret) {
+    const creds = readOAuthClientCredentials(provider);
+    if (!callbackBaseUrl || !creds) {
       const exampleCallback = buildOAuthCallbackUrl(provider, callbackBaseUrl || "http://localhost:5173");
       redirectOAuthStartFailure(
         res,
         returnTo,
         "not_configured",
-        `Social sign-in is not configured. Set AUTH_CALLBACK_BASE_URL (with Vite: use your app URL, e.g. http://localhost:5173), ${provider.toUpperCase()}_CLIENT_ID, and ${provider.toUpperCase()}_CLIENT_SECRET. Register this exact redirect URI with ${provider}: ${exampleCallback}`,
+        `Social sign-in is not configured. Set AUTH_CALLBACK_BASE_URL (with Vite: use your app URL, e.g. http://localhost:5173). ${oauthCredentialSetupHint(provider)} Register this exact redirect URI with ${provider}: ${exampleCallback}`,
       );
       return;
     }
@@ -3983,7 +3986,7 @@ app.get("/api/auth/oauth/:provider/start", (req, res) => {
     const state = createOAuthState(provider, returnTo);
 
     const params = new URLSearchParams({
-      client_id: clientId,
+      client_id: creds.clientId,
       redirect_uri: callbackUri,
       state,
     });
@@ -4043,10 +4046,24 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
   }
 
   try {
-    const clientId = String(process.env[`${provider.toUpperCase()}_CLIENT_ID`] ?? "").trim();
-    const clientSecret = String(process.env[`${provider.toUpperCase()}_CLIENT_SECRET`] ?? "").trim();
+    const creds = readOAuthClientCredentials(provider);
+    if (!creds) {
+      redirectOAuthStartFailure(
+        res,
+        stateData.returnTo,
+        "not_configured",
+        oauthCredentialSetupHint(provider),
+      );
+      return;
+    }
     const callbackUri = buildOAuthCallbackUrl(provider);
-    const { email, name } = await exchangeOAuthCode(provider, code, clientId, clientSecret, callbackUri);
+    const { email, name } = await exchangeOAuthCode(
+      provider,
+      code,
+      creds.clientId,
+      creds.clientSecret,
+      callbackUri,
+    );
     if (!email) throw new Error(`${provider} account did not provide a usable email.`);
     const user = upsertSocialUser(provider, email, name);
     const authToken = await createAuthTokenForUser(user);

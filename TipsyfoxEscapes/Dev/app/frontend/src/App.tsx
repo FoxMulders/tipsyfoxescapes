@@ -17,6 +17,10 @@ import { GlobalFooter } from "@/components/layout/GlobalFooter";
 import { PlanningSnapshotSheet } from "@/components/layout/PlanningSnapshotSheet";
 import { TopNavBar } from "@/components/layout/TopNavBar";
 import { useTopNavHeight } from "@/hooks/useTopNavHeight";
+import {
+  consumeOAuthPlanningStash,
+  stashPlanningSessionForOAuth,
+} from "./oauthPlanningBridge.ts";
 import { FlowStepIntro } from "@/components/planning/FlowStepIntro";
 import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
 import {
@@ -2582,6 +2586,7 @@ export default function App() {
   const lastPlanningAuthTokenRef = useRef(initialAuth.authToken);
   const pendingAuthSessionBootstrap = useRef(false);
   const planningSessionRecoveryInFlight = useRef(false);
+  const oauthHydratingRef = useRef(false);
   const recoverPlanningSessionRef = useRef<
     (options?: { seedThemes?: boolean }) => Promise<string | undefined>
   >(async () => undefined);
@@ -3740,6 +3745,7 @@ export default function App() {
     }
   };
   const handleAuthExpired = (message?: string): void => {
+    if (oauthHydratingRef.current) return;
     if (planningAutoSyncRef.current) {
       clearTimeout(planningAutoSyncRef.current);
       planningAutoSyncRef.current = null;
@@ -3752,7 +3758,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!authToken) return;
+    if (!authToken || oauthHydratingRef.current) return;
     void refreshProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh on token only
   }, [authToken]);
@@ -3826,6 +3832,10 @@ export default function App() {
   const handleSocialAuth = (provider: "google" | "facebook" | "github"): void => {
     setError("");
     setSocialAuthProvider(provider);
+    cacheLocalPlanningInputs();
+    if (sessionId.trim()) {
+      stashPlanningSessionForOAuth(sessionId, deviceId);
+    }
     const returnTo = `${window.location.origin}${window.location.pathname}`;
     window.location.assign(
       `${API_BASE}/api/auth/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`,
@@ -3845,16 +3855,23 @@ export default function App() {
     const callbackToken = url.searchParams.get("auth_token");
     const callbackUserRaw = url.searchParams.get("auth_user");
     if (!callbackToken || !callbackUserRaw) return;
-    try {
-      const callbackUser = normalizeAuthUser(JSON.parse(decodeURIComponent(callbackUserRaw)));
-      if (!callbackUser) throw new Error("invalid user");
-      persistAuth(callbackToken, callbackUser);
-      url.searchParams.delete("auth_token");
-      url.searchParams.delete("auth_user");
-      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
-    } catch {
-      setError("Social sign in completed, but response could not be parsed.");
-    }
+    oauthHydratingRef.current = true;
+    void (async () => {
+      try {
+        const callbackUser = normalizeAuthUser(JSON.parse(decodeURIComponent(callbackUserRaw)));
+        if (!callbackUser) throw new Error("invalid user");
+        persistAuth(callbackToken, callbackUser);
+        await refreshProfile({ retryOnStaleToken: true });
+      } catch {
+        setError("Social sign in completed, but response could not be parsed.");
+      } finally {
+        oauthHydratingRef.current = false;
+        url.searchParams.delete("auth_token");
+        url.searchParams.delete("auth_user");
+        window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time OAuth return handler
   }, []);
 
   const requestThemes = async (
@@ -4127,6 +4144,15 @@ export default function App() {
     }
     const headers = withAuthHeaders();
     const tryRestore = async (): Promise<boolean> => {
+      const oauthStash = consumeOAuthPlanningStash();
+      if (oauthStash?.sessionId && oauthStash.deviceId === deviceId) {
+        const oauthHealth = await fetchPlanningSessionHealth(oauthStash.sessionId, headers);
+        if (oauthHealth?.ok) {
+          setSessionId(oauthStash.sessionId);
+          void persistPlanningSessionId(authToken, oauthStash.sessionId, oauthHealth.leaseExpiresAt);
+          return true;
+        }
+      }
       const persisted = await loadPersistedPlanningSession(authToken);
       if (!persisted?.sessionId) return false;
       const health = await fetchPlanningSessionHealth(persisted.sessionId, headers);

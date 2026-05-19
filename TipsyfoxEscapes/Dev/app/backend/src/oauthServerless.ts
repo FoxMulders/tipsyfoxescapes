@@ -5,6 +5,10 @@ import { FREE_TIER_ROOM_ALLOWANCE, isTrialTierUser } from "./billing/trial.js";
 import { ensureDataDir, getDataDir } from "./dataDir.js";
 import { handleGitHubWebhook } from "./githubWebhook.js";
 import { buildOAuthCallbackUrl, resolveAuthCallbackBaseUrl } from "./oauthCallbackUrl.js";
+import {
+  oauthCredentialSetupHint,
+  readOAuthClientCredentials,
+} from "./oauthConfig.js";
 import { exchangeOAuthCode } from "./oauthTokenExchange.js";
 import { createOAuthState, verifyOAuthState } from "./oauthState.js";
 
@@ -297,15 +301,14 @@ export const handleOAuthStart = async (
     }
 
     const callbackBaseUrl = resolveAuthCallbackBaseUrl(undefined, req.headers as Record<string, string | string[] | undefined>);
-    const clientId = String(process.env[`${provider.toUpperCase()}_CLIENT_ID`] ?? "").trim();
-    const clientSecret = String(process.env[`${provider.toUpperCase()}_CLIENT_SECRET`] ?? "").trim();
-    if (!callbackBaseUrl || !clientId || !clientSecret) {
+    const creds = readOAuthClientCredentials(provider);
+    if (!callbackBaseUrl || !creds) {
       const exampleCallback = buildOAuthCallbackUrl(provider, callbackBaseUrl || "http://localhost:5173");
       redirectOAuthStartFailure(
         res,
         returnTo,
         "not_configured",
-        `Social sign-in is not configured. Set AUTH_CALLBACK_BASE_URL, ${provider.toUpperCase()}_CLIENT_ID, and ${provider.toUpperCase()}_CLIENT_SECRET. Register redirect URI: ${exampleCallback}`,
+        `Social sign-in is not configured. Set AUTH_CALLBACK_BASE_URL. ${oauthCredentialSetupHint(provider)} Register redirect URI: ${exampleCallback}`,
       );
       return;
     }
@@ -313,7 +316,7 @@ export const handleOAuthStart = async (
     const callbackUri = buildOAuthCallbackUrl(provider);
     const state = createOAuthState(provider, returnTo);
     const params = new URLSearchParams({
-      client_id: clientId,
+      client_id: creds.clientId,
       redirect_uri: callbackUri,
       state,
     });
@@ -393,13 +396,22 @@ export const handleOAuthCallback = async (
 
   try {
     await ensureStorage();
-    const clientId = String(process.env[`${provider.toUpperCase()}_CLIENT_ID`] ?? "").trim();
-    const clientSecret = String(process.env[`${provider.toUpperCase()}_CLIENT_SECRET`] ?? "").trim();
+    const creds = readOAuthClientCredentials(provider);
+    if (!creds) {
+      redirectOAuthStartFailure(res, stateData.returnTo, "not_configured", oauthCredentialSetupHint(provider));
+      return;
+    }
     const callbackUri = buildOAuthCallbackUrl(
       provider,
       resolveAuthCallbackBaseUrl(undefined, req.headers as Record<string, string | string[] | undefined>),
     );
-    const { email, name } = await exchangeOAuthCode(provider, code, clientId, clientSecret, callbackUri);
+    const { email, name } = await exchangeOAuthCode(
+      provider,
+      code,
+      creds.clientId,
+      creds.clientSecret,
+      callbackUri,
+    );
     if (!email) throw new Error(`${provider} account did not provide a usable email.`);
     const user = upsertSocialUser(provider, email, name);
     const authToken = await createAuthTokenForUser(user);
