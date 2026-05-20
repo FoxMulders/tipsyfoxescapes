@@ -3603,6 +3603,12 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+app.get("/api/config", (_req, res) => {
+  const apiKey = String(process.env.OPENAI_API_KEY ?? "").trim();
+  const isAiEnabled = apiKey.length > 10 && apiKey.startsWith("sk-");
+  res.json({ isAiEnabled });
+});
+
 app.get("/version", (_req, res) => {
   const readVersion = (): string => {
     const bundled = path.join(__dirname, "..", "..", "api", "app-version.json");

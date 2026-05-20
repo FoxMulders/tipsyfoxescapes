@@ -3963,6 +3963,26 @@ label.checkbox-field {
   font-size: 0.84rem;
 }
 
+.inspiration-ai-config-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  margin: 0 0 0.55rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #f5c97a;
+  background: rgba(245, 180, 50, 0.08);
+  border: 1px solid rgba(245, 180, 50, 0.25);
+}
+
+.inspiration-ai-config-warn code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: #f9d88a;
+}
+
 .inspiration-ai-error {
   margin: 0 0 0.5rem;
   font-size: 0.86rem;
