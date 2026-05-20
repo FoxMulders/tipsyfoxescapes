@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chapter 2: Logic-Aware AI | Escape Room Builder Manual</title>
+  <link rel="stylesheet" href="/how-to/manual.css" />
+</head>
+<body>
+  <div class="manual-shell">
+    <aside class="manual-sidebar">
+      <p class="manual-brand">Tipsy Fox Escapes</p>
+      <h1>Builder Manual</h1>
+      <nav class="manual-nav" aria-label="Manual chapters">
+        <a href="/how-to/index.html">Introduction</a>
+        <a href="/how-to/chapter1-builder-setup.html">Chapter 1: Setup</a>
+        <a href="/how-to/chapter2-logic-aware-ai.html" aria-current="page">Chapter 2: Logic-Aware AI</a>
+        <a href="/how-to/chapter3-puzzle-refinement.html">Chapter 3: Puzzle Set</a>
+        <a href="/how-to/chapter4-build-ready-export.html">Chapter 4: Export Specs</a>
+        <a href="/how-to/chapter5-live-operations.html">Chapter 5: Live Ops</a>
+      </nav>
+    </aside>
+    <main class="manual-content">
+      <article class="chapter-card">
+        <p class="chapter-kicker">Chapter 2</p>
+        <h1>Designing with Logic-Aware AI</h1>
+        <p class="lead">The generator treats available items as physical anchors. Good prop tags produce puzzles that are easier to build, easier to reset, and clearer for game masters to explain.</p>
+
+        <figure class="figure-card">
+          <img src="/animations/figure-a-prop-tags.svg" width="960" height="540" alt="Adding sofa and TV as individual prop tags in the Available items field" />
+          <figcaption><strong>Figure A.</strong> Add one object per tag. “sofa” and “TV” become separate puzzle anchors instead of one vague sentence.</figcaption>
+        </figure>
+
+        <h2>One Tag = One Object</h2>
+        <p>Use short, concrete nouns: <code>sofa</code>, <code>TV</code>, <code>beaker</code>, <code>microscope</code>, <code>side table</code>. Avoid broad phrases like “living room stuff” or “science props” because they do not give the model a specific install location.</p>
+
+        <h2>Anchor Puzzles to Physical Elements</h2>
+        <ol>
+          <li>List each prop or fixture the team can touch, search, view, or manipulate.</li>
+          <li>Keep the environment aligned with the fiction zone so the export can say where each clue lives.</li>
+          <li>Review the generated puzzle’s physical anchor and narrative justification before approving it for build.</li>
+        </ol>
+
+        <h2>Theme Selection Workflow</h2>
+        <p>After room details are valid, continue to themes. Free trial users receive a curated theme set. Paid users can generate a wider rotating set, refresh ideas while preserving planning inputs, or add a custom theme.</p>
+
+        <figure class="figure-card">
+          <img src="/animations/figure-b-generate-refresh.svg" width="960" height="540" alt="Generate For Me and Refresh Ideas buttons producing theme cards" />
+          <figcaption><strong>Figure B.</strong> Generate starts from the current planning inputs. Refresh asks for a new set while keeping the same room, prop, headcount, and duration context.</figcaption>
+        </figure>
+
+        <nav class="next-prev" aria-label="Chapter navigation">
+          <a href="/how-to/chapter1-builder-setup.html">Previous: Initial Setup</a>
+          <a href="/how-to/chapter3-puzzle-refinement.html">Next: Puzzle Set</a>
+        </nav>
+      </article>
+    </main>
+  </div>
+</body>
+</html>

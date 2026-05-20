@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Escape Room Builder Manual | Tipsy Fox Escapes</title>
+  <link rel="stylesheet" href="/how-to/manual.css" />
+</head>
+<body>
+  <div class="manual-shell">
+    <aside class="manual-sidebar">
+      <p class="manual-brand">Tipsy Fox Escapes</p>
+      <h1>Builder Manual</h1>
+      <p class="muted">End-to-end operating guide for planning, generation, export, and live game night.</p>
+      <nav class="manual-nav" aria-label="Manual chapters">
+        <a href="/how-to/index.html" aria-current="page">Introduction</a>
+        <a href="/how-to/chapter1-builder-setup.html">Chapter 1: Setup</a>
+        <a href="/how-to/chapter2-logic-aware-ai.html">Chapter 2: Logic-Aware AI</a>
+        <a href="/how-to/chapter3-puzzle-refinement.html">Chapter 3: Puzzle Set</a>
+        <a href="/how-to/chapter4-build-ready-export.html">Chapter 4: Export Specs</a>
+        <a href="/how-to/chapter5-live-operations.html">Chapter 5: Live Ops</a>
+      </nav>
+    </aside>
+    <main class="manual-content">
+      <article class="chapter-card">
+        <p class="chapter-kicker">Introduction</p>
+        <h1>Quick Start Overview &amp; System Concepts</h1>
+        <p class="lead">Escape Room Builder turns practical room constraints into a playable plan: collect room inputs, choose a theme, generate varied puzzles, replace individual weak ideas, export build-ready specifications, and run the room from live game-night screens.</p>
+
+        <section class="manual-grid" aria-label="Manual chapters">
+          <div class="manual-tile">
+            <h2>1. Initial Setup</h2>
+            <p class="muted">Sign in, choose Home Party or Commercial Venue, and configure environment, player count, duration, and props.</p>
+            <a href="/how-to/chapter1-builder-setup.html">Open setup chapter</a>
+          </div>
+          <div class="manual-tile">
+            <h2>2. Logic-Aware AI</h2>
+            <p class="muted">Use one prop tag per physical object so the generator can anchor puzzles to real objects and spaces.</p>
+            <a href="/how-to/chapter2-logic-aware-ai.html">Open AI chapter</a>
+          </div>
+          <div class="manual-tile">
+            <h2>3. Puzzle Refinement</h2>
+            <p class="muted">Generate the puzzle set, replace only the weak slot, and polish copy with the browser AI editorial pass.</p>
+            <a href="/how-to/chapter3-puzzle-refinement.html">Open puzzle chapter</a>
+          </div>
+          <div class="manual-tile">
+            <h2>4. Build Specs</h2>
+            <p class="muted">Read the master blueprint, consolidated bill of materials, narrative justifications, wiring notes, and crew packet.</p>
+            <a href="/how-to/chapter4-build-ready-export.html">Open export chapter</a>
+          </div>
+          <div class="manual-tile">
+            <h2>5. Live Operations</h2>
+            <p class="muted">Connect the Gamemaster Console and Room Player Display, then run real-time clues and screen modes.</p>
+            <a href="/how-to/chapter5-live-operations.html">Open live ops chapter</a>
+          </div>
+        </section>
+
+        <h2>The Builder Loop</h2>
+        <ol>
+          <li><strong>Room:</strong> define people, duration, environment, operating mode, and available items.</li>
+          <li><strong>Theme:</strong> pick from generated ideas or provide a custom theme when full-catalog access is available.</li>
+          <li><strong>Build:</strong> generate puzzles that include logic, physical, and electronic variety.</li>
+          <li><strong>Review:</strong> replace only individual puzzle cards that miss the mark.</li>
+          <li><strong>Export:</strong> save or download the plan, then launch live URLs for game night.</li>
+        </ol>
+
+        <div class="callout">
+          <strong>Core concept:</strong> a planning session is the source of truth. Its session id ties together the builder, export packet, saved plan, Gamemaster Console at <code>/gm/{sessionId}</code>, and player display at <code>/room/{sessionId}/player-display</code>.
+        </div>
+
+        <nav class="next-prev" aria-label="Chapter navigation">
+          <span></span>
+          <a href="/how-to/chapter1-builder-setup.html">Next: Initial Setup</a>
+        </nav>
+      </article>
+    </main>
+  </div>
+</body>
+</html>

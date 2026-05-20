@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Figure C: Gamemaster clue sync</title>
+  <desc id="desc">A split screen showing a gamemaster clue box sending a hint to the player display over a live stream.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#061014"/>
+      <stop offset="1" stop-color="#10232b"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000" flood-opacity=".35"/>
+    </filter>
+  </defs>
+  <rect width="960" height="540" rx="34" fill="url(#bg)"/>
+  <g filter="url(#shadow)" font-family="Inter,Segoe UI,Arial">
+    <rect x="72" y="78" width="380" height="384" rx="24" fill="#0b161d" stroke="#57d3df" stroke-opacity=".32"/>
+    <rect x="508" y="78" width="380" height="384" rx="24" fill="#0b161d" stroke="#57d3df" stroke-opacity=".32"/>
+    <text x="108" y="130" fill="#ecf8f7" font-size="25" font-weight="800">GM Live Console</text>
+    <text x="544" y="130" fill="#ecf8f7" font-size="25" font-weight="800">Player Display</text>
+    <rect x="108" y="168" width="308" height="118" rx="16" fill="#071116" stroke="#7895a3" stroke-opacity=".5"/>
+    <text x="130" y="203" fill="#a8bec2" font-size="16">Clue box</text>
+    <text x="130" y="238" fill="#ecf8f7" font-size="21" font-weight="700">Check under the sofa tag.</text>
+    <rect x="108" y="312" width="126" height="48" rx="14" fill="#57d3df"/>
+    <text x="146" y="342" fill="#052127" font-size="18" font-weight="800">Send</text>
+    <rect x="544" y="168" width="308" height="206" rx="20" fill="#071116" stroke="#8ff4dc" stroke-opacity=".46"/>
+    <text x="650" y="224" fill="#8ff4dc" font-size="19" font-weight="800">Hint Overlay</text>
+    <rect x="592" y="252" width="212" height="72" rx="18" fill="#123c44"/>
+    <text x="622" y="295" fill="#ecf8f7" font-size="18" font-weight="700">Check under the sofa tag.</text>
+    <path d="M458 270 C492 224 510 224 544 270" fill="none" stroke="#8ff4dc" stroke-width="5" stroke-linecap="round" stroke-dasharray="10 12"/>
+    <path d="m524 250 24 19-24 19" fill="none" stroke="#8ff4dc" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="440" y="216" fill="#a8bec2" font-size="15" text-anchor="middle">live stream</text>
+  </g>
+</svg>

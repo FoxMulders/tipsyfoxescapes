@@ -2195,7 +2195,7 @@ a:hover {
 
 .auth-unified-grid {
   display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(260px, 5fr);
+  grid-template-columns: minmax(260px, 5fr) minmax(0, 7fr);
   gap: clamp(1.25rem, 3vw, 2.25rem);
   align-items: start;
 }

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Tipsy Fox Escapes — build escape rooms from concept to runbook with story beats, puzzle logic, and tech wiring notes." />
+    <meta name="theme-color" content="#0f172a" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <title>Tipsy Fox Escapes</title>
+  </head>
+  <body>
+    <div id="root" role="status" aria-live="polite">Loading app…</div>
+    <script>
+      window.setTimeout(function () {
+        var root = document.getElementById("root");
+        if (!root) return;
+        if (root.textContent && root.textContent.indexOf("Loading app") !== -1) {
+          root.innerHTML =
+            "<main><h1>Tipsy Fox Escapes</h1>" +
+            "<p>The app did not boot from this file directly.</p>" +
+            "<p>Start the frontend dev server in <code>Dev/app/frontend</code> with <code>npm install</code> then <code>npm run dev</code>, and open the Vite URL.</p></main>";
+        }
+      }, 1500);
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

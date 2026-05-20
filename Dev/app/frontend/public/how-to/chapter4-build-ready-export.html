@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chapter 4: Build-Ready Export | Escape Room Builder Manual</title>
+  <link rel="stylesheet" href="/how-to/manual.css" />
+</head>
+<body>
+  <div class="manual-shell">
+    <aside class="manual-sidebar">
+      <p class="manual-brand">Tipsy Fox Escapes</p>
+      <h1>Builder Manual</h1>
+      <nav class="manual-nav" aria-label="Manual chapters">
+        <a href="/how-to/index.html">Introduction</a>
+        <a href="/how-to/chapter1-builder-setup.html">Chapter 1: Setup</a>
+        <a href="/how-to/chapter2-logic-aware-ai.html">Chapter 2: Logic-Aware AI</a>
+        <a href="/how-to/chapter3-puzzle-refinement.html">Chapter 3: Puzzle Set</a>
+        <a href="/how-to/chapter4-build-ready-export.html" aria-current="page">Chapter 4: Export Specs</a>
+        <a href="/how-to/chapter5-live-operations.html">Chapter 5: Live Ops</a>
+      </nav>
+    </aside>
+    <main class="manual-content">
+      <article class="chapter-card">
+        <p class="chapter-kicker">Chapter 4</p>
+        <h1>Exporting Build-Ready Specifications</h1>
+        <p class="lead">The export is the handoff packet for hosts, builders, AV techs, and game masters. It converts selected puzzles into a master blueprint, material lists, setup notes, and operating instructions.</p>
+
+        <h2>Master Blueprint</h2>
+        <p>The blueprint summarizes story progression, puzzle ordering, dependencies, and reset expectations. Use it as the first page for builders and operators before they inspect individual puzzle cards.</p>
+
+        <h2>Consolidated Bill of Materials</h2>
+        <p>The bill of materials groups props, electronics, sensors, controllers, fasteners, signage, and printable artifacts across the whole room. For electronic puzzles, inspect parts, wiring diagram lines, build steps, and Arduino-style code before purchasing supplies.</p>
+
+        <h2>Narrative Justification</h2>
+        <p>Each puzzle should explain why the clue belongs where it appears. This keeps build crews from moving an object that is load-bearing for puzzle logic.</p>
+
+        <figure class="figure-card">
+          <img src="/animations/figure-e-build-spec-tablet.svg" width="960" height="540" alt="A tablet showing narrative justification beside a sofa prop graphic" />
+          <figcaption><strong>Figure E.</strong> Build crews can read the narrative justification beside the physical prop so placement, reset, and story logic stay aligned.</figcaption>
+        </figure>
+
+        <h2>Printing the Packet</h2>
+        <ol>
+          <li>Run <strong>Export Plan</strong> from the Export step.</li>
+          <li>Download the HTML or markdown export.</li>
+          <li>Use browser print or your document workflow to save a PDF for build crews.</li>
+          <li>Keep a digital copy available during game night for quick clue and reset reference.</li>
+        </ol>
+
+        <nav class="next-prev" aria-label="Chapter navigation">
+          <a href="/how-to/chapter3-puzzle-refinement.html">Previous: Puzzle Set</a>
+          <a href="/how-to/chapter5-live-operations.html">Next: Live Ops</a>
+        </nav>
+      </article>
+    </main>
+  </div>
+</body>
+</html>

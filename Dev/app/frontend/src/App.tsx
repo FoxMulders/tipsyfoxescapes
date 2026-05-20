@@ -5982,24 +5982,6 @@ export default function App() {
         {error ? <p className="error-banner auth-page-error">{error}</p> : null}
         <section id="auth-unified-panel" className="hero auth-hero auth-hero--planning auth-unified-panel auth-clear-glass">
           <div className="auth-unified-grid">
-            <div className="auth-unified-copy">
-              <p className="hero-chip hero-chip--planning-studio">Escape Planning Studio</p>
-              <h1>{BRAND_NAME}</h1>
-              <p className="auth-hero-para">{BRAND_INTRO}</p>
-              <p className="auth-hero-para muted">
-                Sign up for a <strong>free trial</strong>: three curated themes, narrative story-beat alignment, and a host runbook
-                preview—no maker electronics pack until you upgrade.
-              </p>
-              <ul className="auth-bullets auth-hero-para">
-                <li>Quick cinematic room generation from your space and guest count</li>
-                <li>Narrative story beats aligned to every puzzle in your run</li>
-                <li>Easy host run sheets you can print for game night</li>
-                <li>Paid plans unlock saves, full theme library, and maker wiring packs</li>
-              </ul>
-              <p className="muted promo-footnote auth-hero-para">
-                Plans and checkout live inside your account after sign-in—start designing first, upgrade when you need saves or Arduino detail.
-              </p>
-            </div>
             <aside className="auth-unified-form" aria-labelledby="auth-panel-title">
           <header className="auth-panel-head">
             <h2 id="auth-panel-title" className="auth-panel-title">{authMode === "signup" ? "Create account" : "Log in"}</h2>
@@ -6113,6 +6095,24 @@ export default function App() {
             </button>
           </nav>
             </aside>
+            <div className="auth-unified-copy">
+              <p className="hero-chip hero-chip--planning-studio">Escape Planning Studio</p>
+              <h1>{BRAND_NAME}</h1>
+              <p className="auth-hero-para">{BRAND_INTRO}</p>
+              <p className="auth-hero-para muted">
+                Sign up for a <strong>free trial</strong>: three curated themes, narrative story-beat alignment, and a host runbook
+                preview—no maker electronics pack until you upgrade.
+              </p>
+              <ul className="auth-bullets auth-hero-para">
+                <li>Quick cinematic room generation from your space and guest count</li>
+                <li>Narrative story beats aligned to every puzzle in your run</li>
+                <li>Easy host run sheets you can print for game night</li>
+                <li>Paid plans unlock saves, full theme library, and maker wiring packs</li>
+              </ul>
+              <p className="muted promo-footnote auth-hero-para">
+                Plans and checkout live inside your account after sign-in—start designing first, upgrade when you need saves or Arduino detail.
+              </p>
+            </div>
           </div>
         </section>
         <GlobalFooter buildStamp={APP_BUILD_STAMP} />
