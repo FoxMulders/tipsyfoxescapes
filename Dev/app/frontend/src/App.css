@@ -2195,7 +2195,7 @@ a:hover {
 
 .auth-unified-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 5fr) minmax(0, 7fr);
+  grid-template-columns: 1fr 1fr;
   gap: clamp(1.25rem, 3vw, 2.25rem);
   align-items: start;
 }
@@ -2205,11 +2205,11 @@ a:hover {
 }
 
 .auth-unified-form {
-  justify-self: end;
+  justify-self: stretch;
   width: 100%;
-  max-width: 22rem;
+  max-width: none;
   min-width: 0;
-  padding: 1rem 1.1rem 1.15rem;
+  padding: 1rem 1.25rem 1.15rem;
   border-radius: 12px;
   box-sizing: border-box;
 }
@@ -2264,6 +2264,18 @@ a:hover {
 .auth-unified-panel .auth-panel-title,
 .auth-unified-panel .auth-hero h1 {
   color: #f4f8ff;
+}
+
+.brand-title {
+  font-family: 'Cinzel Decorative', 'Georgia', serif;
+  font-weight: 700;
+  font-size: clamp(1.55rem, 3.2vw, 2.6rem);
+  letter-spacing: 0.03em;
+  line-height: 1.15;
+  color: #e8f4f2;
+  text-shadow:
+    0 0 28px rgba(61, 184, 200, 0.28),
+    0 2px 8px rgba(0, 0, 0, 0.55);
 }
 
 .auth-unified-panel input:not([type="checkbox"]):not([type="radio"]),
@@ -2936,8 +2948,6 @@ label.checkbox-field {
   }
 
   .auth-unified-form {
-    justify-self: stretch;
-    max-width: none;
     margin-top: 0.25rem;
   }
 }
