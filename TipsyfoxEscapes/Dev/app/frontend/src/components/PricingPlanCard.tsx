@@ -1,4 +1,5 @@
 import type { KeyboardEvent, ReactNode } from "react";
+import { buildPricingFeatureLines } from "@/lib/pricingTierDisplay";
 import { cn } from "@/lib/utils";
 
 export type PricingPlanCardPlan = {
@@ -58,6 +59,7 @@ export function PricingPlanCard({
   footer,
 }: PricingPlanCardProps) {
   const lane = tierLaneLabel(plan.tierLane);
+  const featureLines = buildPricingFeatureLines(plan.id, plan.features);
   const className = cn(
     "pricing-card",
     plan.tierLane === "operator" && "pricing-card--operator",
@@ -79,8 +81,13 @@ export function PricingPlanCard({
         {plan.perRoomPriceLabel ? <p className="pricing-per-room muted">{plan.perRoomPriceLabel}</p> : null}
       </header>
       <ul className="pricing-features">
-        {plan.features.map((feature) => (
-          <li key={feature}>{feature}</li>
+        {featureLines.map((line, index) => (
+          <li
+            key={`${plan.id}-${line.kind}-${index}`}
+            className={line.kind === "plus-lead" ? "pricing-features-plus-lead" : undefined}
+          >
+            {line.text}
+          </li>
         ))}
       </ul>
       {comparedToSlot}

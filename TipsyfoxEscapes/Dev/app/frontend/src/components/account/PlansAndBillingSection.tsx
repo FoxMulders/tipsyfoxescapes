@@ -94,10 +94,7 @@ export function PlansAndBillingSection({
     >
       <h2 className="subscription-title">Plans &amp; billing</h2>
       <p className="muted pricing-lead">
-        <strong>Home hosting</strong> passes unlock saved rooms and host runbooks.{" "}
-        <strong>Home Host Enthusiast</strong> adds maker electronics (wiring, Arduino, schematics).{" "}
-        <strong>Creative Studio</strong> adds the Gamemaster Live Console, white-label staff sheets, and scalable layout
-        rooms (+$39/mo each beyond the first). Checkout is powered by <strong>Square</strong>.
+        Each paid tier lists only what it adds on top of the previous plan. Checkout is powered by <strong>Square</strong>.
       </p>
       {!squarePaymentsReady ? (
         <p className="muted pricing-square-hint" role="status">

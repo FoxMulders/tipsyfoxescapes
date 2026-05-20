@@ -353,6 +353,27 @@ body {
   margin-top: 0.28rem;
 }
 
+.pricing-features li.pricing-features-plus-lead {
+  list-style: none;
+  margin-left: -1.1rem;
+  margin-bottom: 0.15rem;
+  padding-left: 0;
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.35;
+  color: rgba(200, 228, 255, 0.96);
+}
+
+.pricing-grid--compact .pricing-features {
+  padding-left: 1rem;
+  font-size: 0.8rem;
+}
+
+.pricing-grid--compact .pricing-features li.pricing-features-plus-lead {
+  margin-left: -1rem;
+  font-size: 0.74rem;
+}
+
 .pricing-compared-inline {
   margin: 0.35rem 0 0;
   font-size: 0.8rem;
@@ -4013,7 +4034,7 @@ label.checkbox-field {
 }
 
 .pricing-grid--compact {
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(11.75rem, 1fr));
   gap: 0.65rem;
   margin: 0.85rem 0 0.25rem;
 }
