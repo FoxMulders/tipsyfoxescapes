@@ -3647,6 +3647,21 @@ app.post("/api/auth/signup", async (req, res) => {
     });
     return;
   }
+  const pwStr = String(password);
+  if (
+    pwStr.length < 8 ||
+    !/[A-Z]/.test(pwStr) ||
+    !/[0-9!@#$%^&*()\-_=+[\]{};':",.<>/?\\|`~]/.test(pwStr)
+  ) {
+    res.status(400).json({
+      error: {
+        code: "WEAK_PASSWORD",
+        message: "Password must be at least 8 characters and include one uppercase letter and one number or special character.",
+        details: [],
+      },
+    });
+    return;
+  }
   if (acceptedTerms !== true && acceptedTerms !== "true" && acceptedTerms !== 1 && acceptedTerms !== "1") {
     res.status(400).json({
       error: {
