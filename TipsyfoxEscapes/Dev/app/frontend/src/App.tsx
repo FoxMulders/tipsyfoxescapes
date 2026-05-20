@@ -6161,7 +6161,7 @@ export default function App() {
             </aside>
             <div className="auth-unified-copy">
               <p className="hero-chip hero-chip--planning-studio">Escape Planning Studio</p>
-              <h1>{BRAND_NAME}</h1>
+              <h1 className="brand-title">{BRAND_NAME}</h1>
               <p className="auth-hero-para">{BRAND_INTRO}</p>
               <p className="auth-hero-para muted">
                 Sign up for a <strong>free trial</strong>: three curated themes, narrative story-beat alignment, and a host runbook
