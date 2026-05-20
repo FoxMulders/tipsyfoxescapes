@@ -4274,32 +4274,52 @@ export default function App() {
   const handleSocialAuth = (provider: "google" | "facebook" | "github"): void => {
     setError("");
     setSocialAuthProvider(provider);
-    cacheLocalPlanningInputs();
-    stashOAuthReturnSnapshot(buildOAuthReturnSnapshot());
-    stashWorkspaceDraftForOAuth({
-      wizardStep,
-      playersConcurrent,
-      participantsTotal,
-      sessionDurationMinutes,
-      environmentType,
-      availableItems,
-      eventType,
-      targetInterface,
-      venueBuildType,
-      roomDifficulty,
-      themeMustMatchEnvironment,
-      youthAddOnEnabled,
-      youthAddOnGatesAdultFlow,
-      youthAddOnAgeNote,
-    });
-    if (sessionId.trim()) {
-      stashPlanningSessionForOAuth(sessionId, deviceId);
+
+    let safetyTimer: ReturnType<typeof window.setTimeout> | null = null;
+
+    const releaseProvider = (errorMsg?: string) => {
+      if (safetyTimer !== null) window.clearTimeout(safetyTimer);
+      setSocialAuthProvider(null);
+      if (errorMsg) setError(errorMsg);
+    };
+
+    // Safety net: if the page hasn't navigated away within 12 s, unfreeze the button.
+    safetyTimer = window.setTimeout(() => {
+      releaseProvider("Sign-in redirect timed out. Check your connection and try again.");
+    }, 12_000);
+
+    try {
+      cacheLocalPlanningInputs();
+      stashOAuthReturnSnapshot(buildOAuthReturnSnapshot());
+      stashWorkspaceDraftForOAuth({
+        wizardStep,
+        playersConcurrent,
+        participantsTotal,
+        sessionDurationMinutes,
+        environmentType,
+        availableItems,
+        eventType,
+        targetInterface,
+        venueBuildType,
+        roomDifficulty,
+        themeMustMatchEnvironment,
+        youthAddOnEnabled,
+        youthAddOnGatesAdultFlow,
+        youthAddOnAgeNote,
+      });
+      if (sessionId.trim()) {
+        stashPlanningSessionForOAuth(sessionId, deviceId);
+      }
+      setOAuthReturnMarker();
+      const returnTo = `${window.location.origin}${window.location.pathname}`;
+      window.location.assign(
+        `${API_BASE}/api/auth/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`,
+      );
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[social-auth] launch failed:", provider, err);
+      releaseProvider(`Could not start ${provider} sign-in — please try again.`);
     }
-    setOAuthReturnMarker();
-    const returnTo = `${window.location.origin}${window.location.pathname}`;
-    window.location.assign(
-      `${API_BASE}/api/auth/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`,
-    );
   };
 
   useEffect(() => {
@@ -4307,6 +4327,7 @@ export default function App() {
     const oauthErr = url.searchParams.get("oauth_error");
     const oauthMsg = url.searchParams.get("oauth_message");
     if (oauthErr) {
+      setSocialAuthProvider(null);
       setError(oauthMsg?.trim() || `Sign-in could not complete (${oauthErr}).`);
       url.searchParams.delete("oauth_error");
       url.searchParams.delete("oauth_message");
