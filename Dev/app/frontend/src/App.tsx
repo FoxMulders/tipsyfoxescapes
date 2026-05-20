@@ -2585,6 +2585,7 @@ export default function App() {
   const [themeMustMatchEnvironment, setThemeMustMatchEnvironment] = useState<boolean>(false);
   const [venueBuildType, setVenueBuildType] = useState<VenueBuildType>("prebuilt_space");
   const [targetInterface, setTargetInterface] = useState<TargetInterface>("home_party");
+  const targetInterfaceInitRef = useRef(false);
   const [propFabrication3dEnabled, setPropFabrication3dEnabled] = useState(false);
   const [propFabricationKinds, setPropFabricationKinds] = useState<PropFabricationKind[]>([]);
   const [availableItems, setAvailableItems] = useState<string>("");
@@ -2651,6 +2652,14 @@ export default function App() {
         setAiEnabled(true);
       });
   }, [inspirationOpen]);
+
+  useEffect(() => {
+    if (!targetInterfaceInitRef.current) {
+      targetInterfaceInitRef.current = true;
+      return;
+    }
+    setSessionDurationMinutes(targetInterface === "commercial_venue" ? "60" : "30");
+  }, [targetInterface]);
   const [customThemeName, setCustomThemeName] = useState<string>("");
   const [customThemeDescription, setCustomThemeDescription] = useState<string>("");
   const [customThemeCoachMessages, setCustomThemeCoachMessages] = useState<ThemeCoachUiMessage[]>([]);
@@ -3270,11 +3279,6 @@ export default function App() {
       participantsTotal: false,
       headcountOrder: false,
     }));
-    const pc = Number(next);
-    const pt = Number(participantsTotal);
-    if (Number.isFinite(pc) && Number.isFinite(pt) && pc > pt) {
-      setParticipantsTotal(next);
-    }
   };
 
   const applyParticipantsTotalChange = (next: string): void => {
@@ -4835,7 +4839,7 @@ export default function App() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap theme list when step opens; avoid duplicate fetches when themePath flips null→generated
-  }, [wizardStep, sessionId, themes.length, themePath, hasFullCatalogAccess]);
+  }, [wizardStep, sessionId, themes.length, themePath, hasFullCatalogAccess, authBootstrapReady]);
 
   /** Free tier: manual Generate is gated like theme refresh; run one automatic pass when entering Build with a theme. */
   useEffect(() => {
@@ -6588,6 +6592,7 @@ export default function App() {
                 wizardStepLabel={wizardLabel}
                 playersConcurrent={playersConcurrent}
                 onPlayersConcurrentChange={applyPlayersConcurrentChange}
+                maxConcurrent={(() => { const pt = Number(participantsTotal); return Number.isFinite(pt) && pt >= 1 ? Math.min(99, Math.trunc(pt)) : 99; })()}
                 participantsTotal={participantsTotal}
                 onParticipantsTotalChange={applyParticipantsTotalChange}
                 venueBuildType={venueBuildType}

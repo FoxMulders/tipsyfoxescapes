@@ -18,6 +18,7 @@ type RoomDetailsStepProps = {
   wizardStepLabel: string;
   playersConcurrent: string;
   onPlayersConcurrentChange: (v: string) => void;
+  maxConcurrent?: number;
   participantsTotal: string;
   onParticipantsTotalChange: (v: string) => void;
   venueBuildType: VenueBuildType;
@@ -169,7 +170,7 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
                 value={props.playersConcurrent}
                 onChange={props.onPlayersConcurrentChange}
                 min={1}
-                max={99}
+                max={props.maxConcurrent ?? 99}
                 invalid={invalid("playersConcurrent")}
                 aria-label="Players at one time"
               />
@@ -203,34 +204,30 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             </FieldHint>
           </div>
 
-          <div className="form-field-panel">
-            <FieldHint
-              label="Event context"
-              htmlFor="event-context-input"
-              tooltip="e.g., Commercial venue, Halloween party, corporate team building, or school fundraiser."
-            >
-              <Input
-                id="event-context-input"
-                type="text"
-                list="event-type-suggestions"
-                className="border-slate-700/60 bg-slate-900/90 text-slate-50"
-                value={props.eventType}
-                maxLength={200}
-                onChange={(e) => props.setEventType(e.target.value)}
-              />
-              <datalist id="event-type-suggestions">
-                {props.eventSuggestions.map((entry) => (
-                  <option key={entry} value={entry} />
-                ))}
-              </datalist>
-              {props.commercialVenueContext ? (
-                <p className="rounded-md border border-amber-500/35 bg-amber-500/12 p-3 text-sm text-amber-50/95" role="note">
-                  <strong>Commercial / ticketed venue:</strong> Guests expect a clearly unique experience—treat generated ideas as raw
-                  material for original puzzles and flow.
-                </p>
-              ) : null}
-            </FieldHint>
-          </div>
+          {!isCommercial ? (
+            <div className="form-field-panel">
+              <FieldHint
+                label="Event context"
+                htmlFor="event-context-input"
+                tooltip="e.g., Halloween party, corporate team building, school fundraiser, or birthday."
+              >
+                <Input
+                  id="event-context-input"
+                  type="text"
+                  list="event-type-suggestions"
+                  className="border-slate-700/60 bg-slate-900/90 text-slate-50"
+                  value={props.eventType}
+                  maxLength={200}
+                  onChange={(e) => props.setEventType(e.target.value)}
+                />
+                <datalist id="event-type-suggestions">
+                  {props.eventSuggestions.map((entry) => (
+                    <option key={entry} value={entry} />
+                  ))}
+                </datalist>
+              </FieldHint>
+            </div>
+          ) : null}
 
           <div className="form-field-panel">
             <FieldHint
