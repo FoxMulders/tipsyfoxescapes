@@ -2343,6 +2343,14 @@ function ThemeDescriptionBlocks({ text }: { text: string }) {
 
 type ThemeCoachUiMessage = { id: string; role: "user" | "assistant"; content: string };
 
+/** Structured result from the server-side /api/inspiration/generate endpoint. */
+interface InspirationApiResult {
+  theme: string;
+  narrativeHook: string;
+  puzzlesAndProps: Array<{ puzzleConcept: string; requiredProps: string[] }>;
+  source: "openai" | "mock";
+}
+
 function newCoachMessageId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -2616,6 +2624,7 @@ export default function App() {
   const [arduinoPreviewPuzzleId, setArduinoPreviewPuzzleId] = useState<string | null>(null);
   const [inspirationOpen, setInspirationOpen] = useState<boolean>(false);
   const [inspirationAiBrief, setInspirationAiBrief] = useState<ContextualInspirationResult | null>(null);
+  const [inspirationServerResult, setInspirationServerResult] = useState<InspirationApiResult | null>(null);
   const [inspirationAiBusy, setInspirationAiBusy] = useState<boolean>(false);
   const [inspirationAiError, setInspirationAiError] = useState<string>("");
 
@@ -2804,35 +2813,70 @@ export default function App() {
 
   const runContextualInspiration = useCallback(async (): Promise<void> => {
     setInspirationAiError("");
-    if (!coachBrowserAiReady) {
-      setInspirationAiError(
-        "On-device AI is not available in this browser yet. Try Chrome with the Prompt API (e.g. Gemini Nano) enabled, then refresh.",
-      );
-      return;
-    }
+    setInspirationServerResult(null);
+    setInspirationAiBrief(null);
     setInspirationAiBusy(true);
     try {
-      const themeName = selectedTheme?.name ?? (customThemeName.trim() || "Not selected yet");
-      const themeTldr = selectedTheme ? resolveThemeTldr(selectedTheme) : "";
-      const desc = selectedTheme?.description ?? customThemeDescription ?? "";
-      const excerpt = collapseWs(desc).slice(0, 900);
-      const result = await generateContextualInspirationInBrowser({
-        environmentType: environmentType.trim(),
-        availableItems: availableItems.trim(),
-        eventType: eventType.trim(),
-        themeName,
-        themeTldr,
-        themeDescriptionExcerpt: excerpt,
-        isCommercialVenue: commercialVenueContext,
-      });
-      if (!result || (!result.intro && result.propIdeas.length === 0 && !result.proTip)) {
-        setInspirationAiBrief(null);
-        setInspirationAiError(
-          "Could not produce tips. The model may be busy—try again, or confirm on-device AI is enabled in your browser.",
-        );
-        return;
+      // 1. Try server-side API (OpenAI when key configured, otherwise env-aware mock).
+      try {
+        // Compute node count inline (plannerMainPuzzleTarget is declared later in the component).
+        const pc = Number(playersConcurrent);
+        const sd = Number(sessionDurationMinutes);
+        const customN = useCustomMainPuzzleCount ? Number.parseInt(customMainPuzzleCountStr.trim(), 10) : NaN;
+        const targetNodeCount = !isNaN(customN) && Number.isFinite(customN)
+          ? Math.min(24, Math.max(1, Math.trunc(customN)))
+          : (Number.isFinite(pc) && pc >= 1 && Number.isFinite(sd) && sd >= 1
+            ? estimateClientPuzzleCount(Math.floor(pc), Math.floor(sd))
+            : 4);
+        const payload = {
+          environmentType: environmentType.trim(),
+          availableItems: availableItems.trim(),
+          targetNodeCount,
+          themeMustMatchEnvironment,
+          eventType: eventType.trim(),
+          themeName: selectedTheme?.name ?? customThemeName.trim(),
+        };
+        const resp = await fetch("/api/inspiration/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (resp.ok) {
+          const data = (await resp.json()) as InspirationApiResult;
+          if (data.theme && Array.isArray(data.puzzlesAndProps) && data.puzzlesAndProps.length > 0) {
+            setInspirationServerResult(data);
+            return;
+          }
+        }
+      } catch {
+        // Server unavailable — fall through to browser AI.
       }
-      setInspirationAiBrief(result);
+
+      // 2. Fall back to on-device browser AI when available.
+      if (coachBrowserAiReady) {
+        const themeName = selectedTheme?.name ?? (customThemeName.trim() || "Not selected yet");
+        const themeTldr = selectedTheme ? resolveThemeTldr(selectedTheme) : "";
+        const desc = selectedTheme?.description ?? customThemeDescription ?? "";
+        const excerpt = collapseWs(desc).slice(0, 900);
+        const result = await generateContextualInspirationInBrowser({
+          environmentType: environmentType.trim(),
+          availableItems: availableItems.trim(),
+          eventType: eventType.trim(),
+          themeName,
+          themeTldr,
+          themeDescriptionExcerpt: excerpt,
+          isCommercialVenue: commercialVenueContext,
+        });
+        if (result && (result.intro || result.propIdeas.length > 0 || result.proTip)) {
+          setInspirationAiBrief(result);
+          return;
+        }
+      }
+
+      // 3. Both paths failed.
+      setInspirationAiError(
+        "Could not generate inspiration. The server API is available without configuration and returns sample concepts — if you see this, try refreshing the page.",
+      );
     } finally {
       setInspirationAiBusy(false);
     }
@@ -2845,6 +2889,11 @@ export default function App() {
     availableItems,
     eventType,
     commercialVenueContext,
+    themeMustMatchEnvironment,
+    playersConcurrent,
+    sessionDurationMinutes,
+    useCustomMainPuzzleCount,
+    customMainPuzzleCountStr,
   ]);
 
   customThemeCoachMessagesRef.current = customThemeCoachMessages;
@@ -7813,17 +7862,58 @@ export default function App() {
                   aria-busy={inspirationAiBusy}
                   onClick={() => void runContextualInspiration()}
                 >
-                  {inspirationAiBusy ? "Generating tips…" : "Generate tips for my plan (on-device AI)"}
+                  {inspirationAiBusy
+                    ? "Generating…"
+                    : `Generate AI concept (${plannerMainPuzzleTarget} puzzle node${plannerMainPuzzleTarget === 1 ? "" : "s"})`}
                 </button>
-                {!coachBrowserAiReady ? (
-                  <p className="muted inspiration-ai-unavailable">
-                    Prompt API not detected—enable on-device models in Chrome (or a compatible build), then refresh. You can still use
-                    the static links.
-                  </p>
-                ) : null}
                 {inspirationAiError ? <p className="error-banner inspiration-ai-error">{inspirationAiError}</p> : null}
+
+                {/* Structured result from server-side API */}
+                {inspirationServerResult ? (
+                  <div className="inspiration-ai-result inspiration-structured-result" role="region" aria-label="AI-generated escape room concept">
+                    <div className="inspiration-concept-header">
+                      <h3 className="inspiration-concept-theme">{inspirationServerResult.theme}</h3>
+                      {inspirationServerResult.source === "mock" ? (
+                        <span className="inspiration-source-badge inspiration-source-badge--mock">Sample concept</span>
+                      ) : (
+                        <span className="inspiration-source-badge inspiration-source-badge--ai">AI-generated</span>
+                      )}
+                    </div>
+                    {inspirationServerResult.narrativeHook ? (
+                      <p className="inspiration-narrative-hook">{inspirationServerResult.narrativeHook}</p>
+                    ) : null}
+                    {inspirationServerResult.puzzlesAndProps.length > 0 ? (
+                      <>
+                        <h4 className="inspiration-ai-subhead">
+                          Puzzle nodes — {inspirationServerResult.puzzlesAndProps.length} node{inspirationServerResult.puzzlesAndProps.length === 1 ? "" : "s"}
+                          {themeMustMatchEnvironment ? " · environmental fit enforced" : ""}
+                        </h4>
+                        <ol className="inspiration-puzzle-nodes-list">
+                          {inspirationServerResult.puzzlesAndProps.map((node, idx) => (
+                            <li key={`node-${idx}`} className="inspiration-puzzle-node-item">
+                              <p className="inspiration-puzzle-concept">{node.puzzleConcept}</p>
+                              {node.requiredProps.length > 0 ? (
+                                <p className="inspiration-puzzle-props muted">
+                                  <strong>Props:</strong> {node.requiredProps.join(", ")}
+                                </p>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ol>
+                      </>
+                    ) : null}
+                    {inspirationServerResult.source === "mock" ? (
+                      <p className="muted inspiration-mock-notice">
+                        This is a sample concept matched to your environment. Set <code>OPENAI_API_KEY</code> in your backend <code>.env</code> to get personalized AI-generated plans.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {/* On-device browser AI result (fallback) */}
                 {inspirationAiBrief ? (
-                  <div className="inspiration-ai-result" role="region" aria-label="Personalized inspiration">
+                  <div className="inspiration-ai-result" role="region" aria-label="On-device AI inspiration">
+                    <p className="muted inspiration-source-note">Generated by on-device AI</p>
                     {inspirationAiBrief.intro ? <p className="inspiration-ai-intro">{inspirationAiBrief.intro}</p> : null}
                     {inspirationAiBrief.propIdeas.length > 0 ? (
                       <>
