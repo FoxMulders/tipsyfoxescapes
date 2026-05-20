@@ -48,6 +48,7 @@ import {
   clearAuthSession,
   loadAuthSession,
   saveAuthSession,
+  subscribeCrossTabAuth,
   type StoredAuthSession,
 } from "./authStorage.ts";
 import { FlowStepIntro } from "@/components/planning/FlowStepIntro";
@@ -2342,6 +2343,14 @@ function ThemeDescriptionBlocks({ text }: { text: string }) {
 
 type ThemeCoachUiMessage = { id: string; role: "user" | "assistant"; content: string };
 
+/** Structured result from the server-side /api/inspiration/generate endpoint. */
+interface InspirationApiResult {
+  theme: string;
+  narrativeHook: string;
+  puzzlesAndProps: Array<{ puzzleConcept: string; requiredProps: string[] }>;
+  source: "openai" | "mock";
+}
+
 function newCoachMessageId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -2615,6 +2624,7 @@ export default function App() {
   const [arduinoPreviewPuzzleId, setArduinoPreviewPuzzleId] = useState<string | null>(null);
   const [inspirationOpen, setInspirationOpen] = useState<boolean>(false);
   const [inspirationAiBrief, setInspirationAiBrief] = useState<ContextualInspirationResult | null>(null);
+  const [inspirationServerResult, setInspirationServerResult] = useState<InspirationApiResult | null>(null);
   const [inspirationAiBusy, setInspirationAiBusy] = useState<boolean>(false);
   const [inspirationAiError, setInspirationAiError] = useState<string>("");
 
@@ -2803,35 +2813,70 @@ export default function App() {
 
   const runContextualInspiration = useCallback(async (): Promise<void> => {
     setInspirationAiError("");
-    if (!coachBrowserAiReady) {
-      setInspirationAiError(
-        "On-device AI is not available in this browser yet. Try Chrome with the Prompt API (e.g. Gemini Nano) enabled, then refresh.",
-      );
-      return;
-    }
+    setInspirationServerResult(null);
+    setInspirationAiBrief(null);
     setInspirationAiBusy(true);
     try {
-      const themeName = selectedTheme?.name ?? (customThemeName.trim() || "Not selected yet");
-      const themeTldr = selectedTheme ? resolveThemeTldr(selectedTheme) : "";
-      const desc = selectedTheme?.description ?? customThemeDescription ?? "";
-      const excerpt = collapseWs(desc).slice(0, 900);
-      const result = await generateContextualInspirationInBrowser({
-        environmentType: environmentType.trim(),
-        availableItems: availableItems.trim(),
-        eventType: eventType.trim(),
-        themeName,
-        themeTldr,
-        themeDescriptionExcerpt: excerpt,
-        isCommercialVenue: commercialVenueContext,
-      });
-      if (!result || (!result.intro && result.propIdeas.length === 0 && !result.proTip)) {
-        setInspirationAiBrief(null);
-        setInspirationAiError(
-          "Could not produce tips. The model may be busy—try again, or confirm on-device AI is enabled in your browser.",
-        );
-        return;
+      // 1. Try server-side API (OpenAI when key configured, otherwise env-aware mock).
+      try {
+        // Compute node count inline (plannerMainPuzzleTarget is declared later in the component).
+        const pc = Number(playersConcurrent);
+        const sd = Number(sessionDurationMinutes);
+        const customN = useCustomMainPuzzleCount ? Number.parseInt(customMainPuzzleCountStr.trim(), 10) : NaN;
+        const targetNodeCount = !isNaN(customN) && Number.isFinite(customN)
+          ? Math.min(24, Math.max(1, Math.trunc(customN)))
+          : (Number.isFinite(pc) && pc >= 1 && Number.isFinite(sd) && sd >= 1
+            ? estimateClientPuzzleCount(Math.floor(pc), Math.floor(sd))
+            : 4);
+        const payload = {
+          environmentType: environmentType.trim(),
+          availableItems: availableItems.trim(),
+          targetNodeCount,
+          themeMustMatchEnvironment,
+          eventType: eventType.trim(),
+          themeName: selectedTheme?.name ?? customThemeName.trim(),
+        };
+        const resp = await fetch("/api/inspiration/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (resp.ok) {
+          const data = (await resp.json()) as InspirationApiResult;
+          if (data.theme && Array.isArray(data.puzzlesAndProps) && data.puzzlesAndProps.length > 0) {
+            setInspirationServerResult(data);
+            return;
+          }
+        }
+      } catch {
+        // Server unavailable — fall through to browser AI.
       }
-      setInspirationAiBrief(result);
+
+      // 2. Fall back to on-device browser AI when available.
+      if (coachBrowserAiReady) {
+        const themeName = selectedTheme?.name ?? (customThemeName.trim() || "Not selected yet");
+        const themeTldr = selectedTheme ? resolveThemeTldr(selectedTheme) : "";
+        const desc = selectedTheme?.description ?? customThemeDescription ?? "";
+        const excerpt = collapseWs(desc).slice(0, 900);
+        const result = await generateContextualInspirationInBrowser({
+          environmentType: environmentType.trim(),
+          availableItems: availableItems.trim(),
+          eventType: eventType.trim(),
+          themeName,
+          themeTldr,
+          themeDescriptionExcerpt: excerpt,
+          isCommercialVenue: commercialVenueContext,
+        });
+        if (result && (result.intro || result.propIdeas.length > 0 || result.proTip)) {
+          setInspirationAiBrief(result);
+          return;
+        }
+      }
+
+      // 3. Both paths failed.
+      setInspirationAiError(
+        "Could not generate inspiration. The server API is available without configuration and returns sample concepts — if you see this, try refreshing the page.",
+      );
     } finally {
       setInspirationAiBusy(false);
     }
@@ -2844,6 +2889,11 @@ export default function App() {
     availableItems,
     eventType,
     commercialVenueContext,
+    themeMustMatchEnvironment,
+    playersConcurrent,
+    sessionDurationMinutes,
+    useCustomMainPuzzleCount,
+    customMainPuzzleCountStr,
   ]);
 
   customThemeCoachMessagesRef.current = customThemeCoachMessages;
@@ -3584,6 +3634,10 @@ export default function App() {
     persistAuth("", null);
   };
   const currentAuthToken = (): string => {
+    // Prefer the synchronously-updated ref so cross-tab token adoptions (and
+    // proactive refreshes) are visible in the same call stack, before the React
+    // state re-render propagates.
+    if (authSessionRef.current.authToken.trim()) return authSessionRef.current.authToken.trim();
     if (authToken.trim()) return authToken.trim();
     try {
       const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
@@ -4034,6 +4088,31 @@ export default function App() {
       onSessionExpired: (message) => handleAuthExpiredRef.current(message),
     });
   }, [deviceId, refreshToken, accessExpiresAt, refreshExpiresAt, authUser]);
+
+  // Cross-tab auth sync: when another tab refreshes or writes a token to
+  // localStorage, adopt it here so this tab doesn't fail with a stale token.
+  useEffect(() => {
+    const unsubscribe = subscribeCrossTabAuth((newSession) => {
+      if (!newSession?.authToken.trim()) return; // Ignore sign-outs from other tabs.
+      if (newSession.authToken === authSessionRef.current.authToken) return; // Already current.
+      // Adopt the refreshed token synchronously so the next API call uses it.
+      authSessionRef.current = {
+        authToken: newSession.authToken,
+        refreshToken: newSession.refreshToken,
+        authUser: newSession.authUser,
+        accessExpiresAt: newSession.accessExpiresAt,
+        refreshExpiresAt: newSession.refreshExpiresAt,
+      };
+      setAuthToken(newSession.authToken);
+      setRefreshToken(newSession.refreshToken);
+      setAccessExpiresAt(newSession.accessExpiresAt);
+      setRefreshExpiresAt(newSession.refreshExpiresAt);
+      const normalized = normalizeAuthUser(newSession.authUser);
+      if (normalized) setAuthUser(normalized);
+    });
+    return unsubscribe;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- authSessionRef is a stable ref
+  }, []);
 
   useEffect(() => {
     if (authBootstrapReady) return;
@@ -5952,24 +6031,6 @@ export default function App() {
         {error ? <p className="error-banner auth-page-error">{error}</p> : null}
         <section id="auth-unified-panel" className="hero auth-hero auth-hero--planning auth-unified-panel auth-clear-glass">
           <div className="auth-unified-grid">
-            <div className="auth-unified-copy">
-              <p className="hero-chip hero-chip--planning-studio">Escape Planning Studio</p>
-              <h1>{BRAND_NAME}</h1>
-              <p className="auth-hero-para">{BRAND_INTRO}</p>
-              <p className="auth-hero-para muted">
-                Sign up for a <strong>free trial</strong>: three curated themes, narrative story-beat alignment, and a host runbook
-                preview—no maker electronics pack until you upgrade.
-              </p>
-              <ul className="auth-bullets auth-hero-para">
-                <li>Quick cinematic room generation from your space and guest count</li>
-                <li>Narrative story beats aligned to every puzzle in your run</li>
-                <li>Easy host run sheets you can print for game night</li>
-                <li>Paid plans unlock saves, full theme library, and maker wiring packs</li>
-              </ul>
-              <p className="muted promo-footnote auth-hero-para">
-                Plans and checkout live inside your account after sign-in—start designing first, upgrade when you need saves or Arduino detail.
-              </p>
-            </div>
             <aside className="auth-unified-form" aria-labelledby="auth-panel-title">
           <header className="auth-panel-head">
             <h2 id="auth-panel-title" className="auth-panel-title">{authMode === "signup" ? "Create account" : "Log in"}</h2>
@@ -6083,6 +6144,24 @@ export default function App() {
             </button>
           </nav>
             </aside>
+            <div className="auth-unified-copy">
+              <p className="hero-chip hero-chip--planning-studio">Escape Planning Studio</p>
+              <h1>{BRAND_NAME}</h1>
+              <p className="auth-hero-para">{BRAND_INTRO}</p>
+              <p className="auth-hero-para muted">
+                Sign up for a <strong>free trial</strong>: three curated themes, narrative story-beat alignment, and a host runbook
+                preview—no maker electronics pack until you upgrade.
+              </p>
+              <ul className="auth-bullets auth-hero-para">
+                <li>Quick cinematic room generation from your space and guest count</li>
+                <li>Narrative story beats aligned to every puzzle in your run</li>
+                <li>Easy host run sheets you can print for game night</li>
+                <li>Paid plans unlock saves, full theme library, and maker wiring packs</li>
+              </ul>
+              <p className="muted promo-footnote auth-hero-para">
+                Plans and checkout live inside your account after sign-in—start designing first, upgrade when you need saves or Arduino detail.
+              </p>
+            </div>
           </div>
         </section>
         <GlobalFooter buildStamp={APP_BUILD_STAMP} />
@@ -6097,8 +6176,9 @@ export default function App() {
       {/* Main application layout and interactive sections. */}
       <main
         ref={builderShellRef}
-        className="page-shell page-shell--layered"
+        className="page-shell page-shell--layered page-shell--cols"
       >
+      <div className="app-main-col">
       {authUser.billingTier === "trial" && appView === "builder" ? (
         <div className="slot-utilization-warning trial-active-banner" role="status">
           <strong>Free trial:</strong> the same three curated themes load every time. You get one host runbook export (no maker
@@ -6143,28 +6223,6 @@ export default function App() {
           . Room packs and checkout live under <strong>Account &amp; pricing</strong>.
         </div>
       ) : null}
-      <TopNavBar
-        ref={topNavRef}
-        brandName={BRAND_NAME}
-        authName={authUser.name}
-        authEmail={authUser.email}
-        authProviderLabel={AUTH_PROVIDER_LABELS[authUser.provider]}
-        billingTierLabel={formatBillingTierLabel(authUser.billingTier)}
-        planStatusDetail={`${authUser.roomsRemaining} of ${authUser.roomAllowance} save slots · ${authUser.exportCreditsRemaining} export credits`}
-        appView={appView}
-        showAdminTab={authUser.role === "admin" || authUser.isAdmin}
-        onAppViewChange={(view) => {
-          if (view === "admin") {
-            navigate("/admin/dashboard");
-            return;
-          }
-          setAppView(view);
-        }}
-        onSignOut={signOut}
-        onOpenSnapshot={appView === "builder" ? () => setSnapshotOpen(true) : undefined}
-        themeName={selectedTheme?.name}
-        puzzleCount={puzzles.length}
-      />
       <PlanningSnapshotSheet
         open={snapshotOpen}
         onOpenChange={setSnapshotOpen}
@@ -7804,17 +7862,58 @@ export default function App() {
                   aria-busy={inspirationAiBusy}
                   onClick={() => void runContextualInspiration()}
                 >
-                  {inspirationAiBusy ? "Generating tips…" : "Generate tips for my plan (on-device AI)"}
+                  {inspirationAiBusy
+                    ? "Generating…"
+                    : `Generate AI concept (${plannerMainPuzzleTarget} puzzle node${plannerMainPuzzleTarget === 1 ? "" : "s"})`}
                 </button>
-                {!coachBrowserAiReady ? (
-                  <p className="muted inspiration-ai-unavailable">
-                    Prompt API not detected—enable on-device models in Chrome (or a compatible build), then refresh. You can still use
-                    the static links.
-                  </p>
-                ) : null}
                 {inspirationAiError ? <p className="error-banner inspiration-ai-error">{inspirationAiError}</p> : null}
+
+                {/* Structured result from server-side API */}
+                {inspirationServerResult ? (
+                  <div className="inspiration-ai-result inspiration-structured-result" role="region" aria-label="AI-generated escape room concept">
+                    <div className="inspiration-concept-header">
+                      <h3 className="inspiration-concept-theme">{inspirationServerResult.theme}</h3>
+                      {inspirationServerResult.source === "mock" ? (
+                        <span className="inspiration-source-badge inspiration-source-badge--mock">Sample concept</span>
+                      ) : (
+                        <span className="inspiration-source-badge inspiration-source-badge--ai">AI-generated</span>
+                      )}
+                    </div>
+                    {inspirationServerResult.narrativeHook ? (
+                      <p className="inspiration-narrative-hook">{inspirationServerResult.narrativeHook}</p>
+                    ) : null}
+                    {inspirationServerResult.puzzlesAndProps.length > 0 ? (
+                      <>
+                        <h4 className="inspiration-ai-subhead">
+                          Puzzle nodes — {inspirationServerResult.puzzlesAndProps.length} node{inspirationServerResult.puzzlesAndProps.length === 1 ? "" : "s"}
+                          {themeMustMatchEnvironment ? " · environmental fit enforced" : ""}
+                        </h4>
+                        <ol className="inspiration-puzzle-nodes-list">
+                          {inspirationServerResult.puzzlesAndProps.map((node, idx) => (
+                            <li key={`node-${idx}`} className="inspiration-puzzle-node-item">
+                              <p className="inspiration-puzzle-concept">{node.puzzleConcept}</p>
+                              {node.requiredProps.length > 0 ? (
+                                <p className="inspiration-puzzle-props muted">
+                                  <strong>Props:</strong> {node.requiredProps.join(", ")}
+                                </p>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ol>
+                      </>
+                    ) : null}
+                    {inspirationServerResult.source === "mock" ? (
+                      <p className="muted inspiration-mock-notice">
+                        This is a sample concept matched to your environment. Set <code>OPENAI_API_KEY</code> in your backend <code>.env</code> to get personalized AI-generated plans.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {/* On-device browser AI result (fallback) */}
                 {inspirationAiBrief ? (
-                  <div className="inspiration-ai-result" role="region" aria-label="Personalized inspiration">
+                  <div className="inspiration-ai-result" role="region" aria-label="On-device AI inspiration">
+                    <p className="muted inspiration-source-note">Generated by on-device AI</p>
                     {inspirationAiBrief.intro ? <p className="inspiration-ai-intro">{inspirationAiBrief.intro}</p> : null}
                     {inspirationAiBrief.propIdeas.length > 0 ? (
                       <>
@@ -8041,6 +8140,31 @@ export default function App() {
         />
       ) : null}
       <GlobalFooter buildStamp={APP_BUILD_STAMP} />
+      </div>
+      <aside className="app-sidebar-col">
+        <TopNavBar
+          ref={topNavRef}
+          brandName={BRAND_NAME}
+          authName={authUser.name}
+          authEmail={authUser.email}
+          authProviderLabel={AUTH_PROVIDER_LABELS[authUser.provider]}
+          billingTierLabel={formatBillingTierLabel(authUser.billingTier)}
+          planStatusDetail={`${authUser.roomsRemaining} of ${authUser.roomAllowance} save slots · ${authUser.exportCreditsRemaining} export credits`}
+          appView={appView}
+          showAdminTab={authUser.role === "admin" || authUser.isAdmin}
+          onAppViewChange={(view) => {
+            if (view === "admin") {
+              navigate("/admin/dashboard");
+              return;
+            }
+            setAppView(view);
+          }}
+          onSignOut={signOut}
+          onOpenSnapshot={appView === "builder" ? () => setSnapshotOpen(true) : undefined}
+          themeName={selectedTheme?.name}
+          puzzleCount={puzzles.length}
+        />
+      </aside>
       </main>
     </>
   );

@@ -1,4 +1,4 @@
-import type { StoredAuthSession } from "./authStorage.js";
+import { loadAuthSession, type StoredAuthSession } from "./authStorage.js";
 
 export type AuthErrorCode =
   | "UNAUTHORIZED"
@@ -72,7 +72,16 @@ export const refreshAuthTokens = async (): Promise<boolean> => {
   refreshInFlight = (async () => {
     const session = config!.getSession();
     const refreshToken = session.refreshToken.trim();
-    if (!refreshToken) return false;
+
+    if (!refreshToken) {
+      // No refresh token in React state — check if another tab already refreshed.
+      const stored = loadAuthSession();
+      if (stored.authToken.trim() && stored.authToken !== session.authToken) {
+        config!.persistSession(stored);
+        return true;
+      }
+      return false;
+    }
 
     try {
       const response = await fetch(`${config!.apiBase}/api/auth/refresh`, {
@@ -95,6 +104,13 @@ export const refreshAuthTokens = async (): Promise<boolean> => {
       if (!response.ok || !data.authToken) {
         const code = parseAuthErrorCode(data);
         if (isFatalAuthError(code)) {
+          // Before treating this as fatal, check whether another tab already
+          // won the refresh race and wrote a valid token to localStorage.
+          const stored = loadAuthSession();
+          if (stored.authToken.trim() && stored.authToken !== session.authToken) {
+            config!.persistSession(stored);
+            return true;
+          }
           config!.onSessionExpired(data.error?.message);
         }
         return false;
@@ -150,6 +166,13 @@ export const authFetch = async (input: string, init?: RequestInit): Promise<Resp
     const code = parseAuthErrorCode(data);
     if (!isRecoverableAuthError(code)) {
       if (isFatalAuthError(code)) {
+        // Check cross-tab: another tab may have already refreshed the token.
+        const stored = loadAuthSession();
+        const currentToken = config!.getSession().authToken;
+        if (stored.authToken.trim() && stored.authToken !== currentToken) {
+          config!.persistSession(stored);
+          return run(false);
+        }
         const message =
           data && typeof data === "object" && "error" in data
             ? String((data as { error?: { message?: string } }).error?.message ?? "")

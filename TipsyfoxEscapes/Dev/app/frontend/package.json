@@ -1,6 +1,6 @@
 {
   "name": "escape-room-builder-frontend",
-  "version": "1.0.73",
+  "version": "1.0.78",
   "private": true,
   "type": "module",
   "engines": {

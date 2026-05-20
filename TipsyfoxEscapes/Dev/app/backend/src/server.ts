@@ -5576,6 +5576,244 @@ const applyPlanTopUp = (
   return { roomsAdded: quote.roomsToAdd, exportCreditsAdded: quote.exportCreditsToAdd };
 };
 
+// ─── Inspiration API ───────────────────────────────────────────────────────
+
+interface InspirationPuzzleNode {
+  puzzleConcept: string;
+  requiredProps: string[];
+}
+
+interface InspirationApiResult {
+  theme: string;
+  narrativeHook: string;
+  puzzlesAndProps: InspirationPuzzleNode[];
+  source: "openai" | "mock";
+}
+
+function buildInspirationMock(environmentType: string, targetNodeCount: number): InspirationApiResult {
+  const env = environmentType.toLowerCase();
+
+  type MockTemplate = { keywords: string[]; theme: string; hook: string; nodes: InspirationPuzzleNode[] };
+  const TEMPLATES: MockTemplate[] = [
+    {
+      keywords: ["living room", "lounge", "family room"],
+      theme: "The Vanished Archivist",
+      hook: "A brilliant archivist vanished overnight, leaving behind a labyrinth of coded journals and hidden compartments. You have 60 minutes to decode her final message before the library seals forever.",
+      nodes: [
+        { puzzleConcept: "Decode a numeric cipher hidden in book spine numbers arranged on the shelf", requiredProps: ["bookshelf with numbered spines", "printed cipher key card", "pencil"] },
+        { puzzleConcept: "Unlock a combination box using a UV-light-revealed clue hidden on a framed photo", requiredProps: ["framed photo with UV-ink message", "UV flashlight", "3-digit combination lock box"] },
+        { puzzleConcept: "Reassemble a torn letter to reveal coordinates pointing to the final hiding spot", requiredProps: ["torn paper pieces", "clear tape", "cork board with push pins"] },
+        { puzzleConcept: "Match color-coded sticky tabs in a bookshelf to a pattern on the area rug to find the keyword", requiredProps: ["colored sticky note tabs", "area rug with geometric pattern", "notebook"] },
+        { puzzleConcept: "Solve a logic grid puzzle printed on the back of a postcard to reveal a 4-digit code", requiredProps: ["printed logic grid postcard", "pencil", "4-digit padlock"] },
+        { puzzleConcept: "Use a translucent overlay on an old map to reveal a hidden phrase", requiredProps: ["printed city map", "tracing paper overlay", "red marker"] },
+      ],
+    },
+    {
+      keywords: ["kitchen", "dining", "pantry"],
+      theme: "The Alchemist's Kitchen",
+      hook: "A medieval alchemist's recipe for immortality was hidden here centuries ago. Now you must decode the cryptic ingredient list before the next bell tolls and the secret is lost forever.",
+      nodes: [
+        { puzzleConcept: "Decode a recipe cipher where ingredient quantities map to letters of the alphabet", requiredProps: ["printed recipe card with coded quantities", "conversion chart", "pencil"] },
+        { puzzleConcept: "Arrange spice jars in a specific color sequence to spell a word using label first-letters", requiredProps: ["labeled spice jars", "color-coded shelf markers", "reference clue card"] },
+        { puzzleConcept: "Use a kitchen scale to weigh bagged items whose total reveals a numeric code", requiredProps: ["small kitchen scale", "labeled ingredient bags (non-hazardous)", "padlock"] },
+        { puzzleConcept: "Find a hidden message on a cutting board visible only when tilted under a lamp", requiredProps: ["wooden cutting board with carved message", "directional lamp", "magnifying glass"] },
+        { puzzleConcept: "Match cooking timer settings to a wall chart of alchemical symbols to unlock a cabinet", requiredProps: ["kitchen timer", "printed symbol chart", "small cabinet with padlock"] },
+      ],
+    },
+    {
+      keywords: ["bedroom", "guest room", "kids room"],
+      theme: "The Dreamweaver's Chamber",
+      hook: "A mysterious dreamweaver has trapped you in a waking dream. Every object in the room is a clue to escaping her labyrinth — but only if you can tell what's real from what's illusion.",
+      nodes: [
+        { puzzleConcept: "Decode a message hidden on the inside of a pillowcase only visible with a UV flashlight", requiredProps: ["pillowcase with UV message", "UV flashlight", "decoded clue card"] },
+        { puzzleConcept: "Use a mirror and a reversed map to navigate to the correct drawer handle sequence", requiredProps: ["hand mirror", "printed reversed map", "dresser with labeled drawers"] },
+        { puzzleConcept: "Reassemble torn dream journal pages to find the safe word that opens the lockbox", requiredProps: ["torn journal pages", "clear tape", "lockbox with word lock"] },
+        { puzzleConcept: "Match constellations on the bedroom ceiling (glow stars) to a star chart to reveal coordinates", requiredProps: ["glow-in-dark star stickers on ceiling", "printed star chart", "coordinate reference"] },
+      ],
+    },
+    {
+      keywords: ["garage", "workshop", "basement", "shed"],
+      theme: "The Engineer's Last Blueprint",
+      hook: "The eccentric inventor who owned this workshop vanished the night before her greatest invention was to be revealed. The prototype is hidden here — find it before her rivals do.",
+      nodes: [
+        { puzzleConcept: "Read a schematic diagram to determine which tool-hook positions spell a 4-number access code", requiredProps: ["printed schematic", "pegboard with numbered hooks", "tools hung in a pattern"] },
+        { puzzleConcept: "Use a battery tester on marked cells — only cells testing 'full' correspond to a binary code", requiredProps: ["battery tester", "assorted labeled batteries", "binary-to-decimal chart"] },
+        { puzzleConcept: "Arrange wooden blocks by weight (using a balance) to match a blueprint load specification", requiredProps: ["assorted wooden blocks", "balance scale", "printed load spec card"] },
+        { puzzleConcept: "Shine a flashlight through a stencil plate onto the wall to reveal a hidden map", requiredProps: ["metal stencil plate", "flashlight", "blank wall section"] },
+        { puzzleConcept: "Trace a circuit diagram on paper to identify the correct switch sequence on a prop panel", requiredProps: ["printed circuit diagram", "cardboard switch panel with labels", "pencil"] },
+      ],
+    },
+  ];
+
+  const match = TEMPLATES.find((t) => t.keywords.some((kw) => env.includes(kw)));
+  const tpl = match ?? {
+    theme: "The Lost Expedition",
+    hook: "A renowned explorer vanished during her final expedition. You've stumbled upon her base camp and must piece together what happened — and escape before the search party closes in.",
+    nodes: [
+      { puzzleConcept: "Decode a compass cipher using map coordinates from the explorer's field journal", requiredProps: ["compass", "printed journal pages", "grid overlay sheet"] },
+      { puzzleConcept: "Reassemble torn expedition photographs to reveal a hidden trail symbol", requiredProps: ["torn photograph pieces", "clear tape", "magnifying glass"] },
+      { puzzleConcept: "Unlock a padlocked field kit using a code derived from specimen jar labels", requiredProps: ["padlocked box", "labeled specimen jars", "decoded reference card"] },
+      { puzzleConcept: "Match flagging tape colors to a hand-drawn trail map to locate the supply cache", requiredProps: ["colored flagging tape lengths", "hand-drawn trail map", "small locked container"] },
+      { puzzleConcept: "Reconstruct a broken radio frequency dial position from scratched log book entries", requiredProps: ["prop radio with dial", "scratched log book", "frequency reference chart"] },
+      { puzzleConcept: "Decode Morse code tapped on a wall into a 5-letter word lock combination", requiredProps: ["Morse code reference card", "5-letter word lock", "timing metronome or audio clue"] },
+    ],
+  };
+
+  const nodes = [...tpl.nodes];
+  const filler: InspirationPuzzleNode[] = [
+    { puzzleConcept: "Find a hidden note inside a sealed envelope taped behind a picture frame", requiredProps: ["picture frame", "sealed envelope", "adhesive tape"] },
+    { puzzleConcept: "Use a black-light pen message on the window to reveal the final clue", requiredProps: ["UV pen", "UV flashlight", "window surface"] },
+    { puzzleConcept: "Solve a jigsaw fragment puzzle to reveal a 4-digit numeric code", requiredProps: ["custom jigsaw pieces", "reference image card", "padlock"] },
+  ];
+  let fi = 0;
+  while (nodes.length < targetNodeCount) {
+    nodes.push(filler[fi % filler.length] ?? { puzzleConcept: `Bonus challenge ${nodes.length + 1}`, requiredProps: ["paper", "pencil"] });
+    fi++;
+  }
+
+  return { theme: tpl.theme, narrativeHook: tpl.hook, puzzlesAndProps: nodes.slice(0, targetNodeCount), source: "mock" };
+}
+
+async function callOpenAiInspiration(
+  apiKey: string,
+  input: {
+    environmentType: string;
+    availableItems: string;
+    targetNodeCount: number;
+    themeMustMatchEnvironment: boolean;
+    eventType: string;
+    themeName: string;
+  },
+): Promise<InspirationApiResult> {
+  const envConstraint = input.themeMustMatchEnvironment
+    ? `\n\nENVIRONMENTAL CONSTRAINT — HIGH PRIORITY: Strictly limit ALL props, puzzle mechanics, and narrative elements to what is physically realistic and thematically appropriate for a "${input.environmentType}" setting. Do NOT suggest high-tech electronics, futuristic devices, advanced digital equipment, sci-fi technology, or any prop that would be anachronistic or physically impossible in this specific environment. Every puzzle and prop must be something a home host could realistically obtain and set up within the actual constraints of "${input.environmentType}".`
+    : "";
+
+  const systemPrompt = [
+    "You are an expert escape room designer helping a home host plan a fully original, immersive escape room.",
+    "Your task: return a strictly-typed JSON object with a unique theme name, a compelling narrative hook, and exactly the requested number of themed puzzle nodes.",
+    "All puzzle concepts must be original, home-buildable, and narratively integrated with the theme.",
+    "Props must be real physical items a home host could realistically acquire or craft.",
+    "Return ONLY valid JSON with no markdown fences, no commentary, no extra text.",
+    envConstraint,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const userPrompt = [
+    `Environment: ${input.environmentType || "home living room"}`,
+    `Available props / items on hand: ${input.availableItems || "none specified — suggest common household items"}`,
+    `Event context: ${input.eventType || "home escape room for friends and family"}`,
+    `Theme preference: ${input.themeName || "generate a fresh, original theme"}`,
+    `Required puzzle node count: ${input.targetNodeCount}`,
+    "",
+    "Return JSON matching this exact shape:",
+    "{",
+    '  "theme": "Unique escape room theme name",',
+    '  "narrativeHook": "2–3 sentence story setup that draws players in and sets the stakes",',
+    '  "puzzlesAndProps": [',
+    '    { "puzzleConcept": "Specific, buildable puzzle mechanic tied to the theme", "requiredProps": ["prop1", "prop2"] }',
+    "  ]",
+    "}",
+    "",
+    `puzzlesAndProps MUST contain exactly ${input.targetNodeCount} items. Each puzzleConcept must be distinct, thematically tied, and practically buildable at home.`,
+  ].join("\n");
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: 1600,
+      temperature: 0.75,
+    }),
+    signal: AbortSignal.timeout(28_000),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`OpenAI ${response.status}: ${body.slice(0, 300)}`);
+  }
+
+  const data = (await response.json()) as { choices: Array<{ message: { content: string } }> };
+  const raw = data.choices[0]?.message?.content ?? "";
+  const jsonStart = raw.indexOf("{");
+  const jsonEnd = raw.lastIndexOf("}");
+  if (jsonStart < 0 || jsonEnd <= jsonStart) throw new Error("No JSON object in OpenAI response");
+  const parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1)) as {
+    theme?: unknown;
+    narrativeHook?: unknown;
+    puzzlesAndProps?: unknown;
+  };
+
+  const nodes: InspirationPuzzleNode[] = (Array.isArray(parsed.puzzlesAndProps) ? parsed.puzzlesAndProps : [])
+    .map((n: unknown) => {
+      const node = n as Record<string, unknown>;
+      return {
+        puzzleConcept: typeof node.puzzleConcept === "string" ? node.puzzleConcept.trim() : "",
+        requiredProps: Array.isArray(node.requiredProps)
+          ? (node.requiredProps as unknown[]).filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+          : [],
+      };
+    })
+    .filter((n: InspirationPuzzleNode) => n.puzzleConcept.length > 0);
+
+  return {
+    theme: typeof parsed.theme === "string" && parsed.theme.trim() ? parsed.theme.trim() : "Custom Escape Room",
+    narrativeHook: typeof parsed.narrativeHook === "string" ? parsed.narrativeHook.trim() : "",
+    puzzlesAndProps: nodes,
+    source: "openai",
+  };
+}
+
+app.post("/api/inspiration/generate", async (req, res) => {
+  const {
+    environmentType = "",
+    availableItems = "",
+    targetNodeCount: rawNodeCount,
+    themeMustMatchEnvironment = false,
+    eventType = "",
+    themeName = "",
+  } = (req.body ?? {}) as Record<string, unknown>;
+
+  const targetNodeCount = Math.min(
+    24,
+    Math.max(1, Number.isFinite(Number(rawNodeCount)) ? Math.trunc(Number(rawNodeCount)) : 4),
+  );
+  const env = String(environmentType).trim().slice(0, 500);
+  const apiKey = String(process.env.OPENAI_API_KEY ?? "").trim();
+
+  if (!apiKey) {
+    res.json(buildInspirationMock(env, targetNodeCount));
+    return;
+  }
+
+  try {
+    const result = await callOpenAiInspiration(apiKey, {
+      environmentType: env,
+      availableItems: String(availableItems).trim().slice(0, 500),
+      targetNodeCount,
+      themeMustMatchEnvironment: Boolean(themeMustMatchEnvironment),
+      eventType: String(eventType).trim().slice(0, 200),
+      themeName: String(themeName).trim().slice(0, 200),
+    });
+    res.json(result);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[inspiration] OpenAI error — falling back to mock:", err instanceof Error ? err.message : String(err));
+    res.json(buildInspirationMock(env, targetNodeCount));
+  }
+});
+
+// ─── End Inspiration API ────────────────────────────────────────────────────
+
 const port = process.env.PORT || 3001;
 
 const recomputeIdCountersFromSessions = (): void => {

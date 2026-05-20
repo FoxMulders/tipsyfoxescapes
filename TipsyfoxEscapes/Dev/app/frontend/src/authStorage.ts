@@ -56,3 +56,24 @@ export const saveAuthSession = (session: StoredAuthSession): void => {
 export const clearAuthSession = (): void => {
   window.localStorage.removeItem(AUTH_STORAGE_KEY);
 };
+
+/**
+ * Subscribe to auth session changes written by OTHER browser tabs/windows.
+ * The callback receives the new session, or null when the other tab signed out.
+ * Returns an unsubscribe function.
+ */
+export const subscribeCrossTabAuth = (
+  callback: (session: StoredAuthSession | null) => void,
+): (() => void) => {
+  const handler = (e: StorageEvent) => {
+    if (e.key !== AUTH_STORAGE_KEY) return;
+    if (e.newValue === null || e.newValue === "") {
+      callback(null);
+      return;
+    }
+    const parsed = loadAuthSession();
+    callback(parsed.authToken.trim() ? parsed : null);
+  };
+  window.addEventListener("storage", handler);
+  return () => window.removeEventListener("storage", handler);
+};

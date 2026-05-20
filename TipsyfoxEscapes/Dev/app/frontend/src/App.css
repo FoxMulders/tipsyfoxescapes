@@ -2195,7 +2195,7 @@ a:hover {
 
 .auth-unified-grid {
   display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(260px, 5fr);
+  grid-template-columns: minmax(260px, 5fr) minmax(0, 7fr);
   gap: clamp(1.25rem, 3vw, 2.25rem);
   align-items: start;
 }
@@ -4044,6 +4044,111 @@ label.checkbox-field {
   font-size: 0.88rem;
   line-height: 1.45;
 }
+
+/* ── Structured inspiration result (server API) ───────────────────────────── */
+.inspiration-structured-result {
+  border: 1px solid rgba(61, 184, 200, 0.3);
+  border-radius: 12px;
+  padding: 1rem 1.1rem 1.1rem;
+  background: rgba(8, 20, 28, 0.55);
+}
+
+.inspiration-concept-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+  margin-bottom: 0.55rem;
+}
+
+.inspiration-concept-theme {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: hsl(187 80% 72%);
+  line-height: 1.25;
+}
+
+.inspiration-source-badge {
+  flex-shrink: 0;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.inspiration-source-badge--ai {
+  border: 1px solid hsl(140 70% 48% / 0.5);
+  background: hsl(140 70% 48% / 0.12);
+  color: hsl(140 60% 72%);
+}
+
+.inspiration-source-badge--mock {
+  border: 1px solid rgba(255, 190, 80, 0.4);
+  background: rgba(48, 36, 12, 0.4);
+  color: hsl(40 90% 70%);
+}
+
+.inspiration-narrative-hook {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text);
+  font-style: italic;
+}
+
+.inspiration-puzzle-nodes-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.inspiration-puzzle-node-item {
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.inspiration-puzzle-concept {
+  margin: 0 0 0.2rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.inspiration-puzzle-props {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.inspiration-mock-notice {
+  margin: 0.85rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  opacity: 0.75;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  padding-top: 0.65rem;
+}
+
+.inspiration-mock-notice code {
+  background: rgba(255,255,255,0.1);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.78rem;
+}
+
+.inspiration-source-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+}
+
+.inspiration-drawer-lead {
+  font-size: 0.86rem;
+}
+/* ─────────────────────────────────────────────────────────────────────────── */
 
 .mobile-continue-fab {
   display: none;
@@ -6060,4 +6165,119 @@ ul.auth-hero-para {
 .success-inline {
   color: var(--success);
   margin: 0.5rem 0;
+}
+
+/* ── Two-column shell: builder left, account sidebar right ── */
+.page-shell--cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 16rem);
+  align-items: start;
+  /* Nav is now a right sidebar, not a top bar — reset sticky offset to 0 */
+  --app-top-nav-height: 0px;
+}
+
+.app-main-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--shell-panel-gap, 1rem);
+  min-width: 0;
+}
+
+.app-sidebar-col {
+  min-width: 0;
+}
+
+.app-sidebar-col .app-top-nav {
+  position: sticky;
+  top: 1rem;
+}
+
+.app-sidebar-col .app-top-nav__inner {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.75rem;
+}
+
+.app-sidebar-col .app-top-nav__utility {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  margin-left: 0;
+  width: 100%;
+  gap: 0.5rem;
+}
+
+.app-sidebar-col .app-view-toggle {
+  flex-direction: column;
+  justify-content: flex-start;
+  width: 100%;
+  margin-top: 0;
+}
+
+.app-sidebar-col .app-view-toggle > button {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.app-sidebar-col .app-top-nav__plan-menu-panel {
+  right: auto;
+  left: 0;
+}
+
+.app-sidebar-col .app-top-nav__signed-in {
+  display: block !important;
+  max-width: 100%;
+}
+
+/* Collapse sidebar to top bar on viewports narrower than 900px */
+@media (max-width: 900px) {
+  .page-shell--cols {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app-sidebar-col {
+    order: -1;
+  }
+
+  .app-sidebar-col .app-top-nav {
+    position: sticky;
+    top: 0;
+  }
+
+  .app-sidebar-col .app-top-nav__inner {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+  }
+
+  .app-sidebar-col .app-top-nav__utility {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    margin-left: auto;
+    width: auto;
+    gap: 0.4rem;
+  }
+
+  .app-sidebar-col .app-view-toggle {
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: auto;
+    margin-top: 0.75rem;
+    justify-content: flex-end;
+  }
+
+  .app-sidebar-col .app-view-toggle > button {
+    width: auto;
+    justify-content: center;
+  }
+
+  .app-sidebar-col .app-top-nav__signed-in {
+    display: none !important;
+  }
 }
