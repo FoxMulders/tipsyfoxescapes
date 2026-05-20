@@ -22,7 +22,8 @@ export const PricingValueFocus = ({ text }: { text: string }) => {
   const trimmed = text.trim();
   if (!trimmed) return null;
   return (
-    <p className="pricing-value-focus muted" role="note">
+    <p className="pricing-value-focus" role="note">
+      <span className="pricing-value-focus-vs">vs. real cost</span>
       {trimmed}
     </p>
   );
@@ -167,6 +168,32 @@ export function PlansAndBillingSection({
         })}
       </div>
       {billingNotice ? <p className="success-inline pricing-notice">{billingNotice}</p> : null}
+      {!compact ? (
+        <aside className="pricing-comparison" aria-label="Value comparison">
+          <h3 className="pricing-comparison-title">How does this compare to a real escape room?</h3>
+          <div className="pricing-comparison-grid">
+            <div className="pricing-comparison-item">
+              <p className="pricing-comparison-label">Commercial venue ticket</p>
+              <p className="pricing-comparison-value">$25 – $40</p>
+              <p className="pricing-comparison-note">per player, per session — one-time experience, nothing to keep</p>
+            </div>
+            <div className="pricing-comparison-item">
+              <p className="pricing-comparison-label">Freelance designer (1 concept)</p>
+              <p className="pricing-comparison-value">$500 – $2,000</p>
+              <p className="pricing-comparison-note">typical project quote; wiring details and Arduino code billed extra</p>
+            </div>
+            <div className="pricing-comparison-item pricing-comparison-item--ours">
+              <p className="pricing-comparison-label">Tipsy Fox Escapes (full build)</p>
+              <p className="pricing-comparison-value">From $15</p>
+              <p className="pricing-comparison-note">complete puzzle set, narrative runbook, and host sheets — yours to keep and re-run</p>
+            </div>
+          </div>
+          <p className="pricing-comparison-footer muted">
+            Prices for professional venues include labour, props, and set dressing but not the design document you can iterate on.
+            Our plans give you the repeatable design layer — you control the props budget.
+          </p>
+        </aside>
+      ) : null}
     </section>
   );
 }

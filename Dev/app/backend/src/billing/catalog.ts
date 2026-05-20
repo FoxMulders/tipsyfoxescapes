@@ -109,7 +109,7 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
       "Home Mode: standard runbook + basic player screen",
       "Saving to your account requires a paid plan",
     ],
-    comparedTo: "",
+    comparedTo: "Booking a single commercial escape room session runs $25–$40 per player. Try the full design flow free.",
   },
   {
     id: "casual_hobbyist",
@@ -134,7 +134,7 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
       "Exports omit maker electronics — no wiring diagrams, pinouts, SVG schematics, or Arduino source",
       "Player screen with timer and preset hints",
     ],
-    comparedTo: "",
+    comparedTo: "Less than the cost of one commercial ticket — host unlimited guests on your own schedule.",
   },
   {
     id: "home_enthusiast",
@@ -155,7 +155,7 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
       "Custom themes",
       "Optional Commercial Venue layout preview on export",
     ],
-    comparedTo: "",
+    comparedTo: "A freelance escape room designer typically charges $500–$2,000 per concept. Three full builds here for $59.",
   },
   {
     id: "creative_studio",
@@ -185,7 +185,7 @@ export const BILLING_PLANS: BillingPlanDefinition[] = [
       "Player window with SSE sync to in-room displays",
       "Interactive staff reset checklists",
     ],
-    comparedTo: "",
+    comparedTo: "Professional venue design agencies quote $5,000–$20,000+ per room build. One month here covers ongoing refreshes.",
   },
   VENUE_BLUEPRINT_LEGACY,
 ];
