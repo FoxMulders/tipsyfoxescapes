@@ -2703,6 +2703,11 @@ export default function App() {
   } | null>(null);
   const [socialAuthProvider, setSocialAuthProvider] = useState<"google" | "facebook" | "github" | null>(null);
   const [authSubmitting, setAuthSubmitting] = useState(false);
+  /** Non-empty string = verification-pending screen is active; value is the email address shown to user. */
+  const [authVerificationPending, setAuthVerificationPending] = useState<string>("");
+  /** Dev-only: verification URL returned from backend when no email provider is configured. */
+  const [authVerificationDevUrl, setAuthVerificationDevUrl] = useState<string>("");
+  const [authVerificationResending, setAuthVerificationResending] = useState(false);
   const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
   const [selectedBillingPlanId, setSelectedBillingPlanId] = useState<string | null>(null);
   const initialEscapePlanRoomRef = useRef(createEscapePlanRoom(1));
@@ -4207,7 +4212,16 @@ export default function App() {
         refreshExpiresAt?: number;
         user?: AuthUser;
         error?: { message?: string };
+        emailVerificationRequired?: boolean;
+        devVerificationUrl?: string;
       };
+      // Email verification required — show "check your inbox" screen
+      if (response.ok && data.emailVerificationRequired) {
+        setAuthVerificationPending(authEmail.trim());
+        if (data.devVerificationUrl) setAuthVerificationDevUrl(data.devVerificationUrl);
+        setError("");
+        return;
+      }
       if (!response.ok || !data.authToken || !data.user) {
         setError(data.error?.message ?? "Sign up failed.");
         return;
@@ -4246,8 +4260,14 @@ export default function App() {
         accessExpiresAt?: number;
         refreshExpiresAt?: number;
         user?: AuthUser;
-        error?: { message?: string };
+        error?: { message?: string; code?: string };
       };
+      // Unverified local user — redirect to "check your inbox" notice
+      if (!response.ok && data.error?.code === "EMAIL_NOT_VERIFIED") {
+        setAuthVerificationPending(authEmail.trim());
+        setError("");
+        return;
+      }
       if (!response.ok || !data.authToken || !data.user) {
         setError(data.error?.message ?? "Log in failed.");
         return;
@@ -4268,6 +4288,33 @@ export default function App() {
       setError("Log in failed. Check backend and try again.");
     } finally {
       setAuthSubmitting(false);
+    }
+  };
+
+  const handleResendVerification = async (): Promise<void> => {
+    if (!authVerificationPending || authVerificationResending) return;
+    setAuthVerificationResending(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/resend-verification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authVerificationPending }),
+      });
+      const data = (await res.json()) as { ok?: boolean; devVerificationUrl?: string; error?: { message?: string; code?: string } };
+      if (!res.ok) {
+        if (data.error?.code === "RATE_LIMITED") {
+          setError("Please wait a moment before requesting another email.");
+        } else {
+          setError(data.error?.message ?? "Could not resend email. Try again.");
+        }
+      } else {
+        if (data.devVerificationUrl) setAuthVerificationDevUrl(data.devVerificationUrl);
+        setError("Verification email sent — check your inbox.");
+      }
+    } catch {
+      setError("Could not send email. Check your connection and try again.");
+    } finally {
+      setAuthVerificationResending(false);
     }
   };
 
@@ -4333,9 +4380,57 @@ export default function App() {
       url.searchParams.delete("oauth_message");
       window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
     }
+
+    // Email verification error (expired / invalid link)
+    const emailError = url.searchParams.get("email_error");
+    if (emailError) {
+      const emailHint = url.searchParams.get("email") ?? "";
+      if (emailError === "token_expired") {
+        setError("This verification link has expired. Please request a new one below.");
+        if (emailHint) setAuthVerificationPending(emailHint);
+      } else {
+        setError("This verification link is invalid. Please sign up again or request a new link.");
+      }
+      url.searchParams.delete("email_error");
+      url.searchParams.delete("email");
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+    }
+
     const callbackToken = url.searchParams.get("auth_token");
     const callbackRefresh = url.searchParams.get("refresh_token");
     const callbackAccessExpires = Number(url.searchParams.get("access_expires_at") ?? "0");
+    const emailVerified = url.searchParams.get("email_verified");
+
+    // Email verification success — log the user in with the returned tokens
+    if (emailVerified === "1" && callbackToken) {
+      oauthHydratingRef.current = true;
+      void (async () => {
+        try {
+          persistAuth(callbackToken, null as unknown as AuthUser, {
+            refreshToken: callbackRefresh ?? "",
+            accessExpiresAt: Number.isFinite(callbackAccessExpires) ? callbackAccessExpires : 0,
+          });
+          const profileOk = await refreshProfile({ retryOnStaleToken: true, tokenOverride: callbackToken });
+          if (profileOk) {
+            setError("");
+            setAuthVerificationPending("");
+            setAuthVerificationDevUrl("");
+          }
+        } catch {
+          setError("Email verified but could not load your account. Please log in manually.");
+        } finally {
+          oauthHydratingRef.current = false;
+          url.searchParams.delete("email_verified");
+          url.searchParams.delete("auth_token");
+          url.searchParams.delete("refresh_token");
+          url.searchParams.delete("access_expires_at");
+          url.searchParams.delete("refresh_expires_at");
+          window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+        }
+      })();
+      return;
+    }
+
     const callbackUserRaw = url.searchParams.get("auth_user");
     if (!callbackToken || !callbackUserRaw) return;
     oauthHydratingRef.current = true;
@@ -6093,6 +6188,48 @@ export default function App() {
         <section id="auth-unified-panel" className="hero auth-hero auth-hero--planning auth-unified-panel auth-clear-glass">
           <div className="auth-unified-grid">
             <aside className="auth-unified-form" aria-labelledby="auth-panel-title">
+          {authVerificationPending ? (
+            <div className="auth-verify-pending">
+              <div className="auth-verify-icon" aria-hidden="true">✉</div>
+              <h2 className="auth-panel-title">Check your email</h2>
+              <p className="auth-verify-body">
+                We sent a verification link to{" "}
+                <strong className="auth-verify-email">{authVerificationPending}</strong>.
+                Click the link in the email to activate your account.
+              </p>
+              {authVerificationDevUrl ? (
+                <div className="auth-verify-devurl">
+                  <p className="auth-verify-devlabel">Dev mode — no email service configured. Use this link:</p>
+                  <a href={authVerificationDevUrl} className="auth-verify-devlink" target="_blank" rel="noreferrer">
+                    Verify my email &rarr;
+                  </a>
+                </div>
+              ) : null}
+              <div className="auth-verify-actions">
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => void handleResendVerification()}
+                  disabled={authVerificationResending}
+                  aria-busy={authVerificationResending}
+                >
+                  {authVerificationResending ? "Sending…" : "Resend verification email"}
+                </button>
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => {
+                    setAuthVerificationPending("");
+                    setAuthVerificationDevUrl("");
+                    setError("");
+                  }}
+                >
+                  Back to sign in
+                </button>
+              </div>
+            </div>
+          ) : (
+          <>
           <header className="auth-panel-head">
             <h2 id="auth-panel-title" className="auth-panel-title">{authMode === "signup" ? "Create account" : "Log in"}</h2>
             <p className="muted auth-mode-switch">
@@ -6227,6 +6364,8 @@ export default function App() {
               {socialAuthProvider === "github" ? "Redirecting…" : "GitHub"}
             </button>
           </nav>
+          </>
+          )}
             </aside>
             <div className="auth-unified-copy">
               <p className="hero-chip hero-chip--planning-studio">Escape Planning Studio</p>

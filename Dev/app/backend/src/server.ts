@@ -417,6 +417,12 @@ type StoredUser = {
   /** Venue Blueprint fleet / multi-room live ops enabled by enterprise onboarding. */
   isEnterpriseProvisioned?: boolean;
   createdAt?: string;
+  /** false only while the local/email user is awaiting verification; undefined/true = verified. */
+  emailVerified?: boolean;
+  /** One-time token sent to the user's inbox; cleared after use. */
+  emailVerificationToken?: string;
+  /** ISO timestamp of last token issuance (used for 24-hour expiry). */
+  emailVerificationSentAt?: string;
 };
 type PublicUser = {
   id: string;
@@ -913,6 +919,9 @@ const persistUsers = async (): Promise<void> => {
     lastPurchasedPlanId: user.lastPurchasedPlanId ?? null,
     isEnterpriseProvisioned: Boolean(user.isEnterpriseProvisioned),
     createdAt: user.createdAt ?? null,
+    emailVerified: user.emailVerified ?? true,
+    emailVerificationToken: user.emailVerificationToken ?? null,
+    emailVerificationSentAt: user.emailVerificationSentAt ?? null,
   }));
   const { writeJsonBlob } = await import("./kvJsonStore.js");
   await writeJsonBlob("users.json", rows);
@@ -996,6 +1005,16 @@ const loadUsers = async (): Promise<void> => {
         createdAt:
           typeof (row as { createdAt?: string }).createdAt === "string"
             ? (row as { createdAt: string }).createdAt
+            : undefined,
+        // Existing accounts without this field default to verified (backwards-compatible).
+        emailVerified: (row as { emailVerified?: boolean }).emailVerified === false ? false : true,
+        emailVerificationToken:
+          typeof (row as { emailVerificationToken?: string }).emailVerificationToken === "string"
+            ? (row as { emailVerificationToken: string }).emailVerificationToken
+            : undefined,
+        emailVerificationSentAt:
+          typeof (row as { emailVerificationSentAt?: string }).emailVerificationSentAt === "string"
+            ? (row as { emailVerificationSentAt: string }).emailVerificationSentAt
             : undefined,
       };
       usersByEmail.set(email, user);
@@ -3416,6 +3435,80 @@ const enrichThemesWithRecommended = (themes: Theme[], session: SessionState): Th
 
 const issueAuthForUser = async (user: StoredUser) => authTokenStore.issueTokenPair(user.id);
 
+/** Linear scan — only called during token-based verify/resend flows, not hot paths. */
+const findUserByVerificationToken = (token: string): StoredUser | undefined => {
+  for (const u of usersByEmail.values()) {
+    if (u.emailVerificationToken === token) return u;
+  }
+  return undefined;
+};
+
+/**
+ * Send a verification email.
+ * - Uses Resend REST API when RESEND_API_KEY is set.
+ * - Otherwise logs the link to the console and (in non-Vercel environments) returns the URL
+ *   so the caller can include it in the signup response for developer convenience.
+ */
+const sendVerificationEmail = async (
+  toEmail: string,
+  token: string,
+  appBaseUrl: string
+): Promise<{ devUrl?: string }> => {
+  const verificationUrl = `${appBaseUrl}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
+  const fromAddress = String(process.env.EMAIL_FROM ?? "Tipsy Fox Escapes <noreply@tipsyfoxescapes.com>").trim();
+  const resendKey = String(process.env.RESEND_API_KEY ?? "").trim();
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Verify your email</title></head>
+<body style="font-family:sans-serif;background:#f9f6f1;margin:0;padding:24px">
+  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:10px;padding:32px;border:1px solid #e5d9c8">
+    <h2 style="font-family:Georgia,serif;color:#c8694e;margin-top:0">Tipsy Fox Escapes</h2>
+    <p style="color:#2c2515;font-size:15px;line-height:1.6">
+      Thanks for signing up! Click the button below to verify your email address and activate your account.
+    </p>
+    <p style="text-align:center;margin:28px 0">
+      <a href="${verificationUrl}"
+         style="display:inline-block;background:#c8694e;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-size:15px;font-weight:600">
+        Verify my email
+      </a>
+    </p>
+    <p style="color:#7a6a55;font-size:13px">This link expires in 24 hours. If you didn't sign up, you can ignore this email.</p>
+    <hr style="border:none;border-top:1px solid #e5d9c8;margin:20px 0">
+    <p style="color:#aaa;font-size:11px">Can't click the button? Copy this link:<br>${verificationUrl}</p>
+  </div>
+</body>
+</html>`;
+
+  if (resendKey) {
+    try {
+      const resp = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}` },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [toEmail],
+          subject: "Verify your Tipsy Fox Escapes email",
+          html,
+        }),
+      });
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => "(no body)");
+        console.error(`[verify-email] Resend API error ${resp.status}: ${errText}`);
+      }
+    } catch (e) {
+      console.error("[verify-email] Failed to call Resend API:", e);
+    }
+    return {};
+  }
+
+  // No email service configured — log the link and surface it in dev
+  console.log(`\n[verify-email] ✉  Verification link for ${toEmail}:\n  ${verificationUrl}\n`);
+  const isVercel = Boolean(process.env.VERCEL);
+  return isVercel ? {} : { devUrl: verificationUrl };
+};
+
 const createAuthTokenForUser = async (user: StoredUser): Promise<string> => {
   const issued = await issueAuthForUser(user);
   return issued.authToken;
@@ -3688,6 +3781,8 @@ app.post("/api/auth/signup", async (req, res) => {
     return;
   }
   const isAdmin = adminEmails.has(normalizedEmail);
+  const verificationToken = crypto.randomUUID();
+  const now = new Date().toISOString();
   const user: StoredUser = {
     id: `usr_${nextUserId++}`,
     name: String(name).trim(),
@@ -3699,11 +3794,28 @@ app.post("/api/auth/signup", async (req, res) => {
     role: isAdmin ? "admin" : "user",
     roomAllowance: FREE_TIER_ROOM_ALLOWANCE,
     exportCreditsRemaining: 0,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    // Admins are auto-verified; everyone else must click the link.
+    emailVerified: isAdmin ? true : false,
+    emailVerificationToken: isAdmin ? undefined : verificationToken,
+    emailVerificationSentAt: isAdmin ? undefined : now,
   };
   usersByEmail.set(normalizedEmail, user);
   indexUserUsername(user, usersByUsername, normalizedEmail);
   await persistUsers();
+
+  if (!isAdmin) {
+    const baseUrl =
+      resolveAuthCallbackBaseUrl(undefined, req.headers as Record<string, string | string[] | undefined>) ||
+      `http://localhost:${String(process.env.PORT ?? 3001)}`;
+    const { devUrl } = await sendVerificationEmail(normalizedEmail, verificationToken, baseUrl);
+    res.status(201).json({
+      emailVerificationRequired: true,
+      ...(devUrl ? { devVerificationUrl: devUrl } : {}),
+    });
+    return;
+  }
+
   const tokens = await issueAuthForUser(user);
   res.status(201).json({
     authToken: tokens.authToken,
@@ -3712,6 +3824,79 @@ app.post("/api/auth/signup", async (req, res) => {
     refreshExpiresAt: tokens.refreshExpiresAt,
     user: toPublicUser(user),
   });
+});
+
+/** GET /api/auth/verify-email?token=... — clicked from the inbox link. */
+app.get("/api/auth/verify-email", async (req, res) => {
+  const token = String(req.query.token ?? "").trim();
+  const baseUrl =
+    resolveAuthCallbackBaseUrl(undefined, req.headers as Record<string, string | string[] | undefined>) ||
+    `http://localhost:${String(process.env.PORT ?? 3001)}`;
+  // Derive the frontend origin — same as base URL but strip /api paths if any.
+  const frontendOrigin = baseUrl.replace(/\/api(\/.*)?$/, "");
+
+  if (!token) {
+    res.redirect(`${frontendOrigin}/?email_error=invalid_token`);
+    return;
+  }
+  const user = findUserByVerificationToken(token);
+  if (!user) {
+    res.redirect(`${frontendOrigin}/?email_error=invalid_token`);
+    return;
+  }
+  // 24-hour expiry
+  const sentAt = user.emailVerificationSentAt ? new Date(user.emailVerificationSentAt).getTime() : 0;
+  if (Date.now() - sentAt > 24 * 60 * 60 * 1000) {
+    res.redirect(`${frontendOrigin}/?email_error=token_expired&email=${encodeURIComponent(user.email)}`);
+    return;
+  }
+  user.emailVerified = true;
+  user.emailVerificationToken = undefined;
+  user.emailVerificationSentAt = undefined;
+  await persistUsers();
+  // Issue tokens and redirect so the user lands logged in
+  const tokens = await issueAuthForUser(user);
+  const params = new URLSearchParams({
+    email_verified: "1",
+    auth_token: tokens.authToken,
+    refresh_token: tokens.refreshToken,
+    access_expires_at: String(tokens.accessExpiresAt),
+    refresh_expires_at: String(tokens.refreshExpiresAt),
+  });
+  res.redirect(`${frontendOrigin}/?${params.toString()}`);
+});
+
+/** POST /api/auth/resend-verification — resend the email verification link. */
+app.post("/api/auth/resend-verification", async (req, res) => {
+  const { email } = req.body ?? {};
+  if (!email) {
+    res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "email is required.", details: [] } });
+    return;
+  }
+  const normalizedEmail = normalizeEmail(email);
+  const user = usersByEmail.get(normalizedEmail);
+  // Silently succeed if not found / already verified / social user — don't leak existence
+  if (!user || user.emailVerified !== false || user.provider !== "local") {
+    res.json({ ok: true });
+    return;
+  }
+  // Rate-limit: don't resend more than once per 60 seconds
+  const lastSent = user.emailVerificationSentAt ? new Date(user.emailVerificationSentAt).getTime() : 0;
+  if (Date.now() - lastSent < 60_000) {
+    res.status(429).json({
+      error: { code: "RATE_LIMITED", message: "Please wait a moment before requesting another verification email.", details: [] },
+    });
+    return;
+  }
+  const newToken = crypto.randomUUID();
+  user.emailVerificationToken = newToken;
+  user.emailVerificationSentAt = new Date().toISOString();
+  await persistUsers();
+  const baseUrl =
+    resolveAuthCallbackBaseUrl(undefined, req.headers as Record<string, string | string[] | undefined>) ||
+    `http://localhost:${String(process.env.PORT ?? 3001)}`;
+  const { devUrl } = await sendVerificationEmail(normalizedEmail, newToken, baseUrl);
+  res.json({ ok: true, ...(devUrl ? { devVerificationUrl: devUrl } : {}) });
 });
 
 app.get("/api/access/room/:step", async (req, res) => {
@@ -3762,6 +3947,16 @@ app.post("/api/auth/login", async (req, res) => {
   if (!user || !canAuthenticateWithPassword(user) || !verifyUserPassword(user, password)) {
     res.status(401).json({
       error: { code: "INVALID_CREDENTIALS", message: "Invalid email, username, or password.", details: [] },
+    });
+    return;
+  }
+  if ((user as StoredUser).emailVerified === false) {
+    res.status(403).json({
+      error: {
+        code: "EMAIL_NOT_VERIFIED",
+        message: "Please verify your email address before signing in. Check your inbox for the verification link.",
+        details: [],
+      },
     });
     return;
   }

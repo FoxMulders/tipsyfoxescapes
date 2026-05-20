@@ -2384,6 +2384,61 @@ a:hover {
   margin-bottom: 1rem;
 }
 
+/* ── Email verification pending screen ── */
+.auth-verify-pending {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem 0.5rem;
+  text-align: center;
+}
+.auth-verify-icon {
+  font-size: 2.8rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 8px rgba(200, 105, 78, 0.5));
+}
+.auth-verify-pending .auth-panel-title {
+  margin: 0;
+}
+.auth-verify-body {
+  font-size: 0.93rem;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 28ch;
+}
+.auth-verify-email {
+  color: var(--text);
+  word-break: break-all;
+}
+.auth-verify-devurl {
+  background: rgba(200, 105, 78, 0.1);
+  border: 1px solid rgba(200, 105, 78, 0.35);
+  border-radius: 6px;
+  padding: 0.65rem 0.85rem;
+  width: 100%;
+}
+.auth-verify-devlabel {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin: 0 0 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.auth-verify-devlink {
+  font-size: 0.82rem;
+  color: #c8694e;
+  word-break: break-all;
+  text-decoration: underline;
+}
+.auth-verify-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
 .auth-panel-title {
   margin: 0 0 0.35rem;
   font-size: 1.35rem;
