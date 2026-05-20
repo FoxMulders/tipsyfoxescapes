@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAQ | Tipsy Fox Escape Builder</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem auto; max-width: 900px; line-height: 1.55; padding: 0 1rem; color: #1a1a1a; }
+    h1 { margin-bottom: 0.5rem; }
+    .muted { color: #444; font-size: 0.95rem; }
+    .q { font-weight: 700; margin-top: 1.15rem; }
+    code { background: #f0f4f8; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.9em; }
+    ul { padding-left: 1.2rem; }
+    a { color: #1a56db; }
+  </style>
+</head>
+<body>
+  <h1>FAQ</h1>
+  <p class="muted">Escape Room Builder — quick answers. The in-app flow is the source of truth; this page tracks the same steps.</p>
+
+  <p class="q">What order do I follow in the builder?</p>
+  <p><strong>Room details</strong> (timing, headcount, environment, comma-separated items, difficulty, optional junior add-on) → <strong>Choose a theme</strong> (generate ideas or bring your own) → <strong>Build puzzle set</strong> → <strong>Output</strong> (review, export, save).</p>
+
+  <p class="q">Do I need to start a session manually?</p>
+  <p>No. A planning session is created when you continue from Room details, load themes, or other planning actions that talk to the server.</p>
+
+  <p class="q">Why is “Use My Own Theme” (or “Generate For Me” / “Refresh Ideas”) disabled?</p>
+  <p>
+    Those controls are <strong>full-catalog</strong> features (paid room pack). On the <strong>free trial</strong>, the <strong>same three curated themes</strong> load automatically when you open theme selection — you do not need to press <strong>Generate For Me</strong>. Disabled buttons show a tooltip: <strong>Features unlocked with a room pack</strong>. Purchase a pack under <strong>Account</strong> (activation key in dev) to unlock the full rotating catalog, refresh, custom themes, and saving plans.
+  </p>
+
+  <p class="q">Where do I write my custom theme description?</p>
+  <p>On <strong>Use My Own Theme</strong>, the large <strong>Theme description</strong> field is <strong>above</strong> the theme coach card. Fill in the theme name and description there first. The optional coach sits below that field.</p>
+
+  <p class="q">Why does the theme coach say built-in AI is unavailable?</p>
+  <p>The coach uses Chrome’s on-device Prompt API (Gemini Nano). It only runs in a <strong>recent Chrome desktop</strong> build with the right flags and hardware. The coach card lists the usual <code>chrome://flags</code> entries and a link to Google’s built-in AI docs. You can still type a description in the field above the coach and click <strong>Add and Select Custom Theme</strong> without the coach.</p>
+
+  <p class="q">“Add and Select Custom Theme” does nothing — what should I check?</p>
+  <ul>
+    <li><strong>Theme name</strong> is required; the button stays disabled until it is non-empty.</li>
+    <li>Errors appear in a <strong>red banner at the top</strong> of the Flow card (not only at the bottom of the page).</li>
+    <li>You need <strong>full catalog</strong> access; otherwise the server returns an error explaining the room pack requirement.</li>
+    <li>The <strong>backend</strong> must be running (for example <code>npm run dev</code> in <code>Dev/app/backend</code>) so <code>/api/themes/custom</code> can succeed.</li>
+    <li>The button is no longer blocked while the coach is “thinking”; if it still fails, read the red banner message.</li>
+  </ul>
+
+  <p class="q">“Continue to output review” seems to do nothing — why?</p>
+  <ul>
+    <li>The button is <strong>disabled until you generate at least one puzzle</strong> (hover for the tooltip). Use <strong>Generate puzzles</strong> first.</li>
+    <li>When it works, the <strong>Output: Review</strong> card appears <strong>below</strong> the tall Flow card; the page scrolls there automatically.</li>
+    <li>If room details later fail validation (empty environment or items, bad timing, etc.), you get a <strong>red banner at the top of the Flow card</strong> and should go <strong>← Back</strong> to Room details to fix highlighted fields.</li>
+  </ul>
+
+  <p class="q">Can I save plans for later?</p>
+  <p>Yes. After you generate content, use <strong>Output</strong> to mark a plan approved for build if you want, then <strong>Save Plan</strong>. Saved plans appear under <strong>Account</strong> and in the <strong>Saved</strong> step when you have saved plans.</p>
+
+  <p class="q">Can I load saved plans after login?</p>
+  <p>Yes. When you sign in, you can open the <strong>Saved</strong> step (if you have plans) or go to <strong>Account</strong> → saved room plans and load one back into the builder.</p>
+
+  <p class="q">Credits</p>
+  <p>I would like to give credit to my daughter Sam who helped me build this site by clicking a button. :P</p>
+</body>
+</html>

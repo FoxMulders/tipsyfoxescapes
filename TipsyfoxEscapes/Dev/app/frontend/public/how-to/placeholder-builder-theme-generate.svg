@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Placeholder: Generate For Me themes</title>
+  <desc id="desc">Animated GIF will show Generate For Me and Refresh Ideas on the theme step.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f0f4f8"/>
+      <stop offset="100%" stop-color="#e2e8f0"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="540" fill="url(#bg)"/>
+  <rect x="48" y="48" width="864" height="444" rx="12" fill="#fff" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="480" y="190" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="700" fill="#1e293b">GIF placeholder</text>
+  <text x="480" y="238" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#475569">Choose a theme ’ Generate For Me</text>
+  <text x="480" y="280" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#64748b">Replace with screen capture: theme cards + Refresh Ideas</text>
+  <rect x="300" y="320" width="180" height="44" rx="8" fill="#1a56db"/>
+  <text x="390" y="349" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="600" fill="#fff">Generate For Me</text>
+  <rect x="500" y="320" width="160" height="44" rx="8" fill="#fff" stroke="#64748b" stroke-width="2"/>
+  <text x="580" y="349" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#334155">Refresh Ideas</text>
+</svg>

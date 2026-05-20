@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chapter 5: Live Operations | Escape Room Builder Manual</title>
+  <link rel="stylesheet" href="/how-to/manual.css" />
+</head>
+<body>
+  <div class="manual-shell">
+    <aside class="manual-sidebar">
+      <p class="manual-brand">Tipsy Fox Escapes</p>
+      <h1>Builder Manual</h1>
+      <nav class="manual-nav" aria-label="Manual chapters">
+        <a href="/how-to/index.html">Introduction</a>
+        <a href="/how-to/chapter1-builder-setup.html">Chapter 1: Setup</a>
+        <a href="/how-to/chapter2-logic-aware-ai.html">Chapter 2: Logic-Aware AI</a>
+        <a href="/how-to/chapter3-puzzle-refinement.html">Chapter 3: Puzzle Set</a>
+        <a href="/how-to/chapter4-build-ready-export.html">Chapter 4: Export Specs</a>
+        <a href="/how-to/chapter5-live-operations.html" aria-current="page">Chapter 5: Live Ops</a>
+      </nav>
+    </aside>
+    <main class="manual-content">
+      <article class="chapter-card">
+        <p class="chapter-kicker">Chapter 5</p>
+        <h1>Live Operations &amp; Game Night Execution</h1>
+        <p class="lead">Commercial venue mode connects a private Gamemaster Console with a player-facing display. The session id links both screens to the same generated plan.</p>
+
+        <h2>Connect the Screens</h2>
+        <ul>
+          <li><strong>Gamemaster Live Console:</strong> open <code>/gm/{sessionId}</code> on a crew laptop or tablet.</li>
+          <li><strong>Room Player Display:</strong> open <code>/room/{sessionId}/player-display</code> on the projector, TV, or wall-mounted tablet.</li>
+          <li>Wait for the player display connection indicator before starting the timer.</li>
+        </ul>
+
+        <figure class="figure-card">
+          <img src="/animations/figure-c-live-clue-sync.svg" width="960" height="540" alt="Gamemaster clue box sending a hint to the player display over the live stream" />
+          <figcaption><strong>Figure C.</strong> The GM clue box sends a hint over the live stream and the player display switches into a readable hint overlay.</figcaption>
+        </figure>
+
+        <h2>Send Real-Time Clues</h2>
+        <ol>
+          <li>Use the custom clue field for ad hoc nudges.</li>
+          <li>Use saved hint chips from the plan when the team needs the intended progression clue.</li>
+          <li>Keep clues concise because they appear on the player display during active play.</li>
+        </ol>
+
+        <figure class="figure-card">
+          <img src="/animations/figure-d-venue-display-layout.svg" width="960" height="540" alt="Venue layout showing GM display and player display connected to their live URLs" />
+          <figcaption><strong>Figure D.</strong> Display 1 stays with the game master; Display 2 faces players. Each room uses its own session id and display pair.</figcaption>
+        </figure>
+
+        <h2>Physical Venue Layout</h2>
+        <p>Place the GM station where staff can see the floor without exposing controls to players. Label display cables, confirm network stability, and keep the export packet open for reset checklists, clue triggers, and failure recovery notes.</p>
+
+        <nav class="next-prev" aria-label="Chapter navigation">
+          <a href="/how-to/chapter4-build-ready-export.html">Previous: Export Specs</a>
+          <a href="/how-to/index.html">Back to Introduction</a>
+        </nav>
+      </article>
+    </main>
+  </div>
+</body>
+</html>
