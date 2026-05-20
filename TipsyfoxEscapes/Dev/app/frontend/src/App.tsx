@@ -2745,6 +2745,7 @@ export default function App() {
 
   useEffect(() => {
     if (appView !== "builder" || !error.trim()) return;
+    if (oauthHydratingRef.current || pendingAuthSessionBootstrap.current) return;
     toast.error(error);
   }, [error, appView]);
 
@@ -3144,14 +3145,11 @@ export default function App() {
         }
         const msg = data.error?.message ?? "Failed to update planning details.";
         setError(msg);
-        toast.error(msg);
         return false;
       }
       return true;
     } catch (err) {
-      const msg = classifyApiCatchError(err);
-      setError(msg);
-      toast.error(msg);
+      setError(classifyApiCatchError(err));
       return false;
     }
   };
@@ -3424,6 +3422,11 @@ export default function App() {
   ): void => {
     const normalized = user ? normalizeAuthUser(user) : null;
     const oauthResumePending = Boolean(token && normalized && peekOAuthPlanningStash());
+    const preservePlanningSession = Boolean(
+      token &&
+        normalized &&
+        (oauthResumePending || oauthReturnBootstrapRef.current || sessionId.trim()),
+    );
     const nextRefreshToken = sessionExtras?.refreshToken ?? (token ? refreshToken : "");
     const nextAccessExpiresAt = sessionExtras?.accessExpiresAt ?? (token ? accessExpiresAt : 0);
     const nextRefreshExpiresAt = sessionExtras?.refreshExpiresAt ?? (token ? refreshExpiresAt : 0);
@@ -3449,7 +3452,7 @@ export default function App() {
     setAuthUser(normalized);
     setShowPlanPicker(Boolean(user));
     setActivePanel(Boolean(user?.canSaveRooms) ? "saved" : "plan");
-    if (!oauthResumePending) {
+    if (!oauthResumePending && !preservePlanningSession) {
       setWizardStep("setup");
     }
     if (!user || !token) {
@@ -3482,7 +3485,7 @@ export default function App() {
         return;
       }
       if (normalized) {
-        if (!oauthResumePending) {
+        if (!preservePlanningSession) {
           setSessionId("");
         }
         pendingAuthSessionBootstrap.current = true;
@@ -3614,7 +3617,10 @@ export default function App() {
           await new Promise((resolve) => window.setTimeout(resolve, 450));
           return refreshProfile({ retryOnStaleToken: false, tokenOverride: token });
         }
-        if (isFatalAuthError(code) || code === "UNAUTHORIZED" || code === "TOKEN_MISSING") {
+        if (
+          !oauthHydratingRef.current &&
+          (isFatalAuthError(code) || code === "UNAUTHORIZED" || code === "TOKEN_MISSING")
+        ) {
           handleAuthExpired(data.error?.message);
         }
         return false;
@@ -4018,6 +4024,7 @@ export default function App() {
         accessExpiresAt: data.accessExpiresAt,
         refreshExpiresAt: data.refreshExpiresAt,
       });
+      setError("");
       await refreshProfile({ retryOnStaleToken: true });
     } catch {
       setError("Sign up failed. Check backend and try again.");
@@ -4057,6 +4064,7 @@ export default function App() {
         accessExpiresAt: data.accessExpiresAt,
         refreshExpiresAt: data.refreshExpiresAt,
       });
+      setError("");
       await refreshProfile({ retryOnStaleToken: true });
     } catch {
       setError("Log in failed. Check backend and try again.");
@@ -4121,10 +4129,7 @@ export default function App() {
           accessExpiresAt: Number.isFinite(callbackAccessExpires) ? callbackAccessExpires : 0,
         });
         const profileOk = await refreshProfile({ retryOnStaleToken: true, tokenOverride: callbackToken });
-        if (profileOk) {
-          const workspaceDraft = consumeWorkspaceDraftForOAuth();
-          if (workspaceDraft) applyWorkspaceDraftFromOAuth(workspaceDraft);
-        }
+        if (profileOk) setError("");
       } catch {
         setError("Social sign in completed, but response could not be parsed.");
       } finally {
@@ -4435,20 +4440,24 @@ export default function App() {
     if (isNewToken) {
       lastPlanningAuthTokenRef.current = authToken;
       pendingAuthSessionBootstrap.current = true;
-      setSessionId("");
-      setThemes([]);
-      setSelectedThemeId("");
-      setPuzzles([]);
-      setRefusedPuzzleSlots([]);
-      setSuggestedAdditions([]);
-      setSuggestedAdditionsRequired([]);
-      setStoryPlan(null);
-      setCompatibilityPassed(null);
-      setExportContent("");
-      setApprovedForBuild(false);
-      setPlanSavedSuccessfully(false);
-      setThemePath(null);
-      setExistingPuzzles([]);
+      const preservePlanningOnBootstrap =
+        oauthReturnBootstrapRef.current || Boolean(peekOAuthPlanningStash());
+      if (!preservePlanningOnBootstrap) {
+        setSessionId("");
+        setThemes([]);
+        setSelectedThemeId("");
+        setPuzzles([]);
+        setRefusedPuzzleSlots([]);
+        setSuggestedAdditions([]);
+        setSuggestedAdditionsRequired([]);
+        setStoryPlan(null);
+        setCompatibilityPassed(null);
+        setExportContent("");
+        setApprovedForBuild(false);
+        setPlanSavedSuccessfully(false);
+        setThemePath(null);
+        setExistingPuzzles([]);
+      }
       void (async () => {
         const restored = await tryRestore();
         if (!restored) await createSession({ existingPuzzles: [] }, { seedThemes: true });
@@ -5820,8 +5829,10 @@ export default function App() {
     return (
       <>
         <AppAtmosphere />
-        <main className="page-shell page-shell--layered auth-layout auth-layout--compact">
-          <p className="muted auth-hero-para">Checking sign-in…</p>
+        <main className="page-shell page-shell--layered">
+          <section className="auth-unified-panel auth-clear-glass">
+            <p className="muted auth-hero-para">Checking sign-in…</p>
+          </section>
         </main>
       </>
     );
@@ -5833,30 +5844,27 @@ export default function App() {
         <AppAtmosphere />
         <main className="page-shell page-shell--layered">
         {error ? <p className="error-banner auth-page-error">{error}</p> : null}
-        <div className="auth-layout auth-layout--compact auth-layout--login">
-          <section id="auth-hero-panel" className="hero auth-hero auth-hero--planning auth-surface">
-            <div className="hero-grid">
-              <div>
-                <p className="hero-chip hero-chip--planning-studio">Escape Planning Studio</p>
-                <h1>{BRAND_NAME}</h1>
-                <p className="auth-hero-para">{BRAND_INTRO}</p>
-                <p className="auth-hero-para muted">
-                  Sign up for a <strong>free trial</strong>: three curated themes, narrative story-beat alignment, and a host runbook
-                  preview—no maker electronics pack until you upgrade.
-                </p>
-                <ul className="auth-bullets auth-hero-para">
-                  <li>Quick cinematic room generation from your space and guest count</li>
-                  <li>Narrative story beats aligned to every puzzle in your run</li>
-                  <li>Easy host run sheets you can print for game night</li>
-                  <li>Paid plans unlock saves, full theme library, and maker wiring packs</li>
-                </ul>
-                <p className="muted promo-footnote auth-hero-para">
-                  Plans and checkout live inside your account after sign-in—start designing first, upgrade when you need saves or Arduino detail.
-                </p>
-              </div>
+        <section id="auth-unified-panel" className="hero auth-hero auth-hero--planning auth-unified-panel auth-clear-glass">
+          <div className="auth-unified-grid">
+            <div className="auth-unified-copy">
+              <p className="hero-chip hero-chip--planning-studio">Escape Planning Studio</p>
+              <h1>{BRAND_NAME}</h1>
+              <p className="auth-hero-para">{BRAND_INTRO}</p>
+              <p className="auth-hero-para muted">
+                Sign up for a <strong>free trial</strong>: three curated themes, narrative story-beat alignment, and a host runbook
+                preview—no maker electronics pack until you upgrade.
+              </p>
+              <ul className="auth-bullets auth-hero-para">
+                <li>Quick cinematic room generation from your space and guest count</li>
+                <li>Narrative story beats aligned to every puzzle in your run</li>
+                <li>Easy host run sheets you can print for game night</li>
+                <li>Paid plans unlock saves, full theme library, and maker wiring packs</li>
+              </ul>
+              <p className="muted promo-footnote auth-hero-para">
+                Plans and checkout live inside your account after sign-in—start designing first, upgrade when you need saves or Arduino detail.
+              </p>
             </div>
-          </section>
-        <section id="auth-card-panel" className="card auth-card auth-panel auth-surface" aria-labelledby="auth-panel-title">
+            <aside className="auth-unified-form" aria-labelledby="auth-panel-title">
           <header className="auth-panel-head">
             <h2 id="auth-panel-title" className="auth-panel-title">{authMode === "signup" ? "Create account" : "Log in"}</h2>
             <p className="muted auth-mode-switch">
@@ -5968,8 +5976,9 @@ export default function App() {
               {socialAuthProvider === "github" ? "Redirecting…" : "GitHub"}
             </button>
           </nav>
+            </aside>
+          </div>
         </section>
-        </div>
         <GlobalFooter buildStamp={APP_BUILD_STAMP} />
       </main>
       </>
