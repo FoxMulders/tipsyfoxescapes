@@ -13,6 +13,13 @@ import {
 import { flushSync } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import {
+  consumeOAuthReturnSnapshot,
+  peekOAuthReturnSnapshot,
+  stashOAuthReturnSnapshot,
+  type OAuthReturnSnapshot,
+} from "./oauthReturnSnapshot.ts";
+import { isSignInForPuzzlesMessage, toastErrorOnce, toastMessageOnce, TOAST_ID } from "./toastNotify.ts";
 import { GlobalFooter } from "@/components/layout/GlobalFooter";
 import { PlanningSnapshotSheet } from "@/components/layout/PlanningSnapshotSheet";
 import { TopNavBar } from "@/components/layout/TopNavBar";
@@ -2746,7 +2753,7 @@ export default function App() {
   useEffect(() => {
     if (appView !== "builder" || !error.trim()) return;
     if (oauthHydratingRef.current || pendingAuthSessionBootstrap.current) return;
-    toast.error(error);
+    toastErrorOnce(error);
   }, [error, appView]);
 
   useEffect(() => {
@@ -3388,6 +3395,75 @@ export default function App() {
     setValidationFlags((current) => ({ ...current, ...next }));
   };
 
+  const isAuthPlanningRestorePending = (): boolean =>
+    oauthHydratingRef.current || pendingAuthSessionBootstrap.current;
+
+  const waitForAuthPlanningBootstrap = async (): Promise<void> => {
+    if (!isAuthPlanningRestorePending()) return;
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      if (!isAuthPlanningRestorePending()) return;
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+    }
+  };
+
+  const buildOAuthReturnSnapshot = (): Omit<OAuthReturnSnapshot, "savedAt"> => ({
+    sessionId: sessionId.trim(),
+    deviceId,
+    wizardStep,
+    playersConcurrent,
+    participantsTotal,
+    sessionDurationMinutes,
+    environmentType,
+    availableItems,
+    eventType,
+    targetInterface,
+    venueBuildType,
+    roomDifficulty,
+    themeMustMatchEnvironment,
+    youthAddOnEnabled,
+    youthAddOnGatesAdultFlow,
+    youthAddOnAgeNote,
+    themePath,
+    selectedThemeId,
+    themes,
+    puzzles,
+    existingPuzzles,
+    suggestedAdditions,
+    suggestedAdditionsRequired,
+    storyPlan,
+    compatibilityPassed,
+    approvedForBuild,
+    useCustomMainPuzzleCount,
+    customMainPuzzleCountStr,
+    useCustomMix,
+    customMixLogic,
+    customMixPhysical,
+    customMixElectronic,
+  });
+
+  const applyOAuthReturnSnapshot = (snapshot: OAuthReturnSnapshot): void => {
+    applyWorkspaceDraftFromOAuth(snapshot);
+    if (snapshot.sessionId.trim()) setSessionId(snapshot.sessionId.trim());
+    setThemePath(snapshot.themePath);
+    setSelectedThemeId(snapshot.selectedThemeId ?? "");
+    setThemes(Array.isArray(snapshot.themes) ? (snapshot.themes as Theme[]) : []);
+    setPuzzles(Array.isArray(snapshot.puzzles) ? (snapshot.puzzles as Puzzle[]) : []);
+    setExistingPuzzles(Array.isArray(snapshot.existingPuzzles) ? snapshot.existingPuzzles : []);
+    setSuggestedAdditions(Array.isArray(snapshot.suggestedAdditions) ? snapshot.suggestedAdditions : []);
+    setSuggestedAdditionsRequired(
+      Array.isArray(snapshot.suggestedAdditionsRequired) ? snapshot.suggestedAdditionsRequired : [],
+    );
+    setStoryPlan((snapshot.storyPlan as StoryPlan | null) ?? null);
+    setCompatibilityPassed(snapshot.compatibilityPassed ?? null);
+    setApprovedForBuild(Boolean(snapshot.approvedForBuild));
+    setUseCustomMainPuzzleCount(Boolean(snapshot.useCustomMainPuzzleCount));
+    setCustomMainPuzzleCountStr(snapshot.customMainPuzzleCountStr ?? "");
+    setUseCustomMix(Boolean(snapshot.useCustomMix));
+    setCustomMixLogic(snapshot.customMixLogic ?? "");
+    setCustomMixPhysical(snapshot.customMixPhysical ?? "");
+    setCustomMixElectronic(snapshot.customMixElectronic ?? "");
+  };
+
   const applyWorkspaceDraftFromOAuth = (draft: OAuthWorkspaceDraft): void => {
     setPlayersConcurrent(draft.playersConcurrent);
     setParticipantsTotal(draft.participantsTotal);
@@ -3425,7 +3501,10 @@ export default function App() {
     const preservePlanningSession = Boolean(
       token &&
         normalized &&
-        (oauthResumePending || oauthReturnBootstrapRef.current || sessionId.trim()),
+        (oauthResumePending ||
+          oauthReturnBootstrapRef.current ||
+          Boolean(peekOAuthReturnSnapshot()) ||
+          sessionId.trim()),
     );
     const nextRefreshToken = sessionExtras?.refreshToken ?? (token ? refreshToken : "");
     const nextAccessExpiresAt = sessionExtras?.accessExpiresAt ?? (token ? accessExpiresAt : 0);
@@ -4077,6 +4156,7 @@ export default function App() {
     setError("");
     setSocialAuthProvider(provider);
     cacheLocalPlanningInputs();
+    stashOAuthReturnSnapshot(buildOAuthReturnSnapshot());
     stashWorkspaceDraftForOAuth({
       wizardStep,
       playersConcurrent,
@@ -4169,7 +4249,10 @@ export default function App() {
         return undefined;
       }
       if (handleBillingGate(data.error?.code, data.error?.message)) return undefined;
+      const themeErrMsg = data.error?.message ?? "Failed to load themes.";
+      if (isSignInForPuzzlesMessage(themeErrMsg) && isAuthPlanningRestorePending()) return undefined;
       if (isInvalidPlanningSessionResponse(response, data)) {
+        if (isAuthPlanningRestorePending()) return undefined;
         const freshId = await recoverPlanningSessionRef.current({ seedThemes: true });
         if (freshId && freshId !== activeSessionId) {
           return requestThemes(freshId, endpoint, currentThemes);
@@ -4177,7 +4260,7 @@ export default function App() {
         setError(planningSessionRecoveryNotice);
         return undefined;
       }
-      setError(data.error?.message ?? "Failed to load themes.");
+      setError(themeErrMsg);
       return undefined;
     }
     const nextThemes = data.themes;
@@ -4217,7 +4300,10 @@ export default function App() {
           return false;
         }
         if (handleBillingGate(data.error?.code, data.error?.message)) return false;
+        const puzzleErrMsg = data.error?.message ?? "Failed to generate puzzles.";
+        if (isSignInForPuzzlesMessage(puzzleErrMsg) && isAuthPlanningRestorePending()) return false;
         if (isInvalidPlanningSessionResponse(response, data)) {
+          if (isAuthPlanningRestorePending()) return false;
           const freshId = await recoverPlanningSessionRef.current({ seedThemes: false });
           if (freshId && freshId !== activeSessionId) {
             return requestPuzzles(freshId, themeId, themeForEnhance);
@@ -4225,7 +4311,7 @@ export default function App() {
           setError(planningSessionRecoveryNotice);
           return false;
         }
-        setError(data.error?.message ?? "Failed to generate puzzles.");
+        setError(puzzleErrMsg);
         return false;
       }
       if (data.user) {
@@ -4374,7 +4460,7 @@ export default function App() {
       setExportContent("");
       setApprovedForBuild(false);
       setPlanSavedSuccessfully(false);
-      if (seedThemes) {
+      if (seedThemes && !isAuthPlanningRestorePending()) {
         await requestThemes(data.sessionId, "/api/themes/generate", []);
       }
       return data.sessionId;
@@ -4392,8 +4478,8 @@ export default function App() {
       const tokenForPlanning = currentAuthToken();
       if (tokenForPlanning) await clearPersistedPlanningSession(tokenForPlanning);
       const freshId = await createSession(undefined, { seedThemes: options?.seedThemes ?? false });
-      if (freshId && !oauthReturnBootstrapRef.current) {
-        toast.message(planningSessionRecoveryNotice, { duration: 4000 });
+      if (freshId && !oauthReturnBootstrapRef.current && !isAuthPlanningRestorePending()) {
+        toastMessageOnce(planningSessionRecoveryNotice, TOAST_ID.planningRecovery, 4000);
       }
       oauthReturnBootstrapRef.current = false;
       return freshId;
@@ -4403,6 +4489,7 @@ export default function App() {
   };
 
   const ensureSession = async (): Promise<string | undefined> => {
+    await waitForAuthPlanningBootstrap();
     if (sessionId) return sessionId;
     return createSession(undefined, { seedThemes: true });
   };
@@ -4415,33 +4502,40 @@ export default function App() {
       return;
     }
     const headers = withAuthHeaders();
-    const tryRestore = async (): Promise<boolean> => {
-      const oauthStash = consumeOAuthPlanningStash();
-      if (oauthStash?.sessionId && oauthStash.deviceId === deviceId) {
-        const oauthHealth = await fetchPlanningSessionHealth(oauthStash.sessionId, headers);
-        if (oauthHealth?.ok) {
-          setSessionId(oauthStash.sessionId);
-          void persistPlanningSessionId(authToken, oauthStash.sessionId, oauthHealth.leaseExpiresAt);
-          return true;
-        }
-      }
+    const tryRestore = async (preferredSessionId?: string): Promise<boolean> => {
+      const oauthStash = peekOAuthPlanningStash();
       const persisted = await loadPersistedPlanningSession(authToken);
-      if (!persisted?.sessionId) return false;
-      const health = await fetchPlanningSessionHealth(persisted.sessionId, headers);
-      if (!health?.ok) {
-        await clearPersistedPlanningSession(authToken);
-        return false;
+      const candidates = [
+        preferredSessionId?.trim(),
+        sessionId.trim(),
+        oauthStash?.sessionId,
+        persisted?.sessionId,
+      ].filter((id): id is string => Boolean(id));
+      const uniqueIds = [...new Set(candidates)];
+      if (oauthStash) consumeOAuthPlanningStash();
+
+      for (const sid of uniqueIds) {
+        if (oauthStash?.sessionId === sid && oauthStash.deviceId !== deviceId) continue;
+        const health = await fetchPlanningSessionHealth(sid, headers, API_BASE);
+        if (!health?.ok) continue;
+        setSessionId(sid);
+        void persistPlanningSessionId(authToken, sid, health.leaseExpiresAt);
+        await renewPlanningSessionLease(sid, headers, API_BASE);
+        return true;
       }
-      setSessionId(persisted.sessionId);
-      void persistPlanningSessionId(authToken, persisted.sessionId, health.leaseExpiresAt);
-      return true;
+      if (persisted?.sessionId && !uniqueIds.includes(persisted.sessionId)) {
+        await clearPersistedPlanningSession(authToken);
+      }
+      return false;
     };
     const isNewToken = lastPlanningAuthTokenRef.current !== authToken;
     if (isNewToken) {
       lastPlanningAuthTokenRef.current = authToken;
       pendingAuthSessionBootstrap.current = true;
       const preservePlanningOnBootstrap =
-        oauthReturnBootstrapRef.current || Boolean(peekOAuthPlanningStash());
+        oauthReturnBootstrapRef.current ||
+        Boolean(peekOAuthPlanningStash()) ||
+        Boolean(peekOAuthReturnSnapshot());
       if (!preservePlanningOnBootstrap) {
         setSessionId("");
         setThemes([]);
@@ -4459,8 +4553,18 @@ export default function App() {
         setExistingPuzzles([]);
       }
       void (async () => {
-        const restored = await tryRestore();
-        if (!restored) await createSession({ existingPuzzles: [] }, { seedThemes: true });
+        const snapshot = consumeOAuthReturnSnapshot();
+        if (snapshot) applyOAuthReturnSnapshot(snapshot);
+        const restored = await tryRestore(snapshot?.sessionId);
+        if (!restored) {
+          await createSession(
+            { existingPuzzles: snapshot?.existingPuzzles ?? [] },
+            { seedThemes: !snapshot },
+          );
+        } else {
+          const sid = sessionId.trim() || snapshot?.sessionId?.trim();
+          if (sid) await syncPlanningInputToServer(sid, "draft");
+        }
         const workspaceDraft = consumeWorkspaceDraftForOAuth();
         if (workspaceDraft) applyWorkspaceDraftFromOAuth(workspaceDraft);
         oauthReturnBootstrapRef.current = false;
@@ -4585,6 +4689,7 @@ export default function App() {
     if (themesAutoFetchInFlight.current) {
       return;
     }
+    if (isAuthPlanningRestorePending()) return;
     themesAutoFetchInFlight.current = true;
     if (themePath === null) {
       setThemePath("generated");
@@ -4622,6 +4727,7 @@ export default function App() {
     if (wizardStep !== "themes-puzzles" || !selectedThemeId || hasFullCatalogAccess || puzzles.length > 0) {
       return;
     }
+    if (isAuthPlanningRestorePending()) return;
     let cancelled = false;
     void (async () => {
       setError("");
