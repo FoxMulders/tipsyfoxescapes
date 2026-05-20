@@ -5704,7 +5704,7 @@ export default function App() {
         <main className="page-shell page-shell--layered">
         {error ? <p className="error-banner auth-page-error">{error}</p> : null}
         <div className="auth-layout auth-layout--compact auth-layout--login">
-          <section id="auth-hero-panel" className="hero auth-hero auth-hero--planning glass-panel">
+          <section id="auth-hero-panel" className="hero auth-hero auth-hero--planning auth-surface">
             <div className="hero-grid">
               <div>
                 <p className="hero-chip hero-chip--planning-studio">Escape Planning Studio</p>
@@ -5726,7 +5726,7 @@ export default function App() {
               </div>
             </div>
           </section>
-        <section id="auth-card-panel" className="card auth-card auth-panel glass-panel" aria-labelledby="auth-panel-title">
+        <section id="auth-card-panel" className="card auth-card auth-panel auth-surface" aria-labelledby="auth-panel-title">
           <header className="auth-panel-head">
             <h2 id="auth-panel-title" className="auth-panel-title">{authMode === "signup" ? "Create account" : "Log in"}</h2>
             <p className="muted auth-mode-switch">

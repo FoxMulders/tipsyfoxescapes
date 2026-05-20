@@ -2,6 +2,8 @@
   --shell-panel-gap: 1rem;
   --bg: #050a0c;
   --bg-deep: #070f12;
+  --auth-surface-bg: hsl(220 28% 7%);
+  --auth-surface-border: rgba(255, 255, 255, 0.1);
   --surface: rgba(10, 18, 22, 0.38);
   --surface-strong: rgba(12, 22, 28, 0.48);
   --border: rgba(72, 130, 140, 0.35);
@@ -2206,7 +2208,9 @@ a:hover {
 }
 
 .auth-layout > .hero.auth-hero,
-.auth-layout > .card.auth-card.auth-panel {
+.auth-layout > .card.auth-card.auth-panel,
+#auth-hero-panel.auth-surface,
+#auth-card-panel.auth-surface {
   margin: 0;
   min-height: min(520px, 72vh);
   height: 100%;
@@ -2215,6 +2219,45 @@ a:hover {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  background: var(--auth-surface-bg) !important;
+  border: 1px solid var(--auth-surface-border) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+}
+
+.auth-layout > .hero.auth-hero::before {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.auth-layout .auth-hero-para.muted,
+.auth-layout .auth-mode-switch,
+.auth-layout .promo-footnote {
+  color: #a8bcc0;
+}
+
+.auth-layout .auth-panel-title,
+.auth-layout .auth-hero h1 {
+  color: #f4f8ff;
+}
+
+.auth-layout input:not([type="checkbox"]):not([type="radio"]),
+.auth-layout select,
+.auth-layout textarea {
+  background: hsl(220 28% 5%);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #f4f8ff;
+}
+
+.auth-layout input::placeholder,
+.auth-layout textarea::placeholder {
+  color: rgba(168, 188, 192, 0.9);
+}
+
+.auth-layout .secondary-btn {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: hsl(220 26% 11%);
+  color: #e8f4f2;
 }
 
 .auth-layout--compact > .hero.auth-hero.auth-hero--planning {
@@ -4889,8 +4932,7 @@ ul.auth-hero-para {
   -webkit-backdrop-filter: blur(3px) !important;
 }
 
-/* Login hero: strip opaque .hero gradient so studio glass shows through */
-#auth-hero-panel.hero.glass-panel,
+/* Control deck hero: light glass wash (login uses solid .auth-surface) */
 #control-deck-studio.hero.glass-panel {
   background:
     linear-gradient(rgba(255, 255, 255, 0) 49.65%, rgba(255, 255, 255, 0.012) 50%, rgba(255, 255, 255, 0) 50.4%),
