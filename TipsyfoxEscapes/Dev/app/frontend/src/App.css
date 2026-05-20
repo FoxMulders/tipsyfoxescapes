@@ -287,7 +287,8 @@ body {
 }
 
 .pricing-card-footer {
-  margin-top: 0.15rem;
+  margin-top: auto;
+  padding-top: 0.65rem;
 }
 
 .pricing-card-head h3 {
@@ -390,7 +391,20 @@ body {
 .pricing-card .primary-btn,
 .pricing-card .secondary-btn {
   width: 100%;
-  margin-top: 0.15rem;
+  min-height: 2.5rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.pricing-card .pricing-included {
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  margin: 0;
 }
 
 .pricing-included {

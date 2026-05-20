@@ -2,8 +2,8 @@
 
 const ADDITIVE_PREVIOUS_TIER_NAME: Record<string, string> = {
   casual_hobbyist: "Trial",
-  home_enthusiast: "The Casual Hobbyist Pass",
-  creative_studio: "The Home Host Enthusiast",
+  home_enthusiast: "Casual Hobbyist",
+  creative_studio: "Home Host Enthusiast",
 };
 
 export type PricingFeatureLine =
@@ -13,7 +13,7 @@ export type PricingFeatureLine =
 export const additivePlusLead = (planId: string): string | null => {
   const previous = ADDITIVE_PREVIOUS_TIER_NAME[planId];
   if (!previous) return null;
-  return `Everything in ${previous}, plus:`;
+  return `Contains all of the ${previous}, plus:`;
 };
 
 /** Feature bullets for UI: optional plus-lead, then tier-specific deltas only. */
