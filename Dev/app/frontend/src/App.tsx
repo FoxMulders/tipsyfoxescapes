@@ -2627,6 +2627,8 @@ export default function App() {
   const [inspirationServerResult, setInspirationServerResult] = useState<InspirationApiResult | null>(null);
   const [inspirationAiBusy, setInspirationAiBusy] = useState<boolean>(false);
   const [inspirationAiError, setInspirationAiError] = useState<string>("");
+  const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
+  const aiEnabledFetchedRef = useRef(false);
 
   useEffect(() => {
     if (!inspirationOpen) return;
@@ -2635,6 +2637,19 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [inspirationOpen]);
+
+  useEffect(() => {
+    if (!inspirationOpen || aiEnabledFetchedRef.current) return;
+    aiEnabledFetchedRef.current = true;
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((data: { isAiEnabled?: boolean }) => {
+        setAiEnabled(Boolean(data.isAiEnabled));
+      })
+      .catch(() => {
+        setAiEnabled(true);
+      });
   }, [inspirationOpen]);
   const [customThemeName, setCustomThemeName] = useState<string>("");
   const [customThemeDescription, setCustomThemeDescription] = useState<string>("");
@@ -7866,6 +7881,12 @@ export default function App() {
                     ? "Generating…"
                     : `Generate AI concept (${plannerMainPuzzleTarget} puzzle node${plannerMainPuzzleTarget === 1 ? "" : "s"})`}
                 </button>
+                {aiEnabled === false ? (
+                  <p className="inspiration-ai-config-warn" role="status">
+                    <span aria-hidden="true">⚠</span>{" "}
+                    AI generation unavailable — <code>OPENAI_API_KEY</code> is not configured in your environment. Sample concepts will be shown instead.
+                  </p>
+                ) : null}
                 {inspirationAiError ? <p className="error-banner inspiration-ai-error">{inspirationAiError}</p> : null}
 
                 {/* Structured result from server-side API */}
