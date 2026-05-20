@@ -5,6 +5,13 @@ export type SocialProfile = { email: string; name: string };
 const providerLabel = (provider: OAuthProvider): string =>
   provider === "google" ? "Google" : provider === "facebook" ? "Facebook" : "GitHub";
 
+/** Fetch with a hard deadline. Throws with a clear timeout message if the provider stalls. */
+const fetchWithTimeout = (url: string, opts: RequestInit = {}, timeoutMs = 10_000): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timer));
+};
+
 const readJsonBody = async <T>(response: Response, label: string): Promise<T> => {
   const text = await response.text();
   try {
@@ -35,7 +42,7 @@ export const exchangeOAuthCode = async (
   const label = providerLabel(provider);
 
   if (provider === "google") {
-    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    const tokenResponse = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -57,7 +64,7 @@ export const exchangeOAuthCode = async (
     if (!tokenResponse.ok) throw new Error(`${label} token exchange failed (${tokenResponse.status}).`);
     const tokenToVerify = tokenData.id_token || tokenData.access_token;
     if (!tokenToVerify) throw new Error(`${label} token payload missing id_token/access_token.`);
-    const verifyResponse = await fetch(
+    const verifyResponse = await fetchWithTimeout(
       `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(tokenToVerify)}`,
     );
     const verifyData = await readJsonBody<{ email?: string; name?: string; error?: string }>(verifyResponse, label);
@@ -70,7 +77,7 @@ export const exchangeOAuthCode = async (
   }
 
   if (provider === "facebook") {
-    const tokenResponse = await fetch(
+    const tokenResponse = await fetchWithTimeout(
       `https://graph.facebook.com/v20.0/oauth/access_token?${new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,
@@ -87,7 +94,7 @@ export const exchangeOAuthCode = async (
     }
     if (!tokenResponse.ok) throw new Error(`${label} token exchange failed (${tokenResponse.status}).`);
     if (!tokenData.access_token) throw new Error(`${label} token payload missing access_token.`);
-    const profileResponse = await fetch(
+    const profileResponse = await fetchWithTimeout(
       `https://graph.facebook.com/me?${new URLSearchParams({
         fields: "id,name,email",
         access_token: tokenData.access_token,
@@ -104,7 +111,7 @@ export const exchangeOAuthCode = async (
     return { email, name };
   }
 
-  const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
+  const tokenResponse = await fetchWithTimeout("https://github.com/login/oauth/access_token", {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -125,7 +132,7 @@ export const exchangeOAuthCode = async (
   if (!tokenResponse.ok) throw new Error(`${label} token exchange failed (${tokenResponse.status}).`);
   if (!tokenData.access_token) throw new Error(`${label} token payload missing access_token.`);
 
-  const profileResponse = await fetch("https://api.github.com/user", {
+  const profileResponse = await fetchWithTimeout("https://api.github.com/user", {
     headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: "application/vnd.github+json" },
   });
   if (!profileResponse.ok) throw new Error(`${label} profile lookup failed (${profileResponse.status}).`);
@@ -134,7 +141,7 @@ export const exchangeOAuthCode = async (
   if (profileData.email) {
     email = String(profileData.email).trim().toLowerCase();
   } else {
-    const emailsResponse = await fetch("https://api.github.com/user/emails", {
+    const emailsResponse = await fetchWithTimeout("https://api.github.com/user/emails", {
       headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: "application/vnd.github+json" },
     });
     if (!emailsResponse.ok) throw new Error(`${label} email lookup failed (${emailsResponse.status}).`);

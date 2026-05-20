@@ -4307,7 +4307,10 @@ app.get("/api/auth/oauth/:provider/start", (req, res) => {
     }
 
     const returnTo = String(req.query.returnTo ?? "").trim() || "http://localhost:5173/";
-    const callbackBaseUrl = resolveAuthCallbackBaseUrl();
+    const callbackBaseUrl = resolveAuthCallbackBaseUrl(
+      undefined,
+      req.headers as Record<string, string | string[] | undefined>,
+    );
     const creds = readOAuthClientCredentials(provider);
     if (!callbackBaseUrl || !creds) {
       const exampleCallback = buildOAuthCallbackUrl(provider, callbackBaseUrl || "http://localhost:5173");
@@ -4320,7 +4323,7 @@ app.get("/api/auth/oauth/:provider/start", (req, res) => {
       return;
     }
 
-    const callbackUri = buildOAuthCallbackUrl(provider);
+    const callbackUri = buildOAuthCallbackUrl(provider, callbackBaseUrl);
     const state = createOAuthState(provider, returnTo);
 
     const params = new URLSearchParams({
@@ -4384,6 +4387,8 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
   }
 
   try {
+    // Ensure in-memory stores are loaded before touching users/tokens
+    await Promise.all([loadUsers(), authTokenStore.ensureLoaded()]).catch(() => {});
     const creds = readOAuthClientCredentials(provider);
     if (!creds) {
       redirectOAuthStartFailure(
@@ -4394,7 +4399,12 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
       );
       return;
     }
-    const callbackUri = buildOAuthCallbackUrl(provider);
+    const callbackBase = resolveAuthCallbackBaseUrl(
+      undefined,
+      req.headers as Record<string, string | string[] | undefined>,
+    );
+    const callbackUri = buildOAuthCallbackUrl(provider, callbackBase);
+    console.log(`[oauth] ${provider} callback — callbackUri: ${callbackUri}`);
     const { email, name } = await exchangeOAuthCode(
       provider,
       code,

@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import crypto, { timingSafeEqual } from "crypto";
 
 type OAuthProvider = "google" | "facebook" | "github";
 
@@ -40,7 +40,9 @@ export const verifyOAuthState = (
   if (dot <= 0) return null;
   const body = trimmed.slice(0, dot);
   const sig = trimmed.slice(dot + 1);
-  if (sign(body) !== sig) return null;
+  const expected = Buffer.from(sign(body));
+  const actual = Buffer.from(sig);
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
   try {
     const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as OAuthStatePayload;
     if (payload.provider !== expectedProvider) return null;
