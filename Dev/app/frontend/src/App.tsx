@@ -2678,6 +2678,7 @@ export default function App() {
   const [authName, setAuthName] = useState<string>("");
   const [authEmail, setAuthEmail] = useState<string>("");
   const [authPassword, setAuthPassword] = useState<string>("");
+  const [authPasswordConfirm, setAuthPasswordConfirm] = useState<string>("");
   const [activationKey, setActivationKey] = useState<string>("");
   const [roomsToAddInput, setRoomsToAddInput] = useState<string>("10");
   const [exportCreditsToAddInput, setExportCreditsToAddInput] = useState<string>("10");
@@ -4162,6 +4163,26 @@ export default function App() {
       setError("");
       if (!termsAccepted) {
         setError("Please read and accept the Terms of Service to create an account.");
+        setAuthSubmitting(false);
+        return;
+      }
+      if (authPassword.length < 8) {
+        setError("Password must be at least 8 characters.");
+        setAuthSubmitting(false);
+        return;
+      }
+      if (!/[A-Z]/.test(authPassword)) {
+        setError("Password must contain at least one uppercase letter.");
+        setAuthSubmitting(false);
+        return;
+      }
+      if (!/[0-9!@#$%^&*()\-_=+[\]{};':",.<>/?\\|`~]/.test(authPassword)) {
+        setError("Password must contain at least one number or special character.");
+        setAuthSubmitting(false);
+        return;
+      }
+      if (authPassword !== authPasswordConfirm) {
+        setError("Passwords do not match.");
         setAuthSubmitting(false);
         return;
       }
@@ -6058,6 +6079,7 @@ export default function App() {
                     className="link-btn"
                     onClick={() => {
                       setTermsAccepted(false);
+                      setAuthPasswordConfirm("");
                       setAuthMode("login");
                     }}
                   >
@@ -6067,7 +6089,7 @@ export default function App() {
               ) : (
                 <>
                   New here?{" "}
-                  <button type="button" className="link-btn" onClick={() => setAuthMode("signup")}>
+                  <button type="button" className="link-btn" onClick={() => { setAuthPasswordConfirm(""); setAuthMode("signup"); }}>
                     Create account
                   </button>
                 </>
@@ -6092,8 +6114,30 @@ export default function App() {
             </label>
             <label className="field-row">
               Password
-              <input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} />
+              <input type="password" autoComplete={authMode === "signup" ? "new-password" : "current-password"} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} />
             </label>
+            {authMode === "signup" && authPassword.length > 0 ? (
+              <ul className="pw-requirements" aria-label="Password requirements">
+                <li className={authPassword.length >= 8 ? "pw-req--met" : "pw-req--unmet"}>At least 8 characters</li>
+                <li className={/[A-Z]/.test(authPassword) ? "pw-req--met" : "pw-req--unmet"}>One uppercase letter</li>
+                <li className={/[0-9!@#$%^&*()\-_=+[\]{};':",.<>/?\\|`~]/.test(authPassword) ? "pw-req--met" : "pw-req--unmet"}>One number or symbol</li>
+              </ul>
+            ) : null}
+            {authMode === "signup" ? (
+              <label className="field-row">
+                Confirm password
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={authPasswordConfirm}
+                  onChange={(event) => setAuthPasswordConfirm(event.target.value)}
+                  className={authPasswordConfirm.length > 0 && authPasswordConfirm !== authPassword ? "input--error" : ""}
+                />
+                {authPasswordConfirm.length > 0 && authPasswordConfirm !== authPassword ? (
+                  <span className="field-error">Passwords do not match</span>
+                ) : null}
+              </label>
+            ) : null}
             {authMode === "signup" ? (
               <div className="auth-terms-block">
                 <label className="field-row field-row--checkbox auth-terms-checkbox">

@@ -2324,6 +2324,43 @@ a:hover {
   margin-top: 0.15rem;
 }
 
+.pw-requirements {
+  list-style: none;
+  padding: 0.3rem 0.5rem;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pw-req--met,
+.pw-req--unmet {
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 0.32rem;
+  transition: color 0.15s ease;
+}
+
+.pw-req--met::before { content: "✓"; }
+.pw-req--unmet::before { content: "·"; font-size: 1.1rem; line-height: 1; }
+
+.pw-req--met { color: var(--success, #7de0ab); }
+.pw-req--unmet { color: var(--muted, #9cb4b8); }
+
+.input--error {
+  border-color: var(--danger, #ff8ea0) !important;
+}
+
+.field-error {
+  font-size: 0.78rem;
+  color: var(--danger, #ff8ea0);
+  margin-top: 0.15rem;
+}
+
 .auth-unified-panel .auth-terms-note {
   font-size: 0.78rem;
   line-height: 1.35;
