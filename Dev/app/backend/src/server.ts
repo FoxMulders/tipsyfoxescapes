@@ -4043,6 +4043,94 @@ app.get("/api/me", async (req, res) => {
   });
 });
 
+app.patch("/api/me", async (req, res) => {
+  const validation = await resolveAuthValidation(req, authTokenStore);
+  if (!validation.ok) {
+    respondAuthValidation(res, validation);
+    return;
+  }
+  const user = getStoredUserById(validation.userId);
+  if (!user) {
+    sendAuthError(res, 401, "USER_NOT_FOUND", "Account not found.");
+    return;
+  }
+  const { name, email, currentPassword, newPassword } = req.body ?? {};
+  const isLocal = user.provider === "local";
+  const changes: Partial<StoredUser> = {};
+
+  // Name — any provider
+  if (name !== undefined) {
+    const trimmed = String(name).trim();
+    if (!trimmed) {
+      res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Name cannot be empty.", details: [] } });
+      return;
+    }
+    changes.name = trimmed;
+  }
+
+  // Email / password changes require local provider + current password
+  const wantsEmailChange = email !== undefined && String(email).trim().toLowerCase() !== user.email;
+  const wantsPasswordChange = newPassword !== undefined && String(newPassword).trim().length > 0;
+
+  if ((wantsEmailChange || wantsPasswordChange) && !isLocal) {
+    res.status(400).json({
+      error: {
+        code: "PROVIDER_RESTRICTED",
+        message: `Email and password are managed by ${user.provider}. Sign in with ${user.provider} to change them.`,
+        details: [],
+      },
+    });
+    return;
+  }
+
+  if (wantsEmailChange || wantsPasswordChange) {
+    if (!currentPassword || !verifyUserPassword(user, String(currentPassword))) {
+      res.status(401).json({
+        error: { code: "INVALID_CREDENTIALS", message: "Current password is incorrect.", details: [] },
+      });
+      return;
+    }
+  }
+
+  if (wantsEmailChange) {
+    const newEmail = normalizeEmail(String(email));
+    if (usersByEmail.has(newEmail)) {
+      res.status(409).json({ error: { code: "EMAIL_EXISTS", message: "An account with that email already exists.", details: [] } });
+      return;
+    }
+    // Move the user in the map to the new key
+    usersByEmail.delete(user.email);
+    changes.email = newEmail;
+  }
+
+  if (wantsPasswordChange) {
+    const pw = String(newPassword);
+    if (pw.length < 8 || !/[A-Z]/.test(pw) || !/[0-9!@#$%^&*()\-_=+[\]{};':",.<>/?\\|`~]/.test(pw)) {
+      res.status(400).json({
+        error: {
+          code: "WEAK_PASSWORD",
+          message: "New password must be at least 8 characters with one uppercase letter and one number or special character.",
+          details: [],
+        },
+      });
+      return;
+    }
+    changes.password = pw;
+  }
+
+  if (Object.keys(changes).length === 0) {
+    res.json({ user: toPublicUser(user) });
+    return;
+  }
+
+  Object.assign(user, changes);
+  // Re-index under new email key
+  usersByEmail.set(user.email, user);
+  indexUserUsername(user, usersByUsername, user.email);
+  await persistUsers();
+  res.json({ user: toPublicUser(user) });
+});
+
 app.post("/api/billing/activate-test", async (req, res) => {
   const user = await readAuthUser(req);
   if (!user) {

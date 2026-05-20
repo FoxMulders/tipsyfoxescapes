@@ -2725,7 +2725,14 @@ export default function App() {
   const [showExistingPuzzleForm, setShowExistingPuzzleForm] = useState<boolean>(false);
   const [validationFlags, setValidationFlags] = useState<Record<string, boolean>>({});
   const [appView, setAppView] = useState<"builder" | "account" | "admin">("builder");
-  const [accountSection, setAccountSection] = useState<"overview" | "plans">("overview");
+  const [accountSection, setAccountSection] = useState<"overview" | "plans" | "profile">("overview");
+  const [profileName, setProfileName] = useState<string>("");
+  const [profileEmail, setProfileEmail] = useState<string>("");
+  const [profileCurrentPassword, setProfileCurrentPassword] = useState<string>("");
+  const [profileNewPassword, setProfileNewPassword] = useState<string>("");
+  const [profileNewPasswordConfirm, setProfileNewPasswordConfirm] = useState<string>("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState<string>("");
   const [snapshotOpen, setSnapshotOpen] = useState(false);
   const lastPlanningAuthTokenRef = useRef(initialAuth.authToken);
   const pendingAuthSessionBootstrap = useRef(false);
@@ -3657,6 +3664,55 @@ export default function App() {
       // ignore
     }
     persistAuth("", null);
+  };
+
+  const handleProfileUpdate = async (): Promise<void> => {
+    if (profileSaving || !authUser) return;
+    setProfileSaving(true);
+    setProfileSuccess("");
+    setError("");
+    try {
+      const isLocal = authUser.provider === "local";
+      const wantsPasswordChange = profileNewPassword.trim().length > 0;
+      if (wantsPasswordChange) {
+        if (profileNewPassword !== profileNewPasswordConfirm) {
+          setError("New passwords do not match.");
+          return;
+        }
+        if (profileNewPassword.length < 8 || !/[A-Z]/.test(profileNewPassword) || !/[0-9!@#$%^&*()\-_=+[\]{};':",.<>/?\\|`~]/.test(profileNewPassword)) {
+          setError("New password must be at least 8 characters with one uppercase letter and one number or symbol.");
+          return;
+        }
+      }
+      const body: Record<string, string> = {};
+      if (profileName.trim() && profileName.trim() !== authUser.name) body.name = profileName.trim();
+      if (isLocal && profileEmail.trim() && profileEmail.trim().toLowerCase() !== authUser.email) body.email = profileEmail.trim();
+      if (isLocal && wantsPasswordChange) body.newPassword = profileNewPassword;
+      if (isLocal && (body.email !== undefined || body.newPassword !== undefined)) body.currentPassword = profileCurrentPassword;
+      if (Object.keys(body).length === 0) {
+        setProfileSuccess("No changes to save.");
+        return;
+      }
+      const response = await apiFetch("/api/me", { method: "PATCH", body: JSON.stringify(body) });
+      const data = (await response.json()) as { user?: AuthUser; error?: { message?: string } };
+      if (!response.ok || !data.user) {
+        setError(data.error?.message ?? "Could not save changes.");
+        return;
+      }
+      const updated = normalizeAuthUser(data.user);
+      if (updated) {
+        persistAuth(currentAuthToken(), updated, { refreshToken: undefined, accessExpiresAt: undefined });
+        setAuthUser(updated);
+      }
+      setProfileCurrentPassword("");
+      setProfileNewPassword("");
+      setProfileNewPasswordConfirm("");
+      setProfileSuccess("Profile updated.");
+    } catch {
+      setError("Could not save changes. Check your connection and try again.");
+    } finally {
+      setProfileSaving(false);
+    }
   };
   const currentAuthToken = (): string => {
     // Prefer the synchronously-updated ref so cross-tab token adoptions (and
@@ -6500,12 +6556,112 @@ export default function App() {
             </button>
             <button
               type="button"
+              className={accountSection === "profile" ? "primary-btn" : "secondary-btn"}
+              onClick={() => {
+                setProfileName(authUser.name);
+                setProfileEmail(authUser.email);
+                setProfileCurrentPassword("");
+                setProfileNewPassword("");
+                setProfileNewPasswordConfirm("");
+                setProfileSuccess("");
+                setError("");
+                setAccountSection("profile");
+              }}
+            >
+              Profile
+            </button>
+            <button
+              type="button"
               className={accountSection === "plans" ? "primary-btn" : "secondary-btn"}
               onClick={() => setAccountSection("plans")}
             >
               Plans &amp; billing
             </button>
           </nav>
+          {accountSection === "profile" ? (
+            <section className="card mission-panel profile-edit-section">
+              <h2 className="subscription-title">Profile</h2>
+              {profileSuccess ? <p className="profile-success-msg">{profileSuccess}</p> : null}
+              <div className="profile-edit-grid">
+                <label className="field-row">
+                  Name
+                  <input
+                    type="text"
+                    value={profileName}
+                    onChange={(e) => { setProfileName(e.target.value); setProfileSuccess(""); }}
+                  />
+                </label>
+                <label className={`field-row${authUser.provider !== "local" ? " field-row--disabled" : ""}`}>
+                  Email
+                  <input
+                    type="email"
+                    value={profileEmail}
+                    disabled={authUser.provider !== "local"}
+                    onChange={(e) => { setProfileEmail(e.target.value); setProfileSuccess(""); }}
+                  />
+                  {authUser.provider !== "local" ? (
+                    <span className="field-hint">Email is managed by {AUTH_PROVIDER_LABELS[authUser.provider]}.</span>
+                  ) : null}
+                </label>
+                {authUser.provider === "local" ? (
+                  <>
+                    <hr className="profile-divider" />
+                    <p className="profile-section-label">Change password <span className="muted">(leave blank to keep current)</span></p>
+                    <label className="field-row">
+                      New password
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={profileNewPassword}
+                        onChange={(e) => { setProfileNewPassword(e.target.value); setProfileSuccess(""); }}
+                      />
+                    </label>
+                    {profileNewPassword.length > 0 ? (
+                      <>
+                        <label className="field-row">
+                          Confirm new password
+                          <input
+                            type="password"
+                            autoComplete="new-password"
+                            value={profileNewPasswordConfirm}
+                            onChange={(e) => { setProfileNewPasswordConfirm(e.target.value); setProfileSuccess(""); }}
+                            className={profileNewPasswordConfirm.length > 0 && profileNewPasswordConfirm !== profileNewPassword ? "input--error" : ""}
+                          />
+                          {profileNewPasswordConfirm.length > 0 && profileNewPasswordConfirm !== profileNewPassword ? (
+                            <span className="field-error">Passwords do not match</span>
+                          ) : null}
+                        </label>
+                        <ul className="pw-requirements" aria-label="Password requirements">
+                          <li className={profileNewPassword.length >= 8 ? "pw-req--met" : "pw-req--unmet"}>At least 8 characters</li>
+                          <li className={/[A-Z]/.test(profileNewPassword) ? "pw-req--met" : "pw-req--unmet"}>One uppercase letter</li>
+                          <li className={/[0-9!@#$%^&*()\-_=+[\]{};':",.<>/?\\|`~]/.test(profileNewPassword) ? "pw-req--met" : "pw-req--unmet"}>One number or symbol</li>
+                        </ul>
+                      </>
+                    ) : null}
+                    <hr className="profile-divider" />
+                    <label className="field-row">
+                      Current password <span className="muted">(required to save email or password changes)</span>
+                      <input
+                        type="password"
+                        autoComplete="current-password"
+                        value={profileCurrentPassword}
+                        onChange={(e) => { setProfileCurrentPassword(e.target.value); setProfileSuccess(""); }}
+                      />
+                    </label>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  className="primary-btn profile-save-btn"
+                  onClick={() => void handleProfileUpdate()}
+                  disabled={profileSaving}
+                  aria-busy={profileSaving}
+                >
+                  {profileSaving ? "Saving…" : "Save changes"}
+                </button>
+              </div>
+            </section>
+          ) : null}
           {accountSection === "plans" && !authUser.isAdmin && billingPlans.length > 0 ? (
             <PlansAndBillingSection
               authUser={authUser}
