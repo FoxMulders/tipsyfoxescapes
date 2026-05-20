@@ -14,7 +14,7 @@ import { createOAuthState, verifyOAuthState } from "./oauthState.js";
 
 export { handleGitHubWebhook };
 import { readJsonBlob, writeJsonBlob } from "./kvJsonStore.js";
-import { loadAuthTokens, persistAuthTokens } from "./runtimePersistence.js";
+import { AuthTokenStore } from "./authSession.js";
 
 export type OAuthProvider = "google" | "facebook" | "github";
 
@@ -51,7 +51,7 @@ type PublicUser = {
 const MAX_ROOM_ALLOWANCE = 100_000;
 const usersPath = (): string => path.join(getDataDir(), "users.json");
 const usersByEmail = new Map<string, StoredUser>();
-const authTokens = new Map<string, string>();
+const authTokenStore = new AuthTokenStore();
 let nextUserId = 1;
 let storageReady: Promise<void> | null = null;
 
@@ -147,7 +147,7 @@ const ensureStorage = (): Promise<void> => {
   if (!storageReady) {
     storageReady = (async () => {
       await ensureDataDir();
-      await Promise.all([loadUsers(), loadAuthTokens(authTokens)]);
+      await Promise.all([loadUsers(), authTokenStore.ensureLoaded()]);
     })();
   }
   return storageReady;
@@ -183,9 +183,15 @@ const redirectOAuthStartFailure = (
   redirect(res, u.toString());
 };
 
-const buildAuthSuccessRedirect = (returnTo: string, authToken: string, user: StoredUser): string => {
+const buildAuthSuccessRedirect = (
+  returnTo: string,
+  tokens: { authToken: string; refreshToken: string; accessExpiresAt: number },
+  user: StoredUser,
+): string => {
   const url = safeOAuthReturnTo(returnTo);
-  url.searchParams.set("auth_token", authToken);
+  url.searchParams.set("auth_token", tokens.authToken);
+  url.searchParams.set("refresh_token", tokens.refreshToken);
+  url.searchParams.set("access_expires_at", String(tokens.accessExpiresAt));
   url.searchParams.set("auth_user", encodeURIComponent(JSON.stringify(toPublicUser(user))));
   return url.toString();
 };
@@ -213,12 +219,7 @@ const upsertSocialUser = (provider: OAuthProvider, email: string, name: string):
   return user;
 };
 
-const createAuthTokenForUser = async (user: StoredUser): Promise<string> => {
-  const authToken = `tok_${user.id}_${Date.now()}`;
-  authTokens.set(authToken, user.id);
-  await persistAuthTokens(authTokens);
-  return authToken;
-};
+const issueAuthForUser = async (user: StoredUser) => authTokenStore.issueTokenPair(user.id);
 
 type OAuthRequest = IncomingMessage & {
   query?: Record<string, string | string[] | undefined>;
@@ -414,8 +415,8 @@ export const handleOAuthCallback = async (
     );
     if (!email) throw new Error(`${provider} account did not provide a usable email.`);
     const user = upsertSocialUser(provider, email, name);
-    const authToken = await createAuthTokenForUser(user);
-    redirect(res, buildAuthSuccessRedirect(stateData.returnTo, authToken, user));
+    const tokens = await issueAuthForUser(user);
+    redirect(res, buildAuthSuccessRedirect(stateData.returnTo, tokens, user));
   } catch (error) {
     const detail = String(error instanceof Error ? error.message : error);
     // eslint-disable-next-line no-console

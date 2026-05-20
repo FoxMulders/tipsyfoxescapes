@@ -168,14 +168,14 @@ export const registerLiveRoutes = (
   deps: {
     resolvePlanningSession: (sessionId: string) => LivePlanningSession | undefined;
     deriveOperatingMode: (session: LivePlanningSession) => OperatingMode;
-    hasGmConsoleAccess: (req: Request) => boolean;
-    readAuthUser?: (req: Request) => { id: string; isAdmin?: boolean } | undefined;
+    hasGmConsoleAccess?: (req: Request) => boolean | Promise<boolean>;
+    readAuthUser?: (req: Request) => { id: string; isAdmin?: boolean } | undefined | Promise<{ id: string; isAdmin?: boolean } | undefined>;
     getSessionOwnerId?: (sessionId: string) => string | undefined;
     assertLiveInitAllowed?: (
       req: Request,
       sessionId: string,
       operatingMode: OperatingMode,
-    ) => { code: string; message: string } | null;
+    ) => { code: string; message: string } | null | Promise<{ code: string; message: string } | null>;
     appendOperationalAudit?: (entry: {
       ts: string;
       action: string;
@@ -199,7 +199,7 @@ export const registerLiveRoutes = (
       return null;
     }
     if (state.operatingMode === "venue" && deps.assertLiveInitAllowed) {
-      const denied = deps.assertLiveInitAllowed(req, sessionId, "venue");
+      const denied = await Promise.resolve(deps.assertLiveInitAllowed(req, sessionId, "venue"));
       if (denied) {
         liveDenied(res, denied);
         return null;
@@ -220,7 +220,7 @@ export const registerLiveRoutes = (
         ? req.body.operatingMode
         : deps.deriveOperatingMode(session);
     if (deps.assertLiveInitAllowed) {
-      const denied = deps.assertLiveInitAllowed(req, sessionId, operatingMode);
+      const denied = await Promise.resolve(deps.assertLiveInitAllowed(req, sessionId, operatingMode));
       if (denied) {
         liveDenied(res, denied);
         return;
@@ -270,7 +270,7 @@ export const registerLiveRoutes = (
       return;
     }
     if (state.operatingMode === "venue" && deps.assertLiveInitAllowed) {
-      const denied = deps.assertLiveInitAllowed(req, sessionId, "venue");
+      const denied = await Promise.resolve(deps.assertLiveInitAllowed(req, sessionId, "venue"));
       if (denied) {
         liveDenied(res, denied);
         return;
@@ -387,7 +387,7 @@ export const registerLiveRoutes = (
       return;
     }
     if (stateBefore.operatingMode === "venue" && deps.assertLiveInitAllowed) {
-      const denied = deps.assertLiveInitAllowed(req, sessionId, "venue");
+      const denied = await Promise.resolve(deps.assertLiveInitAllowed(req, sessionId, "venue"));
       if (denied) {
         liveDenied(res, denied);
         return;
@@ -541,7 +541,7 @@ export const registerLiveRoutes = (
     }
     const operatingMode = deps.deriveOperatingMode(session);
     if (operatingMode === "venue" && deps.assertLiveInitAllowed) {
-      const denied = deps.assertLiveInitAllowed(req, sessionId, "venue");
+      const denied = await Promise.resolve(deps.assertLiveInitAllowed(req, sessionId, "venue"));
       if (denied) {
         liveDenied(res, denied);
         return;

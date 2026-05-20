@@ -37,7 +37,8 @@ import {
   resolveLoginIdentifier,
   verifyUserPassword,
 } from "./authIdentity.js";
-import { issueAuthToken, resolveAuthUserId } from "./authSession.js";
+import { AuthTokenStore, resolveAuthUserId, resolveAuthValidation, sendAuthError } from "./authSession.js";
+import { requireAuthUserId, respondAuthValidation } from "./authMiddleware.js";
 import { registerAdminRoutes } from "./adminRoutes.js";
 import { buildRoomFlowchartMermaid } from "../../shared/roomFlowchart.js";
 import {
@@ -83,12 +84,7 @@ import {
   enrichPuzzlesWithManufacturingSchema,
   PUZZLE_GENERATION_INVENTORY_POLICY,
 } from "./puzzleManufacturingSchema.js";
-import {
-  loadAuthTokens,
-  loadPlanningSessions,
-  persistAuthTokens,
-  persistPlanningSessions,
-} from "./runtimePersistence.js";
+import { loadPlanningSessions, persistPlanningSessions } from "./runtimePersistence.js";
 import { handleFacebookWebhookVerify } from "./oauthServerless.js";
 import { handleGitHubWebhook } from "./githubWebhook.js";
 
@@ -495,7 +491,7 @@ app.use(express.json());
 app.use((_req, res, next) => {
   res.on("finish", () => {
     void (async () => {
-      await persistAuthTokens(authTokens);
+      await authTokenStore.syncToDisk();
       await persistPlanningSessions(sessions, (session) => serializeSessionForDisk(session as SessionState));
     })();
   });
@@ -556,7 +552,7 @@ const skipHistoryPath = path.join(getDataDir(), "skip-history.json");
 const skipEntries = new Map<string, SkipEntry>();
 const usersByEmail = new Map<string, StoredUser>();
 const usersByUsername = new Map<string, string>();
-const authTokens = new Map<string, string>();
+const authTokenStore = new AuthTokenStore();
 let nextUserId = 1;
 const savedPlansPath = path.join(getDataDir(), "user-plans.json");
 const usersPath = path.join(getDataDir(), "users.json");
@@ -795,11 +791,6 @@ const deriveSessionOperatingMode = (session: SessionState, req?: express.Request
     return targetInterfaceToOperatingMode(ti);
   }
   if (session.operatingMode === "home" || session.operatingMode === "venue") return session.operatingMode;
-  const userId = req ? readAuthUserId(req) : undefined;
-  if (userId) {
-    const user = getStoredUserById(userId);
-    if (user) return operatingModeDefaultForUser(user);
-  }
   const et = (session.planningInput.eventType ?? "").toLowerCase();
   if (/\b(commercial|ticketed|venue|escape room)\b/.test(et)) return "venue";
   if (session.planningInput.venueBuildType === "professional_empty") return "venue";
@@ -1025,8 +1016,7 @@ const loadUsers = async (): Promise<void> => {
 
 app.use(
   createVercelDiskSyncMiddleware({
-    authTokens,
-    loadAuthTokens,
+    authStore: authTokenStore,
     loadUsers,
   }),
 );
@@ -3424,7 +3414,12 @@ const enrichThemesWithRecommended = (themes: Theme[], session: SessionState): Th
   }));
 };
 
-const createAuthTokenForUser = async (user: StoredUser): Promise<string> => issueAuthToken(authTokens, user.id);
+const issueAuthForUser = async (user: StoredUser) => authTokenStore.issueTokenPair(user.id);
+
+const createAuthTokenForUser = async (user: StoredUser): Promise<string> => {
+  const issued = await issueAuthForUser(user);
+  return issued.authToken;
+};
 
 const upsertSocialUser = (provider: StoredUser["provider"], email: string, name: string): StoredUser => {
   const normalizedEmail = email.trim().toLowerCase();
@@ -3472,9 +3467,15 @@ const safeOAuthReturnTo = (raw: string): URL => {
   }
 };
 
-const buildAuthSuccessRedirect = (returnTo: string, authToken: string, user: StoredUser): string => {
+const buildAuthSuccessRedirect = (
+  returnTo: string,
+  tokens: { authToken: string; refreshToken: string; accessExpiresAt: number },
+  user: StoredUser,
+): string => {
   const url = safeOAuthReturnTo(returnTo);
-  url.searchParams.set("auth_token", authToken);
+  url.searchParams.set("auth_token", tokens.authToken);
+  url.searchParams.set("refresh_token", tokens.refreshToken);
+  url.searchParams.set("access_expires_at", String(tokens.accessExpiresAt));
   url.searchParams.set("auth_user", encodeURIComponent(JSON.stringify(toPublicUser(user))));
   return url.toString();
 };
@@ -3486,24 +3487,13 @@ const redirectOAuthStartFailure = (res: express.Response, returnToRaw: string, c
   res.redirect(302, u.toString());
 };
 
-const readAuthUserId = (req: express.Request): string | undefined => {
-  const token = String(req.headers.authorization ?? "")
-    .trim()
-    .toLowerCase()
-    .startsWith("bearer ")
-    ? String(req.headers.authorization ?? "")
-        .slice(7)
-        .trim()
-    : "";
-  if (!token) return undefined;
-  return authTokens.get(token);
-};
+const readAuthUserId = async (req: express.Request): Promise<string | undefined> =>
+  resolveAuthUserId(req, authTokenStore);
 
-const readAuthUserIdAsync = async (req: express.Request): Promise<string | undefined> =>
-  resolveAuthUserId(req, authTokens);
+const readAuthUserIdAsync = readAuthUserId;
 
-const readAuthUser = (req: express.Request): StoredUser | undefined => {
-  const id = readAuthUserId(req);
+const readAuthUser = async (req: express.Request): Promise<StoredUser | undefined> => {
+  const id = await readAuthUserId(req);
   if (!id) return undefined;
   return getStoredUserById(id);
 };
@@ -3514,9 +3504,12 @@ const readAuthUserAsync = async (req: express.Request): Promise<StoredUser | und
   return getStoredUserById(id);
 };
 
-const claimSessionForAuth = (sessionId: string | undefined, req: express.Request): StoredUser | undefined => {
+const claimSessionForAuth = async (
+  sessionId: string | undefined,
+  req: express.Request,
+): Promise<StoredUser | undefined> => {
   if (!sessionId) return undefined;
-  const user = readAuthUser(req);
+  const user = await readAuthUser(req);
   if (user) sessionUserOwners.set(sessionId, user.id);
   const ownerId = sessionUserOwners.get(sessionId);
   return ownerId ? getStoredUserById(ownerId) : user;
@@ -3542,16 +3535,13 @@ const puzzleMutationAccessError = (
 };
 
 /** Require a logged-in user who owns (or can claim) this planning session. */
-const requireAuthedSessionOwnership = (
+const requireAuthedSessionOwnership = async (
   req: express.Request,
   res: express.Response,
   sessionId: string,
-): SessionState | undefined => {
-  const userId = readAuthUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
-    return undefined;
-  }
+): Promise<SessionState | undefined> => {
+  const userId = await requireAuthUserId(req, res, authTokenStore);
+  if (!userId) return undefined;
   const session = resolvePlanningSession(sessionId);
   if (!session) {
     respondInvalidPlanningSession(res, sessionId);
@@ -3693,16 +3683,19 @@ app.post("/api/auth/signup", async (req, res) => {
   usersByEmail.set(normalizedEmail, user);
   indexUserUsername(user, usersByUsername, normalizedEmail);
   await persistUsers();
-  const authToken = await createAuthTokenForUser(user);
+  const tokens = await issueAuthForUser(user);
   res.status(201).json({
-    authToken,
+    authToken: tokens.authToken,
+    refreshToken: tokens.refreshToken,
+    accessExpiresAt: tokens.accessExpiresAt,
+    refreshExpiresAt: tokens.refreshExpiresAt,
     user: toPublicUser(user),
   });
 });
 
-app.get("/api/access/room/:step", (req, res) => {
+app.get("/api/access/room/:step", async (req, res) => {
   const step = String(req.params.step ?? "").trim().toLowerCase();
-  const user = readAuthUser(req);
+  const user = await readAuthUser(req);
   if (step === "build") {
     const denied = generationAccessError(user);
     if (denied) {
@@ -3751,38 +3744,51 @@ app.post("/api/auth/login", async (req, res) => {
     });
     return;
   }
-  const authToken = await createAuthTokenForUser(user as StoredUser);
+  const tokens = await issueAuthForUser(user as StoredUser);
   res.json({
-    authToken,
+    authToken: tokens.authToken,
+    refreshToken: tokens.refreshToken,
+    accessExpiresAt: tokens.accessExpiresAt,
+    refreshExpiresAt: tokens.refreshExpiresAt,
     user: toPublicUser(user as StoredUser),
   });
 });
 
-app.get("/api/me", async (req, res) => {
-  const userId = await readAuthUserIdAsync(req);
-  if (!userId) {
-    res.status(401).json({
-      error: {
-        code: "TOKEN_INVALID",
-        message: "Sign-in expired or invalid. Please log in again.",
-        details: [],
-      },
-    });
+app.post("/api/auth/refresh", async (req, res) => {
+  const refreshToken = String(req.body?.refreshToken ?? "").trim();
+  const refreshed = await authTokenStore.refreshTokenPair(refreshToken);
+  if (!refreshed.ok) {
+    sendAuthError(res, 401, refreshed.code, refreshed.message);
     return;
   }
-  const user = getStoredUserById(userId);
+  const user = getStoredUserById(refreshed.userId);
   if (!user) {
-    res.status(401).json({
-      error: {
-        code: "TOKEN_INVALID",
-        message: "Account not found for this sign-in. Please log in again.",
-        details: [],
-      },
-    });
+    sendAuthError(res, 401, "USER_NOT_FOUND", "Account not found for this refresh token. Please log in again.");
+    return;
+  }
+  res.json({
+    authToken: refreshed.tokens.authToken,
+    refreshToken: refreshed.tokens.refreshToken,
+    accessExpiresAt: refreshed.tokens.accessExpiresAt,
+    refreshExpiresAt: refreshed.tokens.refreshExpiresAt,
+    user: toPublicUser(user),
+  });
+});
+
+app.get("/api/me", async (req, res) => {
+  const validation = await resolveAuthValidation(req, authTokenStore);
+  if (!validation.ok) {
+    respondAuthValidation(res, validation);
+    return;
+  }
+  const user = getStoredUserById(validation.userId);
+  if (!user) {
+    sendAuthError(res, 401, "USER_NOT_FOUND", "Account not found for this sign-in. Please log in again.");
     return;
   }
   res.json({
     user: toPublicUser(user),
+    accessExpiresAt: validation.record.accessExpiresAt,
     trial: {
       curatedThemeIds: [...CURATED_TRIAL_THEME_ORDER],
       trialCatalogOnly: isTrialTierUser(user),
@@ -3794,7 +3800,7 @@ app.get("/api/me", async (req, res) => {
 });
 
 app.post("/api/billing/activate-test", async (req, res) => {
-  const user = readAuthUser(req);
+  const user = await readAuthUser(req);
   if (!user) {
     res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
     return;
@@ -3927,7 +3933,7 @@ app.post("/api/billing/webhook", async (req, res) => {
 });
 
 app.get("/api/billing/audit-log", async (req, res) => {
-  const user = readAuthUser(req);
+  const user = await readAuthUser(req);
   if (!user) {
     res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
     return;
@@ -4066,8 +4072,8 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
     );
     if (!email) throw new Error(`${provider} account did not provide a usable email.`);
     const user = upsertSocialUser(provider, email, name);
-    const authToken = await createAuthTokenForUser(user);
-    res.redirect(buildAuthSuccessRedirect(stateData.returnTo, authToken, user));
+    const tokens = await issueAuthForUser(user);
+    res.redirect(buildAuthSuccessRedirect(stateData.returnTo, tokens, user));
   } catch (error) {
     const detail = String(error instanceof Error ? error.message : error);
     // eslint-disable-next-line no-console
@@ -4196,14 +4202,14 @@ app.get("/api/planning/session/:sessionId/health", (req, res) => {
   });
 });
 
-app.post("/api/planning/session/:sessionId/lease", (req, res) => {
+app.post("/api/planning/session/:sessionId/lease", async (req, res) => {
   const sessionId = req.params.sessionId;
   const session = resolvePlanningSession(sessionId, { touchLease: false });
   if (!session) {
     respondInvalidPlanningSession(res, sessionId);
     return;
   }
-  const user = readAuthUser(req);
+  const user = await readAuthUser(req);
   if (user) {
     const ownerId = sessionUserOwners.get(sessionId);
     if (ownerId && ownerId !== user.id && !user.isAdmin) {
@@ -4307,14 +4313,14 @@ app.patch("/api/planning/session/:sessionId/planning-input", (req, res) => {
   res.json({ ok: true, operatingMode: session.operatingMode });
 });
 
-app.get("/api/planning/session/:sessionId/theme-coach", (req, res) => {
-  const session = requireAuthedSessionOwnership(req, res, req.params.sessionId);
+app.get("/api/planning/session/:sessionId/theme-coach", async (req, res) => {
+  const session = await requireAuthedSessionOwnership(req, res, req.params.sessionId);
   if (!session) return;
   res.json({ messages: session.themeCoachChat });
 });
 
-app.put("/api/planning/session/:sessionId/theme-coach", (req, res) => {
-  const session = requireAuthedSessionOwnership(req, res, req.params.sessionId);
+app.put("/api/planning/session/:sessionId/theme-coach", async (req, res) => {
+  const session = await requireAuthedSessionOwnership(req, res, req.params.sessionId);
   if (!session) return;
   const raw = req.body?.messages;
   if (!Array.isArray(raw)) {
@@ -4740,7 +4746,7 @@ app.post("/api/puzzles/generate", async (req, res) => {
   });
 });
 
-app.post("/api/puzzles/:puzzleId/replace", (req, res) => {
+app.post("/api/puzzles/:puzzleId/replace", async (req, res) => {
   const { sessionId } = req.body ?? {};
   const puzzleId = req.params.puzzleId;
   const session = resolvePlanningSession(sessionId);
@@ -4748,7 +4754,7 @@ app.post("/api/puzzles/:puzzleId/replace", (req, res) => {
     respondInvalidPlanningSession(res, sessionId);
     return;
   }
-  const billingUser = claimSessionForAuth(String(sessionId), req);
+  const billingUser = await claimSessionForAuth(String(sessionId), req);
   const denied = puzzleMutationAccessError(session, billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
@@ -4841,7 +4847,7 @@ app.post("/api/puzzles/:puzzleId/replace", (req, res) => {
   });
 });
 
-app.post("/api/puzzles/:puzzleId/reject", (req, res) => {
+app.post("/api/puzzles/:puzzleId/reject", async (req, res) => {
   const { sessionId } = req.body ?? {};
   const puzzleId = req.params.puzzleId;
   const session = resolvePlanningSession(sessionId);
@@ -4849,7 +4855,7 @@ app.post("/api/puzzles/:puzzleId/reject", (req, res) => {
     respondInvalidPlanningSession(res, sessionId);
     return;
   }
-  const billingUser = claimSessionForAuth(String(sessionId), req);
+  const billingUser = await claimSessionForAuth(String(sessionId), req);
   const denied = puzzleMutationAccessError(session, billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
@@ -4901,14 +4907,14 @@ app.post("/api/puzzles/:puzzleId/reject", (req, res) => {
   });
 });
 
-app.post("/api/puzzles/fill-slot", (req, res) => {
+app.post("/api/puzzles/fill-slot", async (req, res) => {
   const { sessionId, category, audienceTrack, gatesAdultProgression } = req.body ?? {};
   const session = resolvePlanningSession(sessionId);
   if (!session) {
     respondInvalidPlanningSession(res, sessionId);
     return;
   }
-  const billingUser = claimSessionForAuth(String(sessionId), req);
+  const billingUser = await claimSessionForAuth(String(sessionId), req);
   const denied = puzzleMutationAccessError(session, billingUser);
   if (denied) {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
@@ -5011,7 +5017,7 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
     respondInvalidPlanningSession(res, sessionId);
     return;
   }
-  const billingUser = claimSessionForAuth(sessionId, req);
+  const billingUser = await claimSessionForAuth(sessionId, req);
   if (!session.roomManifest) session.roomManifest = defaultRoomManifest();
   const creditReservedAtManifest = Boolean(session.roomManifest.creditConsumedAt);
   if (!creditReservedAtManifest) {
@@ -5306,11 +5312,8 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
 });
 
 app.post("/api/plans/:sessionId/save", async (req, res) => {
-  const userId = readAuthUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
-    return;
-  }
+  const userId = await requireAuthUserId(req, res, authTokenStore);
+  if (!userId) return;
   const user = getStoredUserById(userId);
   if (!user) {
     res.status(401).json({ error: { code: "UNAUTHORIZED", message: "User not found.", details: [] } });
@@ -5404,12 +5407,9 @@ app.post("/api/plans/:sessionId/save", async (req, res) => {
   });
 });
 
-app.get("/api/plans/saved", (req, res) => {
-  const userId = readAuthUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
-    return;
-  }
+app.get("/api/plans/saved", async (req, res) => {
+  const userId = await requireAuthUserId(req, res, authTokenStore);
+  if (!userId) return;
   const plans = (savedPlansByUser.get(userId) ?? []).map((plan) => ({
     planId: plan.planId,
     name: plan.name,
@@ -5477,12 +5477,9 @@ const rehydrateLiveSessionFromSavedPlan = (plan: SavedPlan, ownerUserId: string)
   sessionUserOwners.set(plan.sessionId, ownerUserId);
 };
 
-app.get("/api/plans/saved/:planId", (req, res) => {
-  const userId = readAuthUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
-    return;
-  }
+app.get("/api/plans/saved/:planId", async (req, res) => {
+  const userId = await requireAuthUserId(req, res, authTokenStore);
+  if (!userId) return;
   const planId = req.params.planId;
   const plan = (savedPlansByUser.get(userId) ?? []).find((entry) => entry.planId === planId);
   if (!plan) {
@@ -5494,11 +5491,8 @@ app.get("/api/plans/saved/:planId", (req, res) => {
 });
 
 app.delete("/api/plans/saved/:planId", async (req, res) => {
-  const userId = readAuthUserId(req);
-  if (!userId) {
-    res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
-    return;
-  }
+  const userId = await requireAuthUserId(req, res, authTokenStore);
+  if (!userId) return;
   const planId = req.params.planId;
   const current = savedPlansByUser.get(userId) ?? [];
   const next = current.filter((entry) => entry.planId !== planId);
@@ -5621,8 +5615,8 @@ const finishBootstrap = async (): Promise<void> => {
   if (usersMigrated) await persistUsers();
 
   billingRouteDeps = {
-    readAuthUser: (req) => {
-      const user = readAuthUser(req);
+    readAuthUser: async (req) => {
+      const user = await readAuthUser(req);
       return user ? { id: user.id, email: user.email, isAdmin: user.isAdmin } : null;
     },
     findUserById: (userId) => getStoredUserById(userId) ?? null,
@@ -5635,14 +5629,14 @@ const finishBootstrap = async (): Promise<void> => {
   registerLiveRoutes(app, {
     resolvePlanningSession: (sessionId) => resolvePlanningSession(sessionId),
     deriveOperatingMode: (session) => deriveSessionOperatingMode(session as SessionState),
-    hasGmConsoleAccess: (req) => {
-      const user = readAuthUser(req);
+    hasGmConsoleAccess: async (req) => {
+      const user = await readAuthUser(req);
       return Boolean(user && hasGmConsoleAccess(user));
     },
-    readAuthUser: (req) => readAuthUser(req) ?? undefined,
+    readAuthUser: async (req) => (await readAuthUser(req)) ?? undefined,
     getSessionOwnerId: (sessionId) => sessionUserOwners.get(sessionId),
-    assertLiveInitAllowed: (req, sessionId, operatingMode) => {
-      const user = readAuthUser(req);
+    assertLiveInitAllowed: async (req, sessionId, operatingMode) => {
+      const user = await readAuthUser(req);
       const frozen = liveOpsFrozenError(user);
       if (frozen && operatingMode === "venue") return frozen;
       if (operatingMode !== "venue") return null;
@@ -5655,7 +5649,7 @@ const finishBootstrap = async (): Promise<void> => {
   });
 
   registerAdminRoutes(app, {
-    readAuthUser: (req) => readAuthUser(req) ?? undefined,
+    readAuthUser: async (req) => (await readAuthUser(req)) ?? undefined,
     usersByEmail,
     persistUsers,
     appendBillingAudit,
@@ -5704,7 +5698,7 @@ export async function bootstrap(): Promise<void> {
           "[bootstrap] VERCEL without KV_REST_API_URL/KV_REST_API_TOKEN: auth tokens and users will not persist across serverless instances. Link Upstash Redis (Vercel KV) to this project.",
         );
       }
-      await Promise.all([loadUsers(), loadAuthTokens(authTokens)]);
+      await Promise.all([loadUsers(), authTokenStore.ensureLoaded()]);
       await finishBootstrap();
       void loadDeferredStorage().catch((err) => {
         // eslint-disable-next-line no-console
@@ -5718,7 +5712,7 @@ export async function bootstrap(): Promise<void> {
     await loadOrganizationPools();
     await loadUsageLedger();
     await loadSavedPlans();
-    await loadAuthTokens(authTokens);
+    await authTokenStore.ensureLoaded();
     await loadPlanningSessions(sessions, deserializeSessionFromDisk);
     recomputeIdCountersFromSessions();
     await finishBootstrap();

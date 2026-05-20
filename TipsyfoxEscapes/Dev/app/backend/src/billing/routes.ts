@@ -13,7 +13,9 @@ import {
 } from "./square.js";
 
 export type BillingRouteDeps = {
-  readAuthUser: (req: Request) => { id: string; email: string; isAdmin: boolean } | null;
+  readAuthUser: (
+    req: Request,
+  ) => { id: string; email: string; isAdmin: boolean } | null | Promise<{ id: string; email: string; isAdmin: boolean } | null>;
   findUserById: (userId: string) => {
     id: string;
     email: string;
@@ -151,7 +153,7 @@ export const registerBillingRoutes = (app: Express, getDeps: () => BillingRouteD
   });
 
   app.post("/api/billing/checkout", async (req, res) => {
-    const user = deps().readAuthUser(req);
+    const user = await Promise.resolve(deps().readAuthUser(req));
     if (!user) {
       res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
       return;
@@ -225,7 +227,7 @@ export const registerBillingRoutes = (app: Express, getDeps: () => BillingRouteD
   });
 
   app.get("/api/billing/checkout/:orderId/status", async (req, res) => {
-    const user = deps().readAuthUser(req);
+    const user = await Promise.resolve(deps().readAuthUser(req));
     if (!user) {
       res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
       return;
@@ -241,7 +243,7 @@ export const registerBillingRoutes = (app: Express, getDeps: () => BillingRouteD
 
   /** After redirect from Square, client may call this once to fulfill if webhook is delayed (sandbox/dev). */
   app.post("/api/billing/checkout/confirm", async (req, res) => {
-    const user = deps().readAuthUser(req);
+    const user = await Promise.resolve(deps().readAuthUser(req));
     if (!user) {
       res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
       return;
@@ -299,7 +301,7 @@ export const registerBillingRoutes = (app: Express, getDeps: () => BillingRouteD
 
   /** Web Payments SDK nonce handler (stub — charge + fulfill wired next). */
   app.post("/api/payments/square/process", async (req, res) => {
-    const user = deps().readAuthUser(req);
+    const user = await Promise.resolve(deps().readAuthUser(req));
     if (!user) {
       res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
       return;

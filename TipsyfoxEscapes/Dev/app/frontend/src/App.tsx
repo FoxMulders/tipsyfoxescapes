@@ -28,6 +28,21 @@ import {
   stashWorkspaceDraftForOAuth,
   type OAuthWorkspaceDraft,
 } from "./oauthWorkspaceBridge.ts";
+import {
+  authFetch,
+  configureAuthApi,
+  ensureAuthBootstrap,
+  isFatalAuthError,
+  isRecoverableAuthError,
+  parseAuthErrorCode,
+} from "./authApi.ts";
+import {
+  AUTH_STORAGE_KEY,
+  clearAuthSession,
+  loadAuthSession,
+  saveAuthSession,
+  type StoredAuthSession,
+} from "./authStorage.ts";
 import { FlowStepIntro } from "@/components/planning/FlowStepIntro";
 import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
 import {
@@ -397,7 +412,6 @@ function inspirationCatalogEntryById(id: string): InspirationCatalogEntry | unde
   return INSPIRATION_CATALOG.find((e) => e.id === id);
 }
 const HISTORY_STORAGE_KEY = "escape-room-builder-input-history-v1";
-const AUTH_STORAGE_KEY = "escape-room-builder-auth-v1";
 /** After idle sign-out, saved draft plan id so the next login can reopen the builder automatically. */
 const IDLE_RESUME_PLAN_ID_KEY = "escape-room-builder-idle-resume-plan-v1";
 /** Auto sign-out after this many milliseconds without user activity. */
@@ -2525,15 +2539,14 @@ function CustomThemeCoachPanel({
 export default function App() {
   const inputHistory = useMemo(() => loadHistory(), []);
   const initialAuth = useMemo(() => {
-    try {
-      const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
-      if (!raw) return { authToken: "", authUser: null as AuthUser | null };
-      const parsed = JSON.parse(raw) as { authToken?: string; authUser?: unknown };
-      const authUser = normalizeAuthUser(parsed.authUser);
-      return { authToken: parsed.authToken ?? "", authUser };
-    } catch {
-      return { authToken: "", authUser: null as AuthUser | null };
-    }
+    const stored = loadAuthSession();
+    return {
+      authToken: stored.authToken,
+      refreshToken: stored.refreshToken,
+      accessExpiresAt: stored.accessExpiresAt,
+      refreshExpiresAt: stored.refreshExpiresAt,
+      authUser: normalizeAuthUser(stored.authUser),
+    };
   }, []);
 
   const deviceId = useMemo(() => getOrCreateDeviceId(), []);
@@ -2617,7 +2630,18 @@ export default function App() {
   const coachBrowserAiReadyRef = useRef(coachBrowserAiReady);
   coachBrowserAiReadyRef.current = coachBrowserAiReady;
   const [authToken, setAuthToken] = useState<string>(initialAuth.authToken);
+  const [refreshToken, setRefreshToken] = useState<string>(initialAuth.refreshToken);
+  const [accessExpiresAt, setAccessExpiresAt] = useState<number>(initialAuth.accessExpiresAt);
+  const [refreshExpiresAt, setRefreshExpiresAt] = useState<number>(initialAuth.refreshExpiresAt);
   const [authUser, setAuthUser] = useState<AuthUser | null>(initialAuth.authUser);
+  const [authBootstrapReady, setAuthBootstrapReady] = useState<boolean>(() => !initialAuth.authToken.trim());
+  const authSessionRef = useRef<StoredAuthSession>({
+    authToken: initialAuth.authToken,
+    refreshToken: initialAuth.refreshToken,
+    authUser: initialAuth.authUser,
+    accessExpiresAt: initialAuth.accessExpiresAt,
+    refreshExpiresAt: initialAuth.refreshExpiresAt,
+  });
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [authName, setAuthName] = useState<string>("");
   const [authEmail, setAuthEmail] = useState<string>("");
@@ -3103,9 +3127,9 @@ export default function App() {
       return false;
     }
     try {
-      const response = await fetch(`${API_BASE}/api/planning/session/${activeSessionId}/planning-input`, {
+      const response = await apiFetch(`/api/planning/session/${activeSessionId}/planning-input`, {
         method: "PATCH",
-        headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
+        headers: hasAuthToken() ? undefined : anonJsonHeaders(),
         body: JSON.stringify(body),
       });
       const data = await parseApiJson<{ ok?: boolean; error?: { message?: string; code?: string } }>(response);
@@ -3393,20 +3417,35 @@ export default function App() {
     }
   };
 
-  const persistAuth = (token: string, user: AuthUser | null): void => {
+  const persistAuth = (
+    token: string,
+    user: AuthUser | null,
+    sessionExtras?: { refreshToken?: string; accessExpiresAt?: number; refreshExpiresAt?: number },
+  ): void => {
     const normalized = user ? normalizeAuthUser(user) : null;
     const oauthResumePending = Boolean(token && normalized && peekOAuthPlanningStash());
+    const nextRefreshToken = sessionExtras?.refreshToken ?? (token ? refreshToken : "");
+    const nextAccessExpiresAt = sessionExtras?.accessExpiresAt ?? (token ? accessExpiresAt : 0);
+    const nextRefreshExpiresAt = sessionExtras?.refreshExpiresAt ?? (token ? refreshExpiresAt : 0);
+    const session: StoredAuthSession = {
+      authToken: token,
+      refreshToken: nextRefreshToken,
+      authUser: normalized,
+      accessExpiresAt: nextAccessExpiresAt,
+      refreshExpiresAt: nextRefreshExpiresAt,
+    };
+    authSessionRef.current = session;
     if (token && normalized) {
       try {
-        window.localStorage.setItem(
-          AUTH_STORAGE_KEY,
-          JSON.stringify({ authToken: token, authUser: normalized }),
-        );
+        saveAuthSession(session);
       } catch {
         // Ignore storage errors; in-memory auth state still works for this session.
       }
     }
     setAuthToken(token);
+    setRefreshToken(nextRefreshToken);
+    setAccessExpiresAt(nextAccessExpiresAt);
+    setRefreshExpiresAt(nextRefreshExpiresAt);
     setAuthUser(normalized);
     setShowPlanPicker(Boolean(user));
     setActivePanel(Boolean(user?.canSaveRooms) ? "saved" : "plan");
@@ -3439,7 +3478,7 @@ export default function App() {
     }
     try {
       if (!user || !token) {
-        window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        clearAuthSession();
         return;
       }
       if (normalized) {
@@ -3487,6 +3526,16 @@ export default function App() {
     "Content-Type": "application/json",
     "X-Device-Id": deviceId,
   });
+  const apiFetch = (path: string, init?: RequestInit): Promise<Response> => {
+    const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+    if (!currentAuthToken()) {
+      return fetch(url, {
+        ...init,
+        headers: { ...anonJsonHeaders(), ...(init?.headers ?? {}) },
+      });
+    }
+    return authFetch(url, init);
+  };
 
   const openUpgradePrompt = (message?: string): void => {
     setUpgradePromptMessage(
@@ -3548,35 +3597,38 @@ export default function App() {
     const token = (opts?.tokenOverride ?? currentAuthToken()).trim();
     if (!token) return false;
     try {
-      const response = await fetch(`${API_BASE}/api/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-Device-Id": deviceId,
-        },
+      const response = await authFetch(`${API_BASE}/api/me`, {
+        method: "GET",
+        headers: opts?.tokenOverride
+          ? { Authorization: `Bearer ${token}`, "X-Device-Id": deviceId }
+          : { "X-Device-Id": deviceId },
       });
-      const data = (await response.json()) as { user?: AuthUser; error?: { code?: string; message?: string } };
+      const data = (await response.json()) as {
+        user?: AuthUser;
+        accessExpiresAt?: number;
+        error?: { code?: string; message?: string };
+      };
       if (response.status === 401) {
-        const staleToken =
-          data.error?.code === "TOKEN_INVALID" ||
-          data.error?.code === "UNAUTHORIZED" ||
-          Boolean(data.error?.message?.toLowerCase().includes("sign-in"));
-        if (staleToken && opts?.retryOnStaleToken !== false) {
+        const code = parseAuthErrorCode(data);
+        if (isRecoverableAuthError(code) && opts?.retryOnStaleToken !== false) {
           await new Promise((resolve) => window.setTimeout(resolve, 450));
           return refreshProfile({ retryOnStaleToken: false, tokenOverride: token });
         }
-        handleAuthExpired(data.error?.message);
+        if (isFatalAuthError(code) || code === "UNAUTHORIZED" || code === "TOKEN_MISSING") {
+          handleAuthExpired(data.error?.message);
+        }
         return false;
       }
       if (data.user) {
         const normalized = normalizeAuthUser(data.user);
         if (normalized) {
-          setAuthToken(token);
-          setAuthUser(normalized);
-          try {
-            window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authToken: token, authUser: normalized }));
-          } catch {
-            // ignore
-          }
+          const session = authSessionRef.current;
+          persistAuth(token, normalized, {
+            refreshToken: session.refreshToken || refreshToken,
+            accessExpiresAt:
+              typeof data.accessExpiresAt === "number" ? data.accessExpiresAt : session.accessExpiresAt,
+            refreshExpiresAt: session.refreshExpiresAt || refreshExpiresAt,
+          });
         }
       }
       return true;
@@ -3593,13 +3645,9 @@ export default function App() {
     response: Response,
     data?: { error?: { code?: string; message?: string } },
   ): boolean => {
-    const code = data?.error?.code;
-    return (
-      response.status === 401 ||
-      code === "UNAUTHORIZED" ||
-      code === "TOKEN_EXPIRED" ||
-      code === "TOKEN_INVALID"
-    );
+    const code = parseAuthErrorCode(data);
+    if (response.status !== 401) return false;
+    return isFatalAuthError(code) || code === "UNAUTHORIZED" || code === "TOKEN_MISSING";
   };
 
   const handleThemeGenerationAuthExpired = (): void => {
@@ -3621,7 +3669,7 @@ export default function App() {
     const staleToken = currentAuthToken();
     setAuthToken("");
     try {
-      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+      clearAuthSession();
       if (staleToken) void clearPersistedPlanningSession(staleToken);
     } catch {
       // Keep in-memory planning inputs even if storage cleanup fails.
@@ -3639,7 +3687,7 @@ export default function App() {
     if (!authToken || !authUser || appView !== "account") return;
     void (async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/billing/audit-log`, { headers: withAuthGetHeaders() });
+        const response = await apiFetch("/api/billing/audit-log");
         if (response.status === 401) {
           handleAuthExpired();
           return;
@@ -3731,9 +3779,8 @@ export default function App() {
     void (async () => {
       setAppView("account");
       try {
-        const response = await fetch(`${API_BASE}/api/billing/checkout/confirm`, {
+        const response = await apiFetch("/api/billing/checkout/confirm", {
           method: "POST",
-          headers: withAuthHeaders(),
           body: JSON.stringify({ ref }),
         });
         const data = (await response.json()) as {
@@ -3753,12 +3800,7 @@ export default function App() {
         }
         const normalized = data.user ? normalizeAuthUser(data.user) : null;
         if (normalized) {
-          setAuthUser(normalized);
-          try {
-            window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authToken, authUser: normalized }));
-          } catch {
-            // ignore
-          }
+          persistAuth(authToken, normalized);
         }
         if (data.alreadyFulfilled) {
           setBillingNotice("Your room pack is already active on this account.");
@@ -3791,9 +3833,8 @@ export default function App() {
     const layoutRoomCount =
       plan?.scalableRoomPricing && planId === SCALABLE_OPERATOR_PLAN_ID ? escapePlanRooms.length : undefined;
     try {
-      const response = await fetch(`${API_BASE}/api/billing/checkout`, {
+      const response = await apiFetch("/api/billing/checkout", {
         method: "POST",
-        headers: withAuthHeaders(),
         body: JSON.stringify({
           planId,
           ...(layoutRoomCount ? { layoutRoomCount } : {}),
@@ -3829,9 +3870,8 @@ export default function App() {
           return;
         }
       }
-      const response = await fetch(`${API_BASE}/api/billing/activate-test`, {
+      const response = await apiFetch("/api/billing/activate-test", {
         method: "POST",
-        headers: withAuthHeaders(),
         body: JSON.stringify({
           activationKey: activationKey.trim(),
           roomsToAdd,
@@ -3880,12 +3920,62 @@ export default function App() {
     persistAuth("", null);
     setError(message?.trim() || "Your sign-in expired. Please log in again.");
   };
+  const handleAuthExpiredRef = useRef(handleAuthExpired);
+  handleAuthExpiredRef.current = handleAuthExpired;
 
   useEffect(() => {
-    if (!authToken || oauthHydratingRef.current) return;
+    configureAuthApi({
+      apiBase: API_BASE,
+      deviceId,
+      getSession: () => ({
+        authToken: currentAuthToken(),
+        refreshToken: authSessionRef.current.refreshToken || refreshToken,
+        authUser: authSessionRef.current.authUser ?? authUser,
+        accessExpiresAt: authSessionRef.current.accessExpiresAt || accessExpiresAt,
+        refreshExpiresAt: authSessionRef.current.refreshExpiresAt || refreshExpiresAt,
+      }),
+      persistSession: (session) => {
+        const normalized = normalizeAuthUser(session.authUser);
+        authSessionRef.current = { ...session, authUser: normalized };
+        setAuthToken(session.authToken);
+        setRefreshToken(session.refreshToken);
+        setAccessExpiresAt(session.accessExpiresAt);
+        setRefreshExpiresAt(session.refreshExpiresAt);
+        if (normalized) setAuthUser(normalized);
+        if (session.authToken.trim()) {
+          saveAuthSession({ ...session, authUser: normalized });
+        }
+      },
+      onSessionExpired: (message) => handleAuthExpiredRef.current(message),
+    });
+  }, [deviceId, refreshToken, accessExpiresAt, refreshExpiresAt, authUser]);
+
+  useEffect(() => {
+    if (authBootstrapReady) return;
+    void (async () => {
+      if (!initialAuth.authToken.trim()) {
+        setAuthBootstrapReady(true);
+        return;
+      }
+      const status = await ensureAuthBootstrap();
+      if (status === "authenticated") {
+        await refreshProfile({ retryOnStaleToken: false });
+      } else {
+        const stored = loadAuthSession();
+        if (!stored.refreshToken.trim()) {
+          persistAuth("", null);
+        }
+      }
+      setAuthBootstrapReady(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time bootstrap
+  }, []);
+
+  useEffect(() => {
+    if (!authBootstrapReady || !authToken || oauthHydratingRef.current) return;
     void refreshProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh on token only
-  }, [authToken]);
+  }, [authToken, authBootstrapReady]);
 
   const handleSignup = async (): Promise<void> => {
     setAuthSubmitting(true);
@@ -3906,7 +3996,14 @@ export default function App() {
           acceptedTerms: true,
         }),
       });
-      const data = (await response.json()) as { authToken?: string; user?: AuthUser; error?: { message?: string } };
+      const data = (await response.json()) as {
+        authToken?: string;
+        refreshToken?: string;
+        accessExpiresAt?: number;
+        refreshExpiresAt?: number;
+        user?: AuthUser;
+        error?: { message?: string };
+      };
       if (!response.ok || !data.authToken || !data.user) {
         setError(data.error?.message ?? "Sign up failed.");
         return;
@@ -3916,7 +4013,11 @@ export default function App() {
         setError("Sign up response was incomplete.");
         return;
       }
-      persistAuth(data.authToken, signedUp);
+      persistAuth(data.authToken, signedUp, {
+        refreshToken: data.refreshToken,
+        accessExpiresAt: data.accessExpiresAt,
+        refreshExpiresAt: data.refreshExpiresAt,
+      });
       await refreshProfile({ retryOnStaleToken: true });
     } catch {
       setError("Sign up failed. Check backend and try again.");
@@ -3934,7 +4035,14 @@ export default function App() {
         headers: anonJsonHeaders(),
         body: JSON.stringify({ login: authEmail.trim(), password: authPassword }),
       });
-      const data = (await response.json()) as { authToken?: string; user?: AuthUser; error?: { message?: string } };
+      const data = (await response.json()) as {
+        authToken?: string;
+        refreshToken?: string;
+        accessExpiresAt?: number;
+        refreshExpiresAt?: number;
+        user?: AuthUser;
+        error?: { message?: string };
+      };
       if (!response.ok || !data.authToken || !data.user) {
         setError(data.error?.message ?? "Log in failed.");
         return;
@@ -3944,7 +4052,11 @@ export default function App() {
         setError("Log in response was incomplete.");
         return;
       }
-      persistAuth(data.authToken, loggedIn);
+      persistAuth(data.authToken, loggedIn, {
+        refreshToken: data.refreshToken,
+        accessExpiresAt: data.accessExpiresAt,
+        refreshExpiresAt: data.refreshExpiresAt,
+      });
       await refreshProfile({ retryOnStaleToken: true });
     } catch {
       setError("Log in failed. Check backend and try again.");
@@ -3994,6 +4106,8 @@ export default function App() {
       window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
     }
     const callbackToken = url.searchParams.get("auth_token");
+    const callbackRefresh = url.searchParams.get("refresh_token");
+    const callbackAccessExpires = Number(url.searchParams.get("access_expires_at") ?? "0");
     const callbackUserRaw = url.searchParams.get("auth_user");
     if (!callbackToken || !callbackUserRaw) return;
     oauthHydratingRef.current = true;
@@ -4002,7 +4116,10 @@ export default function App() {
       try {
         const callbackUser = normalizeAuthUser(JSON.parse(decodeURIComponent(callbackUserRaw)));
         if (!callbackUser) throw new Error("invalid user");
-        persistAuth(callbackToken, callbackUser);
+        persistAuth(callbackToken, callbackUser, {
+          refreshToken: callbackRefresh ?? "",
+          accessExpiresAt: Number.isFinite(callbackAccessExpires) ? callbackAccessExpires : 0,
+        });
         const profileOk = await refreshProfile({ retryOnStaleToken: true, tokenOverride: callbackToken });
         if (profileOk) {
           const workspaceDraft = consumeWorkspaceDraftForOAuth();
@@ -4014,6 +4131,8 @@ export default function App() {
         oauthHydratingRef.current = false;
         clearOAuthReturnMarker();
         url.searchParams.delete("auth_token");
+        url.searchParams.delete("refresh_token");
+        url.searchParams.delete("access_expires_at");
         url.searchParams.delete("auth_user");
         window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
       }
@@ -4030,9 +4149,9 @@ export default function App() {
       handleThemeGenerationAuthExpired();
       return undefined;
     }
-    const response = await fetch(`${API_BASE}${endpoint}`, {
+    const response = await apiFetch(endpoint, {
       method: "POST",
-      headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
+      headers: hasAuthToken() ? undefined : anonJsonHeaders(),
       body:
         endpoint === "/api/themes/refresh"
           ? JSON.stringify({ sessionId: activeSessionId, excludeThemeIds: currentThemes.map((theme) => theme.id) })
@@ -4072,7 +4191,7 @@ export default function App() {
         handleThemeGenerationAuthExpired();
         return false;
       }
-      const response = await fetch(`${API_BASE}/api/puzzles/generate`, {
+      const response = await apiFetch("/api/puzzles/generate", {
         method: "POST",
         headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify({ sessionId: activeSessionId, themeId }),
@@ -4182,7 +4301,7 @@ export default function App() {
     activeSessionId: string,
     nextExistingPuzzles: Array<{ name: string; link: string; roomPart: string }>,
   ): Promise<void> => {
-    await fetch(`${API_BASE}/api/planning/session/${activeSessionId}/existing-puzzles`, {
+    await apiFetch(`/api/planning/session/${activeSessionId}/existing-puzzles`, {
       method: "POST",
       headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
       body: JSON.stringify({ existingPuzzles: nextExistingPuzzles }),
@@ -4204,7 +4323,7 @@ export default function App() {
     };
 
     try {
-      const response = await fetch(`${API_BASE}/api/planning/session`, {
+      const response = await apiFetch("/api/planning/session", {
         method: "POST",
         headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify(payload),
@@ -4574,7 +4693,7 @@ export default function App() {
       }
       let response: Response;
       try {
-        response = await fetch(`${API_BASE}/api/themes/custom`, {
+        response = await apiFetch("/api/themes/custom", {
           method: "POST",
           headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
           body: JSON.stringify({
@@ -4773,7 +4892,7 @@ export default function App() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/planning/session/${sessionId}/theme-coach`, {
+        const res = await apiFetch(`/api/planning/session/${sessionId}/theme-coach`, {
           headers: withAuthGetHeaders(),
         });
         if (cancelled) return;
@@ -4856,7 +4975,7 @@ export default function App() {
   useEffect(() => {
     if (!authToken || !sessionId || themePath !== "custom") return;
     const handle = window.setTimeout(() => {
-      void fetch(`${API_BASE}/api/planning/session/${sessionId}/theme-coach`, {
+      void apiFetch(`/api/planning/session/${sessionId}/theme-coach`, {
         method: "PUT",
         headers: withAuthHeaders(),
         body: JSON.stringify({
@@ -4938,7 +5057,7 @@ export default function App() {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE}/api/puzzles/${encodeURIComponent(puzzleId)}/replace`, {
+      const response = await apiFetch(`/api/puzzles/${encodeURIComponent(puzzleId)}/replace`, {
         method: "POST",
         headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify({ sessionId: activeSessionId, themeId: selectedThemeId }),
@@ -4982,7 +5101,7 @@ export default function App() {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE}/api/puzzles/${encodeURIComponent(puzzleId)}/reject`, {
+      const response = await apiFetch(`/api/puzzles/${encodeURIComponent(puzzleId)}/reject`, {
         method: "POST",
         headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify({ sessionId: activeSessionId }),
@@ -5036,7 +5155,7 @@ export default function App() {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE}/api/puzzles/fill-slot`, {
+      const response = await apiFetch("/api/puzzles/fill-slot", {
         method: "POST",
         headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify({
@@ -5086,7 +5205,7 @@ export default function App() {
       if (!activeSessionId) return;
       const synced = await syncPlanningInputToServer(activeSessionId, "strict");
       if (!synced) return;
-      const response = await fetch(`${API_BASE}/api/plans/${activeSessionId}/export`, {
+      const response = await apiFetch(`/api/plans/${activeSessionId}/export`, {
         method: "POST",
         headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
         body: JSON.stringify({ format: "both" }),
@@ -5220,7 +5339,7 @@ export default function App() {
 
   const refreshSavedPlans = async (): Promise<void> => {
     if (!authToken) return;
-    const response = await fetch(`${API_BASE}/api/plans/saved`, {
+    const response = await apiFetch("/api/plans/saved", {
       headers: withAuthGetHeaders(),
     });
     if (response.status === 401) {
@@ -5248,7 +5367,7 @@ export default function App() {
       return;
     }
     try {
-      const response = await fetch(`${API_BASE}/api/plans/${activeSessionId}/save`, {
+      const response = await apiFetch(`/api/plans/${activeSessionId}/save`, {
         method: "POST",
         headers: withAuthHeaders(),
         body: JSON.stringify({
@@ -5310,7 +5429,7 @@ export default function App() {
       return null;
     }
     try {
-      const response = await fetch(`${API_BASE}/api/plans/${activeSessionId}/save`, {
+      const response = await apiFetch(`/api/plans/${activeSessionId}/save`, {
         method: "POST",
         headers: withAuthHeaders(),
         body: JSON.stringify({
@@ -5357,7 +5476,7 @@ export default function App() {
   const loadSavedPlan = async (planId: string): Promise<boolean> => {
     setError("");
     try {
-      const response = await fetch(`${API_BASE}/api/plans/saved/${planId}`, {
+      const response = await apiFetch(`/api/plans/saved/${planId}`, {
         headers: withAuthGetHeaders(),
       });
       if (response.status === 401) {
@@ -5435,7 +5554,7 @@ export default function App() {
       setCustomThemeCoachMessages(restoredCoach);
       themeCoachHydratedForSessionRef.current = data.savedPlan.sessionId;
       if (authToken && restoredCoach.length > 0) {
-        void fetch(`${API_BASE}/api/planning/session/${data.savedPlan.sessionId}/theme-coach`, {
+        void apiFetch(`/api/planning/session/${data.savedPlan.sessionId}/theme-coach`, {
           method: "PUT",
           headers: withAuthHeaders(),
           body: JSON.stringify({ messages: restoredCoach }),
@@ -5470,7 +5589,7 @@ export default function App() {
     }
     setError("");
     try {
-      const response = await fetch(`${API_BASE}/api/plans/saved/${planId}`, {
+      const response = await apiFetch(`/api/plans/saved/${planId}`, {
         method: "DELETE",
         headers: withAuthGetHeaders(),
       });
@@ -5696,6 +5815,17 @@ export default function App() {
         ))}
       </ul>
     );
+
+  if (!authBootstrapReady && initialAuth.authToken.trim()) {
+    return (
+      <>
+        <AppAtmosphere />
+        <main className="page-shell page-shell--layered auth-layout auth-layout--compact">
+          <p className="muted auth-hero-para">Checking sign-in…</p>
+        </main>
+      </>
+    );
+  }
 
   if (!authUser) {
     return (

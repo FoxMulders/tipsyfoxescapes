@@ -1,9 +1,9 @@
 import type { RequestHandler } from "express";
+import type { AuthTokenStore } from "./authSession.js";
 
 type DiskSyncDeps = {
-  loadAuthTokens: (map: Map<string, string>) => Promise<void>;
+  authStore: AuthTokenStore;
   loadUsers: () => Promise<void>;
-  authTokens: Map<string, string>;
 };
 
 const shouldReloadAuthFromStore = (): boolean =>
@@ -16,7 +16,7 @@ export const createVercelDiskSyncMiddleware = (deps: DiskSyncDeps): RequestHandl
       next();
       return;
     }
-    void Promise.all([deps.loadAuthTokens(deps.authTokens), deps.loadUsers()])
+    void Promise.all([deps.authStore.reloadFromDisk(), deps.loadUsers()])
       .then(() => next())
       .catch(next);
   };

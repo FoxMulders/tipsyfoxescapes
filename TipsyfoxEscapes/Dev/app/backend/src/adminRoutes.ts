@@ -24,7 +24,7 @@ export type AdminStoredUser = LifecycleUser & {
 };
 
 export type AdminRouteDeps = {
-  readAuthUser: (req: express.Request) => AdminStoredUser | undefined;
+  readAuthUser: (req: express.Request) => AdminStoredUser | undefined | Promise<AdminStoredUser | undefined>;
   usersByEmail: Map<string, AdminStoredUser>;
   persistUsers: () => Promise<void>;
   appendBillingAudit: (entry: {
@@ -39,8 +39,12 @@ export type AdminRouteDeps = {
   getLiveConnectionStats: () => Array<{ sessionId: string; connections: number }>;
 };
 
-const requireAdmin = (deps: AdminRouteDeps, req: express.Request, res: express.Response): AdminStoredUser | null => {
-  const user = deps.readAuthUser(req);
+const requireAdmin = async (
+  deps: AdminRouteDeps,
+  req: express.Request,
+  res: express.Response,
+): Promise<AdminStoredUser | null> => {
+  const user = await Promise.resolve(deps.readAuthUser(req));
   if (!user) {
     res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Auth token is required.", details: [] } });
     return null;
@@ -74,7 +78,7 @@ const adminUserRow = (user: AdminStoredUser) => ({
 
 export const registerAdminRoutes = (app: express.Express, deps: AdminRouteDeps): void => {
   app.get("/api/admin/users", async (req, res) => {
-    if (!requireAdmin(deps, req, res)) return;
+    if (!(await requireAdmin(deps, req, res))) return;
     const q = String(req.query.search ?? "")
       .trim()
       .toLowerCase();
@@ -104,7 +108,7 @@ export const registerAdminRoutes = (app: express.Express, deps: AdminRouteDeps):
   });
 
   app.patch("/api/admin/users/:userId", async (req, res) => {
-    const admin = requireAdmin(deps, req, res);
+    const admin = await requireAdmin(deps, req, res);
     if (!admin) return;
     const userId = String(req.params.userId ?? "").trim();
     const target = Array.from(deps.usersByEmail.values()).find((u) => u.id === userId);
@@ -155,7 +159,7 @@ export const registerAdminRoutes = (app: express.Express, deps: AdminRouteDeps):
   });
 
   app.get("/api/admin/audit", async (req, res) => {
-    if (!requireAdmin(deps, req, res)) return;
+    if (!(await requireAdmin(deps, req, res))) return;
     const limit = Math.min(500, Math.max(20, Number.parseInt(String(req.query.limit ?? "100"), 10) || 100));
     const emailFilter = String(req.query.email ?? "")
       .trim()
@@ -168,7 +172,7 @@ export const registerAdminRoutes = (app: express.Express, deps: AdminRouteDeps):
   });
 
   app.post("/api/admin/session-locks/clear", async (req, res) => {
-    const admin = requireAdmin(deps, req, res);
+    const admin = await requireAdmin(deps, req, res);
     if (!admin) return;
     const userId = typeof req.body?.userId === "string" ? req.body.userId.trim() : undefined;
     const cleared = deps.clearSessionLocks(userId || undefined);
