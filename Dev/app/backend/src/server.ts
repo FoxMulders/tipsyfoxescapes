@@ -3457,6 +3457,8 @@ const sendVerificationEmail = async (
   const verificationUrl = `${appBaseUrl}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
   const fromAddress = String(process.env.EMAIL_FROM ?? "Tipsy Fox Escapes <noreply@tipsyfoxescapes.com>").trim();
   const resendKey = String(process.env.RESEND_API_KEY ?? "").trim();
+  const smtpUser = String(process.env.SMTP_USER ?? "").trim();
+  const smtpPass = String(process.env.SMTP_PASS ?? "").trim();
 
   const html = `
 <!DOCTYPE html>
@@ -3481,6 +3483,7 @@ const sendVerificationEmail = async (
 </body>
 </html>`;
 
+  // Priority 1: Resend REST API
   if (resendKey) {
     try {
       const resp = await fetch("https://api.resend.com/emails", {
@@ -3503,7 +3506,32 @@ const sendVerificationEmail = async (
     return {};
   }
 
-  // No email service configured — log the link and surface it in dev
+  // Priority 2: SMTP (Gmail App Password or any SMTP server)
+  if (smtpUser && smtpPass) {
+    try {
+      const nodemailer = await import("nodemailer");
+      const smtpHost = String(process.env.SMTP_HOST ?? "smtp.gmail.com").trim();
+      const smtpPort = Number(process.env.SMTP_PORT ?? "587");
+      const transporter = nodemailer.default.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: { user: smtpUser, pass: smtpPass },
+      });
+      await transporter.sendMail({
+        from: fromAddress,
+        to: toEmail,
+        subject: "Verify your Tipsy Fox Escapes email",
+        html,
+      });
+      console.log(`[verify-email] ✉  Sent via SMTP to ${toEmail}`);
+    } catch (e) {
+      console.error("[verify-email] SMTP send failed:", e);
+    }
+    return {};
+  }
+
+  // Priority 3: No email service configured — log the link and surface it in dev
   console.log(`\n[verify-email] ✉  Verification link for ${toEmail}:\n  ${verificationUrl}\n`);
   const isVercel = Boolean(process.env.VERCEL);
   return isVercel ? {} : { devUrl: verificationUrl };
