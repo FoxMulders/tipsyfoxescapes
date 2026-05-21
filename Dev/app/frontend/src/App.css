@@ -6450,6 +6450,7 @@ ul.auth-hero-para {
 
 .app-sidebar-col {
   min-width: 0;
+  align-self: stretch;
 }
 
 .app-sidebar-col .app-top-nav {
