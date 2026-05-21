@@ -314,7 +314,7 @@ export const handleOAuthStart = async (
       return;
     }
 
-    const callbackUri = buildOAuthCallbackUrl(provider);
+    const callbackUri = buildOAuthCallbackUrl(provider, callbackBaseUrl);
     const state = createOAuthState(provider, returnTo);
     const params = new URLSearchParams({
       client_id: creds.clientId,
