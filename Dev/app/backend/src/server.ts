@@ -3733,16 +3733,17 @@ app.get("/api/config", (_req, res) => {
 
 app.get("/version", (_req, res) => {
   const readVersion = (): string => {
-    const bundled = path.join(__dirname, "..", "..", "api", "app-version.json");
+    const here = new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+    const base = path.resolve(path.dirname(here), "..", "..");
     try {
-      const data = JSON.parse(readFileSync(bundled, "utf8")) as { version?: string };
+      const data = JSON.parse(readFileSync(path.join(base, "api", "app-version.json"), "utf8")) as { version?: string };
       if (typeof data.version === "string" && data.version.trim()) return data.version.trim();
     } catch {
       /* fall through */
     }
     try {
       const pkg = JSON.parse(
-        readFileSync(path.join(__dirname, "..", "..", "frontend", "package.json"), "utf8"),
+        readFileSync(path.join(base, "frontend", "package.json"), "utf8"),
       ) as { version?: string };
       return typeof pkg.version === "string" ? pkg.version : "0.0.0";
     } catch {
