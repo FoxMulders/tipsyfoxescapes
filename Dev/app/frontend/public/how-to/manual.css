@@ -56,6 +56,27 @@ code {
   box-shadow: var(--shadow);
 }
 
+.manual-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.9rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: rgba(87, 211, 223, 0.08);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.manual-back-link:hover {
+  background: rgba(87, 211, 223, 0.16);
+  border-color: rgba(87, 211, 223, 0.55);
+}
+
 .manual-brand {
   margin: 0 0 0.35rem;
   font-size: 0.78rem;
