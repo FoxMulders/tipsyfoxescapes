@@ -5585,9 +5585,9 @@ ul.auth-hero-para {
   font-family: 'Cinzel Decorative', 'Georgia', serif;
   font-weight: 700;
   letter-spacing: 0.03em;
-  color: #c8694e;
+  color: #f4f8ff;
   text-shadow:
-    0 0 18px rgba(185, 80, 45, 0.32),
+    0 0 18px rgba(200, 230, 255, 0.18),
     0 1px 6px rgba(0, 0, 0, 0.55);
 }
 
