@@ -7167,7 +7167,19 @@ export default function App() {
                         </div>
                       ) : null}
                       {themes.length === 0 && themeIdeasLoading && !themeSessionExpiredNotice ? (
-                        <p className="muted">Generating theme ideas...</p>
+                        <div className="theme-generating-indicator" role="status" aria-live="polite">
+                          <div className="theme-generating-spinner" aria-hidden="true">
+                            <span /><span /><span />
+                          </div>
+                          <p className="theme-generating-headline">Generating original themes…</p>
+                          <p className="theme-generating-sub muted">
+                            The AI is crafting 3 unique escape-room concepts tailored to your setup.
+                            This usually takes <strong>10–20 seconds</strong> — hang tight.
+                          </p>
+                          <div className="theme-generating-bar" aria-hidden="true">
+                            <div className="theme-generating-bar__fill" />
+                          </div>
+                        </div>
                       ) : null}
                       {themes.length === 0 && !themeIdeasLoading && !themeSessionExpiredNotice ? (
                         <p className="muted">Theme ideas will appear here automatically once your session is ready.</p>

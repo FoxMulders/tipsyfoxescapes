@@ -4717,6 +4717,23 @@ app.post("/api/themes/generate", async (req, res) => {
     });
     return;
   }
+  const openAiKey = String(process.env.OPENAI_API_KEY ?? "").trim();
+  if (openAiKey && openAiKey.startsWith("sk-")) {
+    try {
+      const aiThemes = await callOpenAiThemes(openAiKey, session, new Set());
+      aiThemes.forEach((theme) => {
+        session.seenThemeIds.add(theme.id);
+        const tk = normalizeThemeTitleKey(theme.name);
+        if (tk) session.seenThemeTitlesLower.add(tk);
+      });
+      const enriched = injectItemsIntoThemes(enrichThemesWithRecommended(aiThemes, session), session);
+      session.generatedThemes = enriched;
+      res.json({ themes: enriched, aiGenerated: true });
+      return;
+    } catch (err) {
+      console.error("[themes/generate] OpenAI failed — falling back to static pool:", err instanceof Error ? err.message : String(err));
+    }
+  }
   const poolCandidates = sortThemesForSessionAffinity(
     themePool
       .filter(
@@ -4742,9 +4759,7 @@ app.post("/api/themes/generate", async (req, res) => {
     session,
   );
   session.generatedThemes = enriched;
-  res.json({
-    themes: enriched,
-  });
+  res.json({ themes: enriched });
 });
 
 app.post("/api/themes/refresh", async (req, res) => {
@@ -4774,6 +4789,26 @@ app.post("/api/themes/refresh", async (req, res) => {
   requestExcludes.forEach((id) => markSkipped("theme", id));
   void persistSkipHistory();
   const excludes = new Set<string>([...requestExcludes, ...session.seenThemeIds]);
+  const excludeNames = new Set<string>(
+    session.generatedThemes.map((t) => t.name).filter(Boolean),
+  );
+  const openAiKeyR = String(process.env.OPENAI_API_KEY ?? "").trim();
+  if (openAiKeyR && openAiKeyR.startsWith("sk-")) {
+    try {
+      const aiThemes = await callOpenAiThemes(openAiKeyR, session, excludeNames);
+      aiThemes.forEach((theme) => {
+        session.seenThemeIds.add(theme.id);
+        const tk = normalizeThemeTitleKey(theme.name);
+        if (tk) session.seenThemeTitlesLower.add(tk);
+      });
+      const enrichedAi = injectItemsIntoThemes(enrichThemesWithRecommended(aiThemes, session), session);
+      session.generatedThemes = enrichedAi;
+      res.json({ themes: enrichedAi, aiGenerated: true });
+      return;
+    } catch (err) {
+      console.error("[themes/refresh] OpenAI failed — falling back to static pool:", err instanceof Error ? err.message : String(err));
+    }
+  }
   const poolCandidates = sortThemesForSessionAffinity(
     themePool
       .filter(
@@ -4802,10 +4837,7 @@ app.post("/api/themes/refresh", async (req, res) => {
     session,
   );
   session.generatedThemes = enrichedRefresh;
-
-  res.json({
-    themes: enrichedRefresh,
-  });
+  res.json({ themes: enrichedRefresh });
 });
 
 app.post("/api/themes/custom", async (req, res) => {
@@ -6156,6 +6188,88 @@ app.post("/api/inspiration/generate", async (req, res) => {
 
 // ─── End Inspiration API ────────────────────────────────────────────────────
 
+// ─── AI Theme Generation ─────────────────────────────────────────────────────
+
+type AiThemeRaw = {
+  name?: unknown;
+  tldr?: unknown;
+  description?: unknown;
+};
+
+const callOpenAiThemes = async (
+  apiKey: string,
+  session: SessionState,
+  excludeNames: Set<string>,
+): Promise<Theme[]> => {
+  const p = session.planningInput;
+  const items = p.availableItems.length > 0 ? p.availableItems.join(", ") : "none specified — use common household items";
+  const existing = session.generatedThemes.map((t) => t.name).filter(Boolean);
+  const allExcluded = [...new Set([...existing, ...excludeNames])];
+
+  const systemPrompt = `You are a creative escape-room designer. Generate exactly 3 COMPLETELY ORIGINAL escape-room theme ideas. Each must be unique in genre, setting, and puzzle style. Do not reuse common tropes (pirates, haunted house, spy lab) unless given a strong environmental reason. Return ONLY valid JSON — no markdown, no prose, no extra keys.`;
+
+  const userPrompt = [
+    `Players: ${p.playersConcurrent} concurrent, ${p.participantsTotal} total`,
+    `Session length: ${p.sessionDurationMinutes} min`,
+    `Environment: ${p.environmentType || "home living room"}`,
+    `Props on hand: ${items}`,
+    `Difficulty: ${p.roomDifficulty}`,
+    p.eventType ? `Event context: ${p.eventType}` : "",
+    p.themeMustMatchEnvironment ? "IMPORTANT: every theme MUST be rooted in the physical environment described above." : "",
+    allExcluded.length > 0 ? `Do NOT reuse these already-seen theme names: ${allExcluded.join(", ")}` : "",
+    "",
+    'Return ONLY this JSON (no markdown, no code fences):',
+    '{"themes":[',
+    '  {"name":"Theme Name","tldr":"One punchy sentence that sells the premise.","description":"3–5 paragraph markdown brief. Open with a story hook (## Story), then ## The Mission, then ## Puzzle Flavour (3–4 bullet ideas). Each bullet must be concretely tied to the available props or environment."},',
+    '  {"name":"...","tldr":"...","description":"..."},',
+    '  {"name":"...","tldr":"...","description":"..."}',
+    ']}',
+    "",
+    "The three themes must differ completely in genre and tone. Each description MUST be at least 200 words.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: 3200,
+      temperature: 0.9,
+    }),
+    signal: AbortSignal.timeout(55_000),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`OpenAI themes ${response.status}: ${body.slice(0, 300)}`);
+  }
+
+  const data = (await response.json()) as { choices: Array<{ message: { content: string } }> };
+  const raw = data.choices[0]?.message?.content ?? "";
+  const jsonStart = raw.indexOf("{");
+  const jsonEnd = raw.lastIndexOf("}");
+  if (jsonStart < 0 || jsonEnd <= jsonStart) throw new Error("No JSON object in OpenAI themes response");
+  const parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1)) as { themes?: unknown };
+
+  const rawThemes: AiThemeRaw[] = Array.isArray(parsed.themes) ? (parsed.themes as AiThemeRaw[]) : [];
+  if (rawThemes.length === 0) throw new Error("OpenAI returned no themes array");
+
+  return rawThemes.slice(0, 3).map((t): Theme => ({
+    id: `th_ai_${nextThemeId++}`,
+    name: typeof t.name === "string" && t.name.trim() ? t.name.trim() : "Original Theme",
+    tldr: typeof t.tldr === "string" && t.tldr.trim() ? t.tldr.trim() : "",
+    description: typeof t.description === "string" && t.description.trim() ? t.description.trim() : "",
+  }));
+};
+
+// ─── End AI Theme Generation ──────────────────────────────────────────────────
+
 const port = process.env.PORT || 3001;
 
 const recomputeIdCountersFromSessions = (): void => {
@@ -6311,4 +6425,6 @@ if (!process.env.VERCEL) {
     });
   });
 }
+
+
 
