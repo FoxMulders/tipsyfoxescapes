@@ -374,45 +374,40 @@ export const handleOAuthCallback = async (
     return;
   }
 
-  const stateData = verifyOAuthState(state, provider);
-  if (!stateData) {
-    const fallbackReturn = `${resolveAuthCallbackBaseUrl() || "http://localhost:5173"}/`;
-    const message = state
-      ? "Invalid or expired OAuth callback state. Start sign-in again from the app."
-      : "Missing OAuth state. Start sign-in again from the app.";
-    redirectOAuthStartFailure(res, fallbackReturn, "invalid_state", message);
-    return;
-  }
-  if (!code) {
-    const message =
-      oauthErrorDescription ||
-      (oauthError === "redirect_uri_mismatch"
-        ? `GitHub redirect URI must exactly match ${buildOAuthCallbackUrl("github")}`
-        : oauthError
-          ? `${provider} sign-in failed (${oauthError}).`
-          : "Authorization was not completed. Try signing in again.");
-    redirectOAuthStartFailure(res, stateData.returnTo, oauthError || "access_denied", message);
-    return;
-  }
+  const reqHeaders = req.headers as Record<string, string | string[] | undefined>;
+  const appBase = resolveAuthCallbackBaseUrl(undefined, reqHeaders) || "http://localhost:5173";
+  const appRoot = `${appBase}/`;
 
   try {
+    const stateData = verifyOAuthState(state, provider);
+    if (!stateData) {
+      const message = state
+        ? "Invalid or expired OAuth callback state. Start sign-in again from the app."
+        : "Missing OAuth state. Start sign-in again from the app.";
+      redirectOAuthStartFailure(res, appRoot, "invalid_state", message);
+      return;
+    }
+    if (!code) {
+      const callbackUriForMsg = buildOAuthCallbackUrl(provider, appBase);
+      const message =
+        oauthErrorDescription ||
+        (oauthError === "redirect_uri_mismatch"
+          ? `Redirect URI must exactly match ${callbackUriForMsg}`
+          : oauthError
+            ? `${provider} sign-in failed (${oauthError}).`
+            : "Authorization was not completed. Try signing in again.");
+      redirectOAuthStartFailure(res, stateData.returnTo, oauthError || "access_denied", message);
+      return;
+    }
+
     await ensureStorage();
     const creds = readOAuthClientCredentials(provider);
     if (!creds) {
       redirectOAuthStartFailure(res, stateData.returnTo, "not_configured", oauthCredentialSetupHint(provider));
       return;
     }
-    const callbackUri = buildOAuthCallbackUrl(
-      provider,
-      resolveAuthCallbackBaseUrl(undefined, req.headers as Record<string, string | string[] | undefined>),
-    );
-    const { email, name } = await exchangeOAuthCode(
-      provider,
-      code,
-      creds.clientId,
-      creds.clientSecret,
-      callbackUri,
-    );
+    const callbackUri = buildOAuthCallbackUrl(provider, appBase);
+    const { email, name } = await exchangeOAuthCode(provider, code, creds.clientId, creds.clientSecret, callbackUri);
     if (!email) throw new Error(`${provider} account did not provide a usable email.`);
     const user = upsertSocialUser(provider, email, name);
     const tokens = await issueAuthForUser(user);
@@ -423,7 +418,7 @@ export const handleOAuthCallback = async (
     console.error(`[oauth] ${provider} callback failed:`, detail);
     redirectOAuthStartFailure(
       res,
-      stateData.returnTo,
+      appRoot,
       "verification_failed",
       `OAuth verification failed for ${provider}. ${detail}`,
     );
