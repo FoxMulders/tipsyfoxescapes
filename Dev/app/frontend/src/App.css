@@ -859,17 +859,18 @@ pre.code-inline {
 
 .flow-shell-map-bar {
   position: sticky;
-  top: calc(var(--app-top-nav-height, 4.75rem) + 0.35rem);
+  top: var(--app-top-nav-height, 4.75rem);
   z-index: 35;
   flex: 0 0 auto;
   width: 100%;
   min-height: 0;
   padding: 0.08rem 0.55rem 0.16rem;
   margin: 0;
+  border-top: 1px solid rgba(116, 168, 185, 0.18);
   border-bottom: 1px solid rgba(116, 168, 185, 0.28);
-  background: rgba(6, 12, 18, 0.72);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(6, 12, 18, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
   overflow: hidden;
   isolation: isolate;
@@ -2199,10 +2200,11 @@ a:hover {
 
 .app-view-toggle {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  margin-top: 0;
   justify-content: flex-end;
+  align-items: center;
 }
 
 .account-view-wrap {
@@ -5371,7 +5373,7 @@ ul.auth-hero-para {
 
 .app-top-nav__inner {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.65rem;
@@ -5379,15 +5381,17 @@ ul.auth-hero-para {
 
 .app-top-nav__utility {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
   gap: 0.4rem;
   margin-left: auto;
+  min-width: 0;
 }
 
 .app-top-nav__utility > * {
   align-self: center;
+  flex-shrink: 0;
 }
 
 .app-top-nav__utility button {
@@ -5575,9 +5579,16 @@ ul.auth-hero-para {
 }
 
 .app-top-nav__title {
-  margin: 0.1rem 0 0;
-  font-size: 1.15rem;
+  margin: 0.05rem 0 0;
+  font-size: clamp(0.95rem, 1.8vw, 1.2rem);
   line-height: 1.2;
+  font-family: 'Cinzel Decorative', 'Georgia', serif;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #c8694e;
+  text-shadow:
+    0 0 18px rgba(185, 80, 45, 0.32),
+    0 1px 6px rgba(0, 0, 0, 0.55);
 }
 
 .app-top-nav__stats {
