@@ -7316,7 +7316,7 @@ export default function App() {
                         if (!e.target.checked) setCustomMainPuzzleCountStr("");
                       }}
                     />
-                    <span>Override main-track count (1–24)</span>
+                    <span title="By default the server picks a puzzle count based on your player numbers and session length. Enable this to lock in a specific number of main-track puzzles (1–24) instead.">Override main-track count (1–24)</span>
                   </label>
                   {useCustomMainPuzzleCount ? (
                     <label className="field-row">

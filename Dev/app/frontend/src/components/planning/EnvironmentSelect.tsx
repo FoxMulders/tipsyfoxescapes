@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 
 export const HOME_ENVIRONMENT_PRESETS = [
   "Living room",
+  "Family room / rec room",
   "Garage",
   "Basement",
   "Backyard",
@@ -19,7 +20,6 @@ export const HOME_ENVIRONMENT_PRESETS = [
 
 export const ENVIRONMENT_PRESETS = [
   ...HOME_ENVIRONMENT_PRESETS,
-  "Family room / rec room",
   "Kitchen",
   "Dining room",
   "Office / study",

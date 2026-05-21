@@ -83,21 +83,25 @@ export function ThemeCuratedCard({
         </p>
         <div className="theme-idea-card__expand" aria-hidden={!expanded}>
           <div className="theme-idea-card__expand-inner">
-            {hook ? (
-              <p className="theme-idea-narrative">
-                <span className="theme-idea-tldr-label">Narrative</span>
-                <span className="theme-idea-narrative-text">{hook}</span>
-              </p>
-            ) : null}
             <p className="theme-idea-planning-params muted" role="note">
               <span className="theme-idea-tldr-label">Your room</span>
               <span>{planningContext}</span>
             </p>
-            {!simpleView && fullBrief ? (
-              <div className="theme-idea-full-brief">
-                {editorPass ? <div className="theme-idea-card__toolbar">{editorPass}</div> : null}
-                {fullBrief}
-              </div>
+            {!simpleView ? (
+              <>
+                {hook ? (
+                  <p className="theme-idea-narrative">
+                    <span className="theme-idea-tldr-label">Narrative</span>
+                    <span className="theme-idea-narrative-text">{hook}</span>
+                  </p>
+                ) : null}
+                {fullBrief ? (
+                  <div className="theme-idea-full-brief">
+                    {editorPass ? <div className="theme-idea-card__toolbar">{editorPass}</div> : null}
+                    {fullBrief}
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </div>
         </div>
