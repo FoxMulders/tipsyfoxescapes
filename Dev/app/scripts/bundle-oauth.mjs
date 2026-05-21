@@ -18,6 +18,7 @@ await esbuild.build({
   minify: true,
   legalComments: "none",
   logLevel: "info",
+  logOverride: { "empty-import-meta": "silent" },
 });
 
 console.log("[bundle-oauth] Done.");
