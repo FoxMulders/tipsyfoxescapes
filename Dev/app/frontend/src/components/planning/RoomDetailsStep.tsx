@@ -255,19 +255,19 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
 
           <div className="form-field-panel">
             <FieldHint
-              label="Enforce Environmental Fit"
-              htmlFor="enforce-env-fit"
-              tooltip="Forces the AI to strictly anchor all puzzles to the physical objects and layout constraints of your chosen room environment."
+              label="Puzzle difficulty"
+              tooltip="Sets how challenging the generated puzzles will be. Easy is family-friendly, Medium suits most adults, Hard is for experienced players."
             >
-              <label className="feature-card__toggle-row room-details-checkbox-row">
-                <input
-                  id="enforce-env-fit"
-                  type="checkbox"
-                  checked={props.themeMustMatchEnvironment}
-                  onChange={(e) => props.setThemeMustMatchEnvironment(e.target.checked)}
-                />
-                <span>Strictly match generated ideas to this environment.</span>
-              </label>
+              <select
+                className={selectClass}
+                value={props.roomDifficulty}
+                onChange={(e) => props.setRoomDifficulty(e.target.value as "easy" | "medium" | "hard")}
+                aria-label="Room puzzle difficulty"
+              >
+                <option value="easy">Easy — family-friendly, accessible to all ages</option>
+                <option value="medium">Medium — suited to most adults</option>
+                <option value="hard">Hard — experienced players, complex logic</option>
+              </select>
             </FieldHint>
           </div>
 
@@ -292,19 +292,22 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
 
           <Accordion type="single" collapsible className="form-field-panel advanced-config-panel rounded-md border border-slate-600 bg-slate-900 px-4">
             <AccordionItem value="advanced">
-              <AccordionTrigger>Advanced configuration (difficulty)</AccordionTrigger>
+              <AccordionTrigger>Advanced options</AccordionTrigger>
               <AccordionContent className="space-y-4">
-                <FieldHint label="Room puzzle difficulty">
-                  <select
-                    className={selectClass}
-                    value={props.roomDifficulty}
-                    onChange={(e) => props.setRoomDifficulty(e.target.value as "easy" | "medium" | "hard")}
-                    aria-label="Room puzzle difficulty"
-                  >
-                    <option value="easy">Easy</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
-                  </select>
+                <FieldHint
+                  label="Enforce Environmental Fit"
+                  htmlFor="enforce-env-fit"
+                  tooltip="Forces the AI to strictly anchor all puzzles to the physical objects and layout constraints of your chosen room environment. Useful when you want zero generic puzzles."
+                >
+                  <label className="feature-card__toggle-row room-details-checkbox-row">
+                    <input
+                      id="enforce-env-fit"
+                      type="checkbox"
+                      checked={props.themeMustMatchEnvironment}
+                      onChange={(e) => props.setThemeMustMatchEnvironment(e.target.checked)}
+                    />
+                    <span>Strictly match generated ideas to this environment.</span>
+                  </label>
                 </FieldHint>
               </AccordionContent>
             </AccordionItem>
