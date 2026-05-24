@@ -4409,7 +4409,7 @@ export default function App() {
         startUrl: `${API_BASE}/api/auth/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`,
         onTimeout: () => {
           setSocialAuthProvider(null);
-          setError("Sign-in redirect timed out. Check your connection and try again.");
+          setError("Sign-in server did not respond. Wait a moment and try again, or use email sign-in.");
         },
         onLaunchError: (message) => {
           setSocialAuthProvider(null);

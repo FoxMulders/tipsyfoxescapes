@@ -7,12 +7,7 @@ const serverBundlePath = join(__dirname, "server.cjs");
 const oauthBundlePath = join(__dirname, "oauth.cjs");
 let expressHandler;
 let oauthHandler;
-const serverLoadPromise = existsSync(serverBundlePath)
-  ? Promise.resolve().then(() => {
-      const mod = requireFromHere(serverBundlePath);
-      expressHandler = mod.default ?? mod;
-    })
-  : null;
+let serverLoadPromise = null;
 
 /** Restore full /api/... path after rewrite to /api. */
 const normalizeApiUrl = (req) => {
@@ -82,7 +77,25 @@ const loadOAuthHandler = () => {
   return oauthHandler;
 };
 
+const ensureExpressHandler = async () => {
+  if (expressHandler) return expressHandler;
+  if (!existsSync(serverBundlePath)) {
+    throw new Error("api/server.cjs was not built.");
+  }
+  if (!serverLoadPromise) {
+    serverLoadPromise = Promise.resolve().then(() => {
+      const mod = requireFromHere(serverBundlePath);
+      expressHandler = mod.default ?? mod;
+      return expressHandler;
+    });
+  }
+  return serverLoadPromise;
+};
+
 const matchOAuthRoute = (pathname) => {
+  if (pathname === "/api/auth/oauth/complete" || pathname === "/api/auth/oauth/complete/") {
+    return { kind: "complete" };
+  }
   const start = pathname.match(/^\/api\/auth\/oauth\/(google|facebook|github)\/start\/?$/i);
   if (start) return { kind: "start", provider: start[1].toLowerCase() };
   const callback = pathname.match(/^\/api\/auth\/oauth\/(google|facebook|github)\/callback\/?$/i);
@@ -126,6 +139,7 @@ module.exports = async function handler(req, res) {
   if (oauthRoute) {
     try {
       const oauth = loadOAuthHandler();
+      if (oauthRoute.kind === "complete") return oauth.handleOAuthComplete(req, res);
       if (oauthRoute.kind === "start") return oauth.handleOAuthStart(req, res, oauthRoute.provider);
       return oauth.handleOAuthCallback(req, res, oauthRoute.provider);
     } catch (err) {
@@ -151,12 +165,8 @@ module.exports = async function handler(req, res) {
     return;
   }
   try {
-    if (!expressHandler && serverLoadPromise) await serverLoadPromise;
-    if (!expressHandler) {
-      const mod = requireFromHere(serverBundlePath);
-      expressHandler = mod.default ?? mod;
-    }
-    return expressHandler(req, res);
+    const handler = await ensureExpressHandler();
+    return handler(req, res);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.statusCode = 500;

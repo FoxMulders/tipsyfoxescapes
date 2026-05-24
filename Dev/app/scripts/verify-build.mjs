@@ -9,6 +9,7 @@ const required = [
   join(appRoot, "api/health.js"),
   join(appRoot, "api/version.js"),
   join(appRoot, "api/app-version.json"),
+  join(appRoot, "api/oauth.js"),
   join(appRoot, "api/index.js"),
   join(appRoot, "frontend/dist/index.html"),
 ];

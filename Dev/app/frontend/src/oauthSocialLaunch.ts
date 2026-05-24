@@ -3,7 +3,10 @@
 export type SocialOAuthProvider = "google" | "facebook" | "github";
 
 export const PRODUCTION_APP_ORIGIN = "https://www.tipsyfoxescapes.ca";
-export const OAUTH_REDIRECT_TIMEOUT_MS = 20_000;
+/** Stale pending UI recovery — not a hard redirect deadline (serverless cold starts can exceed 20s). */
+export const OAUTH_REDIRECT_TIMEOUT_MS = 120_000;
+/** If assign() did not leave the builder shell, surface an error quickly. */
+const OAUTH_LAUNCH_STUCK_MS = 12_000;
 
 const OAUTH_PENDING_KEY = "escape-room-builder-oauth-pending-v1";
 
@@ -122,40 +125,64 @@ export type LaunchSocialOAuthOptions = {
   onLaunchError: (message: string) => void;
 };
 
-/** Navigate to OAuth start; survives slow cold starts and clears false timeouts on page hide. */
+const isBuilderShellUrl = (href: string): boolean => {
+  try {
+    const path = new URL(href).pathname;
+    return path === "/" || path === "/index.html";
+  } catch {
+    return true;
+  }
+};
+
+/** Navigate to OAuth start; do not treat slow serverless cold starts as client timeouts. */
 export const launchSocialOAuthRedirect = (opts: LaunchSocialOAuthOptions): void => {
   const { provider, startUrl, onTimeout, onLaunchError } = opts;
   stashPendingSocialOAuth(provider);
 
-  let safetyTimer: ReturnType<typeof window.setTimeout> | null = null;
+  const launchHref = window.location.href;
   let released = false;
+  let stuckTimer: ReturnType<typeof window.setTimeout> | null = null;
 
-  const release = (timedOut: boolean): void => {
+  const release = (): void => {
     if (released) return;
     released = true;
-    if (safetyTimer !== null) window.clearTimeout(safetyTimer);
+    if (stuckTimer !== null) window.clearTimeout(stuckTimer);
     window.removeEventListener("pagehide", onPageHide);
-    if (timedOut) clearPendingSocialOAuth();
+    window.removeEventListener("visibilitychange", onVisibilityHidden);
   };
 
   const onPageHide = (): void => {
-    release(false);
+    release();
+  };
+
+  const onVisibilityHidden = (): void => {
+    if (document.visibilityState === "hidden") release();
   };
 
   window.addEventListener("pagehide", onPageHide, { once: true });
-
-  safetyTimer = window.setTimeout(() => {
-    release(true);
-    onTimeout();
-  }, OAUTH_REDIRECT_TIMEOUT_MS);
+  window.addEventListener("visibilitychange", onVisibilityHidden);
 
   try {
     window.location.assign(startUrl);
   } catch (err) {
-    release(true);
+    release();
     clearPendingSocialOAuth();
     onLaunchError(`Could not start ${provider} sign-in — please try again.`);
     // eslint-disable-next-line no-console
     console.error("[social-auth] launch failed:", provider, err);
+    return;
   }
+
+  stuckTimer = window.setTimeout(() => {
+    if (released) return;
+    const stillOnBuilder =
+      document.visibilityState === "visible" &&
+      window.location.href === launchHref &&
+      isBuilderShellUrl(window.location.href);
+    release();
+    if (stillOnBuilder) {
+      clearPendingSocialOAuth();
+      onTimeout();
+    }
+  }, OAUTH_LAUNCH_STUCK_MS);
 };

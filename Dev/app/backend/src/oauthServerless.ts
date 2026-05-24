@@ -413,3 +413,79 @@ export const handleOAuthCallback = async (
     );
   }
 };
+
+type OAuthBodyRequest = IncomingMessage & { body?: unknown; method?: string };
+
+const readJsonBody = async (req: OAuthBodyRequest): Promise<Record<string, unknown>> => {
+  if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+    return req.body as Record<string, unknown>;
+  }
+  if (typeof req.body === "string" && req.body.trim()) {
+    return JSON.parse(req.body) as Record<string, unknown>;
+  }
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const raw = Buffer.concat(chunks).toString("utf8").trim();
+  if (!raw) return {};
+  return JSON.parse(raw) as Record<string, unknown>;
+};
+
+export const handleOAuthComplete = async (req: OAuthBodyRequest, res: ServerResponse): Promise<void> => {
+  if (String(req.method ?? "GET").toUpperCase() !== "POST") {
+    res.statusCode = 405;
+    res.setHeader("Allow", "POST");
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(JSON.stringify({ error: { code: "METHOD_NOT_ALLOWED", message: "POST required.", details: [] } }));
+    return;
+  }
+  try {
+    const body = await readJsonBody(req);
+    const exchangeCode = String(body.code ?? "").trim();
+    if (!exchangeCode) {
+      res.statusCode = 400;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(JSON.stringify({ error: { code: "VALIDATION_ERROR", message: "code is required.", details: [] } }));
+      return;
+    }
+    const payload = await consumeAuthExchangeCode(exchangeCode);
+    if (!payload) {
+      res.statusCode = 401;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.end(
+        JSON.stringify({
+          error: {
+            code: "EXCHANGE_INVALID",
+            message: "Sign-in link expired or already used. Please sign in again.",
+            details: [],
+          },
+        }),
+      );
+      return;
+    }
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(
+      JSON.stringify({
+        authToken: payload.authToken,
+        refreshToken: payload.refreshToken,
+        accessExpiresAt: payload.accessExpiresAt,
+        refreshExpiresAt: payload.refreshExpiresAt,
+        user: payload.user,
+      }),
+    );
+  } catch (err) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(
+      JSON.stringify({
+        error: {
+          code: "EXCHANGE_FAILED",
+          message: err instanceof Error ? err.message : "Could not complete sign-in.",
+          details: [],
+        },
+      }),
+    );
+  }
+};
