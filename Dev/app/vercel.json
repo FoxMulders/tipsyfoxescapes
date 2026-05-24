@@ -12,9 +12,9 @@
   "rewrites": [
     { "source": "/webhook", "destination": "/api/webhook" },
     { "source": "/version", "destination": "/api/version" },
-    { "source": "/api/auth/oauth/(google|facebook|github)/start", "destination": "/api/oauth?kind=start&provider=$1" },
-    { "source": "/api/auth/oauth/(google|facebook|github)/callback", "destination": "/api/oauth?kind=callback&provider=$1" },
-    { "source": "/api/auth/oauth/complete", "destination": "/api/oauth?kind=complete" },
+    { "source": "/api/auth/oauth/(google|facebook|github)/start", "destination": "/api/auth-oauth?kind=start&provider=$1" },
+    { "source": "/api/auth/oauth/(google|facebook|github)/callback", "destination": "/api/auth-oauth?kind=callback&provider=$1" },
+    { "source": "/api/auth/oauth/complete", "destination": "/api/auth-oauth?kind=complete" },
     { "source": "/api/(.*)", "destination": "/api?path=$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
@@ -25,7 +25,7 @@
     "api/version.js": {
       "maxDuration": 10
     },
-    "api/oauth.js": {
+    "api/auth-oauth.js": {
       "maxDuration": 30,
       "includeFiles": "api/oauth.cjs"
     },
