@@ -1,6 +1,28 @@
 export type OAuthProvider = "google" | "facebook" | "github";
 
+export const PRODUCTION_APP_ORIGIN = "https://www.tipsyfoxescapes.ca";
+
 const OAUTH_CALLBACK_PATH_RE = /\/api\/auth\/oauth\/(?:google|facebook|github)\/callback$/i;
+
+const LOCAL_DEV_FALLBACK = "http://localhost:5173/";
+
+/** Canonical post-login return URL; locks production hosts to www.tipsyfoxescapes.ca. */
+export const normalizeOAuthReturnTo = (raw: string): string => {
+  const trimmed = String(raw ?? "").trim() || LOCAL_DEV_FALLBACK;
+  try {
+    const u = new URL(trimmed);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return LOCAL_DEV_FALLBACK;
+    const host = u.hostname.toLowerCase();
+    if (host === "tipsyfoxescapes.ca" || host === "www.tipsyfoxescapes.ca") {
+      return `${PRODUCTION_APP_ORIGIN}${u.pathname}${u.search}${u.hash}`;
+    }
+    return u.toString();
+  } catch {
+    return LOCAL_DEV_FALLBACK;
+  }
+};
+
+export const safeOAuthReturnToUrl = (raw: string): URL => new URL(normalizeOAuthReturnTo(raw));
 
 type HeaderBag = Record<string, string | string[] | undefined>;
 

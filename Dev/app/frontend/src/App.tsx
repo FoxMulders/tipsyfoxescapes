@@ -26,6 +26,12 @@ import { TopNavBar } from "@/components/layout/TopNavBar";
 import { useTopNavHeight } from "@/hooks/useTopNavHeight";
 import { clearOAuthReturnMarker, hasOAuthReturnMarker, setOAuthReturnMarker } from "./oauthClientCookie.ts";
 import {
+  clearPendingSocialOAuth,
+  launchSocialOAuthRedirect,
+  resolveOAuthReturnTo,
+  restorePendingSocialOAuthProvider,
+} from "./oauthSocialLaunch.ts";
+import {
   consumeOAuthPlanningStash,
   peekOAuthPlanningStash,
   stashPlanningSessionForOAuth,
@@ -2701,7 +2707,9 @@ export default function App() {
     locationId: string;
     environment: "sandbox" | "production";
   } | null>(null);
-  const [socialAuthProvider, setSocialAuthProvider] = useState<"google" | "facebook" | "github" | null>(null);
+  const [socialAuthProvider, setSocialAuthProvider] = useState<"google" | "facebook" | "github" | null>(() =>
+    restorePendingSocialOAuthProvider(),
+  );
   const [authSubmitting, setAuthSubmitting] = useState(false);
   /** Non-empty string = verification-pending screen is active; value is the email address shown to user. */
   const [authVerificationPending, setAuthVerificationPending] = useState<string>("");
@@ -4378,19 +4386,6 @@ export default function App() {
     setError("");
     setSocialAuthProvider(provider);
 
-    let safetyTimer: ReturnType<typeof window.setTimeout> | null = null;
-
-    const releaseProvider = (errorMsg?: string) => {
-      if (safetyTimer !== null) window.clearTimeout(safetyTimer);
-      setSocialAuthProvider(null);
-      if (errorMsg) setError(errorMsg);
-    };
-
-    // Safety net: if the page hasn't navigated away within 12 s, unfreeze the button.
-    safetyTimer = window.setTimeout(() => {
-      releaseProvider("Sign-in redirect timed out. Check your connection and try again.");
-    }, 12_000);
-
     try {
       cacheLocalPlanningInputs();
       stashOAuthReturnSnapshot(buildOAuthReturnSnapshot());
@@ -4414,14 +4409,25 @@ export default function App() {
         stashPlanningSessionForOAuth(sessionId, deviceId);
       }
       setOAuthReturnMarker();
-      const returnTo = `${window.location.origin}${window.location.pathname}`;
-      window.location.assign(
-        `${API_BASE}/api/auth/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`,
-      );
+      const returnTo = resolveOAuthReturnTo();
+      launchSocialOAuthRedirect({
+        provider,
+        startUrl: `${API_BASE}/api/auth/oauth/${provider}/start?returnTo=${encodeURIComponent(returnTo)}`,
+        onTimeout: () => {
+          setSocialAuthProvider(null);
+          setError("Sign-in redirect timed out. Check your connection and try again.");
+        },
+        onLaunchError: (message) => {
+          setSocialAuthProvider(null);
+          setError(message);
+        },
+      });
     } catch (err) {
+      clearPendingSocialOAuth();
+      setSocialAuthProvider(null);
       // eslint-disable-next-line no-console
       console.error("[social-auth] launch failed:", provider, err);
-      releaseProvider(`Could not start ${provider} sign-in — please try again.`);
+      setError(`Could not start ${provider} sign-in — please try again.`);
     }
   };
 
@@ -4430,6 +4436,7 @@ export default function App() {
     const oauthErr = url.searchParams.get("oauth_error");
     const oauthMsg = url.searchParams.get("oauth_message");
     if (oauthErr) {
+      clearPendingSocialOAuth();
       setSocialAuthProvider(null);
       setError(oauthMsg?.trim() || `Sign-in could not complete (${oauthErr}).`);
       url.searchParams.delete("oauth_error");
@@ -4505,6 +4512,8 @@ export default function App() {
         setError("Social sign in completed, but response could not be parsed.");
       } finally {
         oauthHydratingRef.current = false;
+        clearPendingSocialOAuth();
+        setSocialAuthProvider(null);
         clearOAuthReturnMarker();
         url.searchParams.delete("auth_token");
         url.searchParams.delete("refresh_token");

@@ -20,7 +20,7 @@ import {
   trialSaveError,
 } from "./billing/trial.js";
 import { ensureDataDir, getDataDir } from "./dataDir.js";
-import { buildOAuthCallbackUrl, resolveAuthCallbackBaseUrl } from "./oauthCallbackUrl.js";
+import { buildOAuthCallbackUrl, resolveAuthCallbackBaseUrl, safeOAuthReturnToUrl } from "./oauthCallbackUrl.js";
 import {
   oauthCredentialSetupHint,
   readOAuthClientCredentials,
@@ -3577,17 +3577,7 @@ const upsertSocialUser = (provider: StoredUser["provider"], email: string, name:
 };
 
 /** Normalize returnTo for OAuth; only http(s) allowed (blocks javascript:, etc.). */
-const safeOAuthReturnTo = (raw: string): URL => {
-  const fallback = "http://localhost:5173/";
-  const trimmed = String(raw ?? "").trim() || fallback;
-  try {
-    const u = new URL(trimmed);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return new URL(fallback);
-    return u;
-  } catch {
-    return new URL(fallback);
-  }
-};
+const safeOAuthReturnTo = (raw: string): URL => safeOAuthReturnToUrl(raw);
 
 const buildAuthSuccessRedirect = (
   returnTo: string,

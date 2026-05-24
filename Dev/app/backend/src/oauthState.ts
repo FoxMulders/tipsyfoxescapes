@@ -1,4 +1,5 @@
 import crypto, { timingSafeEqual } from "crypto";
+import { normalizeOAuthReturnTo } from "./oauthCallbackUrl.js";
 
 type OAuthProvider = "google" | "facebook" | "github";
 
@@ -23,7 +24,7 @@ const sign = (body: string): string =>
 export const createOAuthState = (provider: OAuthProvider, returnTo: string): string => {
   const payload: OAuthStatePayload = {
     provider,
-    returnTo,
+    returnTo: normalizeOAuthReturnTo(returnTo),
     exp: Date.now() + 10 * 60 * 1000,
     nonce: crypto.randomBytes(8).toString("hex"),
   };
