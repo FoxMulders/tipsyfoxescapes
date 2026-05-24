@@ -2575,6 +2575,7 @@ export default function App() {
 
   const [themes, setThemes] = useState<Theme[]>([]);
   const [themeIdeasLoading, setThemeIdeasLoading] = useState(false);
+  const [puzzlesGenerating, setPuzzlesGenerating] = useState(false);
   const [themeSessionExpiredNotice, setThemeSessionExpiredNotice] = useState("");
   const [selectedThemeId, setSelectedThemeId] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -2751,6 +2752,7 @@ export default function App() {
     (options?: { seedThemes?: boolean }) => Promise<string | undefined>
   >(async () => undefined);
   const themesAutoFetchInFlight = useRef(false);
+  const puzzlesRequestInFlight = useRef(false);
   const idleLastActivityRef = useRef(0);
   const idleTimeoutSignOutStartedRef = useRef(false);
   const [idlePromptOpen, setIdlePromptOpen] = useState(false);
@@ -4459,69 +4461,71 @@ export default function App() {
       window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
     }
 
-    const callbackToken = url.searchParams.get("auth_token");
-    const callbackRefresh = url.searchParams.get("refresh_token");
-    const callbackAccessExpires = Number(url.searchParams.get("access_expires_at") ?? "0");
+    const oauthExchangeCode = url.searchParams.get("oauth_code");
     const emailVerified = url.searchParams.get("email_verified");
 
-    // Email verification success — log the user in with the returned tokens
-    if (emailVerified === "1" && callbackToken) {
+    if (oauthExchangeCode) {
       oauthHydratingRef.current = true;
+      oauthReturnBootstrapRef.current = hasOAuthReturnMarker();
       void (async () => {
         try {
-          persistAuth(callbackToken, null as unknown as AuthUser, {
-            refreshToken: callbackRefresh ?? "",
-            accessExpiresAt: Number.isFinite(callbackAccessExpires) ? callbackAccessExpires : 0,
+          const response = await fetch(`${API_BASE}/api/auth/oauth/complete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Device-Id": deviceId },
+            body: JSON.stringify({ code: oauthExchangeCode }),
           });
-          const profileOk = await refreshProfile({ retryOnStaleToken: true, tokenOverride: callbackToken });
+          const data = (await response.json()) as {
+            authToken?: string;
+            refreshToken?: string;
+            accessExpiresAt?: number;
+            refreshExpiresAt?: number;
+            user?: AuthUser;
+            error?: { message?: string };
+          };
+          if (!response.ok || !data.authToken) {
+            throw new Error(data.error?.message ?? "Sign-in exchange failed. Please try again.");
+          }
+          const normalized = normalizeAuthUser(data.user);
+          persistAuth(data.authToken, normalized, {
+            refreshToken: data.refreshToken ?? "",
+            accessExpiresAt: typeof data.accessExpiresAt === "number" ? data.accessExpiresAt : 0,
+          });
+          const profileOk = await refreshProfile({ retryOnStaleToken: true, tokenOverride: data.authToken });
           if (profileOk) {
             setError("");
-            setAuthVerificationPending("");
-            setAuthVerificationDevUrl("");
+            if (emailVerified === "1") {
+              setAuthVerificationPending("");
+              setAuthVerificationDevUrl("");
+            }
           }
-        } catch {
-          setError("Email verified but could not load your account. Please log in manually.");
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Sign-in could not be completed. Please try again.");
         } finally {
           oauthHydratingRef.current = false;
+          clearPendingSocialOAuth();
+          setSocialAuthProvider(null);
+          clearOAuthReturnMarker();
+          url.searchParams.delete("oauth_code");
           url.searchParams.delete("email_verified");
-          url.searchParams.delete("auth_token");
-          url.searchParams.delete("refresh_token");
-          url.searchParams.delete("access_expires_at");
-          url.searchParams.delete("refresh_expires_at");
           window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
         }
       })();
       return;
     }
 
-    const callbackUserRaw = url.searchParams.get("auth_user");
-    if (!callbackToken || !callbackUserRaw) return;
-    oauthHydratingRef.current = true;
-    oauthReturnBootstrapRef.current = hasOAuthReturnMarker();
-    void (async () => {
-      try {
-        const callbackUser = normalizeAuthUser(JSON.parse(decodeURIComponent(callbackUserRaw)));
-        if (!callbackUser) throw new Error("invalid user");
-        persistAuth(callbackToken, callbackUser, {
-          refreshToken: callbackRefresh ?? "",
-          accessExpiresAt: Number.isFinite(callbackAccessExpires) ? callbackAccessExpires : 0,
-        });
-        const profileOk = await refreshProfile({ retryOnStaleToken: true, tokenOverride: callbackToken });
-        if (profileOk) setError("");
-      } catch {
-        setError("Social sign in completed, but response could not be parsed.");
-      } finally {
-        oauthHydratingRef.current = false;
-        clearPendingSocialOAuth();
-        setSocialAuthProvider(null);
-        clearOAuthReturnMarker();
-        url.searchParams.delete("auth_token");
-        url.searchParams.delete("refresh_token");
-        url.searchParams.delete("access_expires_at");
-        url.searchParams.delete("auth_user");
-        window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
-      }
-    })();
+    // Legacy token-in-URL handoff (deprecated — strip without persisting).
+    const legacyCallbackToken = url.searchParams.get("auth_token");
+    if (legacyCallbackToken) {
+      url.searchParams.delete("auth_token");
+      url.searchParams.delete("refresh_token");
+      url.searchParams.delete("access_expires_at");
+      url.searchParams.delete("refresh_expires_at");
+      url.searchParams.delete("auth_user");
+      url.searchParams.delete("email_verified");
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+      setError("Sign-in link format is outdated. Please sign in again.");
+      return;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time OAuth return handler
   }, []);
 
@@ -4574,6 +4578,18 @@ export default function App() {
   };
 
   const requestPuzzles = async (activeSessionId: string, themeId: string, themeForEnhance?: Theme | null): Promise<boolean> => {
+    if (puzzlesRequestInFlight.current) return false;
+    puzzlesRequestInFlight.current = true;
+    setPuzzlesGenerating(true);
+    try {
+      return await requestPuzzlesCore(activeSessionId, themeId, themeForEnhance);
+    } finally {
+      puzzlesRequestInFlight.current = false;
+      setPuzzlesGenerating(false);
+    }
+  };
+
+  const requestPuzzlesCore = async (activeSessionId: string, themeId: string, themeForEnhance?: Theme | null): Promise<boolean> => {
     try {
       if (authUser && !hasAuthToken()) {
         handleThemeGenerationAuthExpired();
@@ -4606,7 +4622,7 @@ export default function App() {
           if (isAuthPlanningRestorePending()) return false;
           const freshId = await recoverPlanningSessionRef.current({ seedThemes: false });
           if (freshId && freshId !== activeSessionId) {
-            return requestPuzzles(freshId, themeId, themeForEnhance);
+            return requestPuzzlesCore(freshId, themeId, themeForEnhance);
           }
           setError(planningSessionRecoveryNotice);
           return false;
@@ -7298,6 +7314,21 @@ export default function App() {
                   </p>
                 </div>
                 <h2>Build puzzle set</h2>
+                {puzzlesGenerating ? (
+                  <div className="theme-generating-indicator" role="status" aria-live="polite">
+                    <div className="theme-generating-spinner" aria-hidden="true">
+                      <span /><span /><span />
+                    </div>
+                    <p className="theme-generating-headline">Generating builder-ready puzzles…</p>
+                    <p className="theme-generating-sub muted">
+                      Crafting logic, physical, and electronic puzzles for your theme.
+                      This usually takes <strong>10–30 seconds</strong>.
+                    </p>
+                    <div className="theme-generating-bar" aria-hidden="true">
+                      <div className="theme-generating-bar__fill" />
+                    </div>
+                  </div>
+                ) : null}
                 <p className="puzzle-pool-selection-note" role="note">
                   The generator drafted these thematic puzzles to match your room capacity. Select the active pool, toggle
                   variations, or leave unselected puzzles as backups—the set updates when you continue to review.
@@ -7520,25 +7551,30 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => void generatePuzzles()}
-                    disabled={!selectedThemeId || !hasFullCatalogAccess || outputReviewBusy}
+                    disabled={!selectedThemeId || !hasFullCatalogAccess || outputReviewBusy || puzzlesGenerating}
+                    aria-busy={puzzlesGenerating}
                     title={
-                      !selectedThemeId
+                      puzzlesGenerating
+                        ? "Generating puzzles…"
+                        : !selectedThemeId
                         ? "Select a theme first."
                         : !hasFullCatalogAccess
                           ? "Features unlocked with subscription"
                           : "Regenerate puzzle set from Room details and theme."
                     }
                   >
-                    Generate puzzles
+                    {puzzlesGenerating ? "Generating puzzles…" : "Generate puzzles"}
                   </button>
                   <button
                     type="button"
                     className="primary-btn"
-                    disabled={!canNavigateToOutputReview || outputReviewBusy}
+                    disabled={!canNavigateToOutputReview || outputReviewBusy || puzzlesGenerating}
                     title={
                       outputReviewBusy
                         ? "Working…"
-                        : !canNavigateToOutputReview
+                        : puzzlesGenerating
+                          ? "Wait for puzzle generation to finish."
+                          : !canNavigateToOutputReview
                           ? "Choose a theme first (Theme step)."
                           : puzzles.length === 0
                             ? "Syncs planning, generates a puzzle set if the list is empty, then opens Output: Review."
@@ -8214,13 +8250,15 @@ export default function App() {
           <button
             type="button"
             className="mobile-continue-fab"
-            disabled={!canNavigateToOutputReview || outputReviewBusy}
-            aria-busy={outputReviewBusy}
+            disabled={!canNavigateToOutputReview || outputReviewBusy || puzzlesGenerating}
+            aria-busy={outputReviewBusy || puzzlesGenerating}
             data-testid="continue-output-review-mobile"
             title={
               outputReviewBusy
                 ? "Working…"
-                : !canNavigateToOutputReview
+                : puzzlesGenerating
+                  ? "Wait for puzzle generation to finish."
+                  : !canNavigateToOutputReview
                   ? "Choose a theme first (Theme step)."
                   : puzzles.length === 0
                     ? "Syncs planning, generates a puzzle set if the list is empty, then opens Output: Review."

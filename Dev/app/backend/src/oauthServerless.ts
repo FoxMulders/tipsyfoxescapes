@@ -11,6 +11,11 @@ import {
 } from "./oauthConfig.js";
 import { exchangeOAuthCode } from "./oauthTokenExchange.js";
 import { createOAuthState, verifyOAuthState } from "./oauthState.js";
+import {
+  buildOAuthSuccessRedirectUrl,
+  consumeAuthExchangeCode,
+  createAuthExchangeCode,
+} from "./oauthExchangeCode.js";
 
 export { handleGitHubWebhook };
 import { readJsonBlob, writeJsonBlob } from "./kvJsonStore.js";
@@ -171,19 +176,6 @@ const redirectOAuthStartFailure = (
   u.searchParams.set("oauth_error", code);
   u.searchParams.set("oauth_message", message);
   redirect(res, u.toString());
-};
-
-const buildAuthSuccessRedirect = (
-  returnTo: string,
-  tokens: { authToken: string; refreshToken: string; accessExpiresAt: number },
-  user: StoredUser,
-): string => {
-  const url = safeOAuthReturnTo(returnTo);
-  url.searchParams.set("auth_token", tokens.authToken);
-  url.searchParams.set("refresh_token", tokens.refreshToken);
-  url.searchParams.set("access_expires_at", String(tokens.accessExpiresAt));
-  url.searchParams.set("auth_user", encodeURIComponent(JSON.stringify(toPublicUser(user))));
-  return url.toString();
 };
 
 const upsertSocialUser = (provider: OAuthProvider, email: string, name: string): StoredUser => {
@@ -401,7 +393,14 @@ export const handleOAuthCallback = async (
     if (!email) throw new Error(`${provider} account did not provide a usable email.`);
     const user = upsertSocialUser(provider, email, name);
     const tokens = await issueAuthForUser(user);
-    redirect(res, buildAuthSuccessRedirect(stateData.returnTo, tokens, user));
+    const exchangeCode = await createAuthExchangeCode({
+      authToken: tokens.authToken,
+      refreshToken: tokens.refreshToken,
+      accessExpiresAt: tokens.accessExpiresAt,
+      refreshExpiresAt: tokens.refreshExpiresAt,
+      user: toPublicUser(user) as unknown as Record<string, unknown>,
+    });
+    redirect(res, buildOAuthSuccessRedirectUrl(stateData.returnTo, exchangeCode));
   } catch (error) {
     const detail = String(error instanceof Error ? error.message : error);
     // eslint-disable-next-line no-console

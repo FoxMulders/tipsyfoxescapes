@@ -27,6 +27,11 @@ import {
 } from "./oauthConfig.js";
 import { exchangeOAuthCode } from "./oauthTokenExchange.js";
 import { createOAuthState, verifyOAuthState } from "./oauthState.js";
+import {
+  buildOAuthSuccessRedirectUrl,
+  consumeAuthExchangeCode,
+  createAuthExchangeCode,
+} from "./oauthExchangeCode.js";
 import { createVercelDiskSyncMiddleware } from "./vercelDiskSync.js";
 import {
   canAuthenticateWithPassword,
@@ -3579,19 +3584,6 @@ const upsertSocialUser = (provider: StoredUser["provider"], email: string, name:
 /** Normalize returnTo for OAuth; only http(s) allowed (blocks javascript:, etc.). */
 const safeOAuthReturnTo = (raw: string): URL => safeOAuthReturnToUrl(raw);
 
-const buildAuthSuccessRedirect = (
-  returnTo: string,
-  tokens: { authToken: string; refreshToken: string; accessExpiresAt: number },
-  user: StoredUser,
-): string => {
-  const url = safeOAuthReturnTo(returnTo);
-  url.searchParams.set("auth_token", tokens.authToken);
-  url.searchParams.set("refresh_token", tokens.refreshToken);
-  url.searchParams.set("access_expires_at", String(tokens.accessExpiresAt));
-  url.searchParams.set("auth_user", encodeURIComponent(JSON.stringify(toPublicUser(user))));
-  return url.toString();
-};
-
 const redirectOAuthStartFailure = (res: express.Response, returnToRaw: string, code: string, message: string): void => {
   const u = safeOAuthReturnTo(returnToRaw);
   u.searchParams.set("oauth_error", code);
@@ -3874,16 +3866,15 @@ app.get("/api/auth/verify-email", async (req, res) => {
   user.emailVerificationToken = undefined;
   user.emailVerificationSentAt = undefined;
   await persistUsers();
-  // Issue tokens and redirect so the user lands logged in
   const tokens = await issueAuthForUser(user);
-  const params = new URLSearchParams({
-    email_verified: "1",
-    auth_token: tokens.authToken,
-    refresh_token: tokens.refreshToken,
-    access_expires_at: String(tokens.accessExpiresAt),
-    refresh_expires_at: String(tokens.refreshExpiresAt),
+  const exchangeCode = await createAuthExchangeCode({
+    authToken: tokens.authToken,
+    refreshToken: tokens.refreshToken,
+    accessExpiresAt: tokens.accessExpiresAt,
+    refreshExpiresAt: tokens.refreshExpiresAt,
+    user: toPublicUser(user) as unknown as Record<string, unknown>,
   });
-  res.redirect(`${frontendOrigin}/?${params.toString()}`);
+  res.redirect(`${frontendOrigin}/?oauth_code=${encodeURIComponent(exchangeCode)}&email_verified=1`);
 });
 
 /** POST /api/auth/resend-verification — resend the email verification link. */
@@ -4357,45 +4348,40 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
   const state = String(req.query.state ?? "");
   const oauthError = String(req.query.error ?? "").trim();
   const oauthErrorDescription = String(req.query.error_description ?? "").trim();
-  const stateData = verifyOAuthState(state, provider);
-  if (!stateData) {
-    const fallbackReturn = `${resolveAuthCallbackBaseUrl() || "http://localhost:5173"}/`;
-    const message = state
-      ? "Invalid or expired OAuth callback state. Start sign-in again from the app."
-      : "Missing OAuth state. Start sign-in again from the app.";
-    redirectOAuthStartFailure(res, fallbackReturn, "invalid_state", message);
-    return;
-  }
-  if (!code) {
-    const message =
-      oauthErrorDescription ||
-      (oauthError === "redirect_uri_mismatch"
-        ? `GitHub redirect URI must exactly match ${buildOAuthCallbackUrl("github")}`
-        : oauthError
-          ? `${provider} sign-in failed (${oauthError}).`
-          : "Authorization was not completed. Try signing in again.");
-    redirectOAuthStartFailure(res, stateData.returnTo, oauthError || "access_denied", message);
-    return;
-  }
+  const reqHeaders = req.headers as Record<string, string | string[] | undefined>;
+  const appBase =
+    resolveAuthCallbackBaseUrl(undefined, reqHeaders) || "http://localhost:5173";
+  const appRoot = `${appBase}/`;
 
   try {
-    // Ensure in-memory stores are loaded before touching users/tokens
+    const stateData = verifyOAuthState(state, provider);
+    if (!stateData) {
+      const message = state
+        ? "Invalid or expired OAuth callback state. Start sign-in again from the app."
+        : "Missing OAuth state. Start sign-in again from the app.";
+      redirectOAuthStartFailure(res, appRoot, "invalid_state", message);
+      return;
+    }
+    if (!code) {
+      const callbackUriForMsg = buildOAuthCallbackUrl(provider, appBase);
+      const message =
+        oauthErrorDescription ||
+        (oauthError === "redirect_uri_mismatch"
+          ? `Redirect URI must exactly match ${callbackUriForMsg}`
+          : oauthError
+            ? `${provider} sign-in failed (${oauthError}).`
+            : "Authorization was not completed. Try signing in again.");
+      redirectOAuthStartFailure(res, stateData.returnTo, oauthError || "access_denied", message);
+      return;
+    }
+
     await Promise.all([loadUsers(), authTokenStore.ensureLoaded()]).catch(() => {});
     const creds = readOAuthClientCredentials(provider);
     if (!creds) {
-      redirectOAuthStartFailure(
-        res,
-        stateData.returnTo,
-        "not_configured",
-        oauthCredentialSetupHint(provider),
-      );
+      redirectOAuthStartFailure(res, stateData.returnTo, "not_configured", oauthCredentialSetupHint(provider));
       return;
     }
-    const callbackBase = resolveAuthCallbackBaseUrl(
-      undefined,
-      req.headers as Record<string, string | string[] | undefined>,
-    );
-    const callbackUri = buildOAuthCallbackUrl(provider, callbackBase);
+    const callbackUri = buildOAuthCallbackUrl(provider, appBase);
     console.log(`[oauth] ${provider} callback — callbackUri: ${callbackUri}`);
     const { email, name } = await exchangeOAuthCode(
       provider,
@@ -4407,17 +4393,62 @@ app.get("/api/auth/oauth/:provider/callback", async (req, res) => {
     if (!email) throw new Error(`${provider} account did not provide a usable email.`);
     const user = upsertSocialUser(provider, email, name);
     const tokens = await issueAuthForUser(user);
-    res.redirect(buildAuthSuccessRedirect(stateData.returnTo, tokens, user));
+    const exchangeCode = await createAuthExchangeCode({
+      authToken: tokens.authToken,
+      refreshToken: tokens.refreshToken,
+      accessExpiresAt: tokens.accessExpiresAt,
+      refreshExpiresAt: tokens.refreshExpiresAt,
+      user: toPublicUser(user) as unknown as Record<string, unknown>,
+    });
+    res.redirect(buildOAuthSuccessRedirectUrl(stateData.returnTo, exchangeCode));
   } catch (error) {
     const detail = String(error instanceof Error ? error.message : error);
     // eslint-disable-next-line no-console
     console.error(`[oauth] ${provider} callback failed:`, detail);
     redirectOAuthStartFailure(
       res,
-      stateData.returnTo,
+      appRoot,
       "verification_failed",
       `OAuth verification failed for ${provider}. ${detail}`,
     );
+  }
+});
+
+app.post("/api/auth/oauth/complete", async (req, res) => {
+  const exchangeCode = String(req.body?.code ?? "").trim();
+  if (!exchangeCode) {
+    res.status(400).json({
+      error: { code: "VALIDATION_ERROR", message: "code is required.", details: [] },
+    });
+    return;
+  }
+  try {
+    const payload = await consumeAuthExchangeCode(exchangeCode);
+    if (!payload) {
+      res.status(401).json({
+        error: {
+          code: "EXCHANGE_INVALID",
+          message: "Sign-in link expired or already used. Please sign in again.",
+          details: [],
+        },
+      });
+      return;
+    }
+    res.json({
+      authToken: payload.authToken,
+      refreshToken: payload.refreshToken,
+      accessExpiresAt: payload.accessExpiresAt,
+      refreshExpiresAt: payload.refreshExpiresAt,
+      user: payload.user,
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: {
+        code: "EXCHANGE_FAILED",
+        message: err instanceof Error ? err.message : "Could not complete sign-in.",
+        details: [],
+      },
+    });
   }
 });
 

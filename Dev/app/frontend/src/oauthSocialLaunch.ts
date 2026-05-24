@@ -67,7 +67,7 @@ export const restorePendingSocialOAuthProvider = (): SocialOAuthProvider | null 
     return null;
   }
   const url = new URL(window.location.href);
-  if (url.searchParams.get("auth_token") || url.searchParams.get("oauth_error")) {
+  if (url.searchParams.get("auth_token") || url.searchParams.get("oauth_error") || url.searchParams.get("oauth_code")) {
     clearPendingSocialOAuth();
     return null;
   }
