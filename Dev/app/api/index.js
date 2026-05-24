@@ -144,7 +144,7 @@ module.exports = async function handler(req, res) {
         error: {
           code: "SERVER_BUNDLE_MISSING",
           message:
-            "api/server.cjs was not built. Check the Vercel build log for [bundle-server] and confirm Root Directory is TipsyfoxEscapes/Dev/app.",
+            "api/server.cjs was not built. Check the Vercel build log for [bundle-server] and confirm Root Directory is Dev/app.",
         },
       }),
     );
