@@ -71,7 +71,48 @@ export const restorePendingSocialOAuthProvider = (): SocialOAuthProvider | null 
     clearPendingSocialOAuth();
     return null;
   }
+  try {
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    if (nav?.type === "back_forward") {
+      clearPendingSocialOAuth();
+      return null;
+    }
+  } catch {
+    /* ignore */
+  }
   return pending.provider;
+};
+
+const OAUTH_RETURN_GRACE_MS = 2_000;
+
+/** Clear stale pending OAuth when user returns via Back/visibility without completing sign-in. */
+export const subscribeOAuthPendingRecovery = (onCancelled: () => void): (() => void) => {
+  const handlePossibleCancel = (): void => {
+    const pending = peekPendingSocialOAuth();
+    if (!pending) return;
+    if (Date.now() - pending.startedAt < OAUTH_RETURN_GRACE_MS) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("oauth_code") || url.searchParams.get("oauth_error")) return;
+    clearPendingSocialOAuth();
+    onCancelled();
+  };
+
+  const onPageShow = (): void => {
+    window.setTimeout(handlePossibleCancel, 50);
+  };
+
+  const onVisibility = (): void => {
+    if (document.visibilityState === "visible") {
+      window.setTimeout(handlePossibleCancel, 50);
+    }
+  };
+
+  window.addEventListener("pageshow", onPageShow);
+  document.addEventListener("visibilitychange", onVisibility);
+  return () => {
+    window.removeEventListener("pageshow", onPageShow);
+    document.removeEventListener("visibilitychange", onVisibility);
+  };
 };
 
 export type LaunchSocialOAuthOptions = {

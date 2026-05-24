@@ -30,6 +30,7 @@ import {
   launchSocialOAuthRedirect,
   resolveOAuthReturnTo,
   restorePendingSocialOAuthProvider,
+  subscribeOAuthPendingRecovery,
 } from "./oauthSocialLaunch.ts";
 import {
   consumeOAuthPlanningStash,
@@ -4527,6 +4528,12 @@ export default function App() {
       return;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time OAuth return handler
+  }, []);
+
+  useEffect(() => {
+    return subscribeOAuthPendingRecovery(() => {
+      setSocialAuthProvider(null);
+    });
   }, []);
 
   const requestThemes = async (

@@ -6,6 +6,8 @@ import crypto from "crypto";
 import { loadEnv } from "./loadEnv.js";
 
 loadEnv();
+import { readAppSemver, resolveLocalBuildId } from "./appVersion.js";
+import { productionPersistenceWarnings, resolveAuthStoreMode } from "./productionHealth.js";
 import { billingPlanById, quotePlanCheckout, resolveBillingPlanId, type BillingPlanId } from "./billing/catalog.js";
 import { countActiveVenueLiveSessions, getActiveLiveConnectionStats, registerLiveRoutes } from "./liveGame.js";
 import { fleetActivationError, liveOpsFrozenError } from "./enterpriseGate.js";
@@ -3698,12 +3700,13 @@ app.get("/health", (_req, res) => {
 });
 
 app.get("/api/health", (_req, res) => {
-  void import("./kvJsonStore.js").then(({ isKvConfigured }) => {
-    res.json({
-      ok: true,
-      service: "escape-room-builder",
-      authStore: process.env.VERCEL ? (isKvConfigured() ? "kv" : "ephemeral") : "local",
-    });
+  const warnings = productionPersistenceWarnings();
+  res.json({
+    ok: warnings.length === 0 || !process.env.VERCEL,
+    service: "escape-room-builder",
+    authStore: resolveAuthStoreMode(),
+    warnings,
+    ts: new Date().toISOString(),
   });
 });
 
@@ -3714,26 +3717,8 @@ app.get("/api/config", (_req, res) => {
 });
 
 app.get("/version", (_req, res) => {
-  const readVersion = (): string => {
-    const here = new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
-    const base = path.resolve(path.dirname(here), "..", "..");
-    try {
-      const data = JSON.parse(readFileSync(path.join(base, "api", "app-version.json"), "utf8")) as { version?: string };
-      if (typeof data.version === "string" && data.version.trim()) return data.version.trim();
-    } catch {
-      /* fall through */
-    }
-    try {
-      const pkg = JSON.parse(
-        readFileSync(path.join(base, "frontend", "package.json"), "utf8"),
-      ) as { version?: string };
-      return typeof pkg.version === "string" ? pkg.version : "0.0.0";
-    } catch {
-      return "0.0.0";
-    }
-  };
   res.setHeader("Cache-Control", "public, max-age=60");
-  res.json({ version: readVersion(), build: "local" });
+  res.json({ version: readAppSemver(), build: resolveLocalBuildId() || "local" });
 });
 
 app.get("/webhook", (req, res) => {
@@ -6580,12 +6565,10 @@ export async function bootstrap(): Promise<void> {
     const onVercel = Boolean(process.env.VERCEL);
 
     if (onVercel) {
-      const { isKvConfigured } = await import("./kvJsonStore.js");
-      if (!isKvConfigured()) {
+      const warnings = productionPersistenceWarnings();
+      for (const warning of warnings) {
         // eslint-disable-next-line no-console
-        console.error(
-          "[bootstrap] VERCEL without KV_REST_API_URL/KV_REST_API_TOKEN: auth tokens and users will not persist across serverless instances. Link Upstash Redis (Vercel KV) to this project.",
-        );
+        console.error(`[bootstrap] ${warning}`);
       }
       await Promise.all([loadUsers(), authTokenStore.ensureLoaded()]);
       await finishBootstrap();
