@@ -1,6 +1,8 @@
 import {
   createElement,
   Fragment,
+  lazy,
+  Suspense,
   type ReactNode,
   useCallback,
   useEffect,
@@ -23,6 +25,7 @@ import { isSignInForPuzzlesMessage, toastErrorOnce, toastMessageOnce, TOAST_ID }
 import { GlobalFooter } from "@/components/layout/GlobalFooter";
 import { PlanningSnapshotSheet } from "@/components/layout/PlanningSnapshotSheet";
 import { TopNavBar } from "@/components/layout/TopNavBar";
+import { AppAtmosphere } from "@/components/layout/AppAtmosphere";
 import { useTopNavHeight } from "@/hooks/useTopNavHeight";
 import { clearOAuthReturnMarker, hasOAuthReturnMarker, setOAuthReturnMarker } from "./oauthClientCookie.ts";
 import {
@@ -109,7 +112,6 @@ import {
   type InspirationCatalogEntry,
 } from "./browserAi.ts";
 import { getOrCreateDeviceId } from "./deviceId.ts";
-import { RoomFlowchartPanel } from "./components/RoomFlowchartPanel.tsx";
 import { HomePostExportModal } from "@/components/live/HomePostExportModal";
 import { initLiveSession } from "@/live/api";
 import {
@@ -119,6 +121,10 @@ import {
 } from "../../shared/liveContracts";
 
 const APP_BUILD_STAMP = typeof __APP_SEMVER__ !== "undefined" ? __APP_SEMVER__ : "0.0.0";
+
+const RoomFlowchartPanel = lazy(() =>
+  import("./components/RoomFlowchartPanel.tsx").then((m) => ({ default: m.RoomFlowchartPanel })),
+);
 
 const BRAND_NAME = "Tipsy Fox Escapes";
 const BRAND_INTRO =
@@ -1153,21 +1159,6 @@ function _LegacyMissionFlowMapUnused({
           Junior add-on: parallel branch on the Build → Review leg (adults + kids tracks).
         </p>
       ) : null}
-    </div>
-  );
-}
-
-const APP_PUBLIC_BASE = (import.meta.env.BASE_URL ?? "/").replace(/\/?$/, "/");
-/** Global backdrop: couple on a ridge above an endless maze (`public/planning-maze-backdrop.png`). */
-const APP_GLOBAL_BACKDROP_URL = `${APP_PUBLIC_BASE}planning-maze-backdrop.png`;
-
-function AppAtmosphere() {
-  return (
-    <div className="app-atmosphere" data-backdrop="art" aria-hidden="true">
-      <div className="app-atmosphere__image-layer">
-        <img className="app-atmosphere__img app-atmosphere__img--base" src={APP_GLOBAL_BACKDROP_URL} alt="" decoding="async" />
-      </div>
-      <div className="app-atmosphere__veil" />
     </div>
   );
 }
@@ -7835,12 +7826,14 @@ export default function App() {
                       <p className="muted room-flowchart-lead">
                         Stages, puzzles, and progression from your story plan—download SVG, PNG, or Mermaid source for runbooks.
                       </p>
-                      <RoomFlowchartPanel
-                        storyPlan={storyPlan}
-                        puzzles={puzzles}
-                        themeName={selectedTheme?.name}
-                        fileBase="room-flow-review"
-                      />
+                      <Suspense fallback={<p className="muted">Loading flowchart…</p>}>
+                        <RoomFlowchartPanel
+                          storyPlan={storyPlan}
+                          puzzles={puzzles}
+                          themeName={selectedTheme?.name}
+                          fileBase="room-flow-review"
+                        />
+                      </Suspense>
                       <NarrativeFlowGuide storyPlan={storyPlan} />
                     </div>
                   ) : null}
@@ -7992,12 +7985,14 @@ export default function App() {
                     Visual map of stages and puzzles—use <strong>Download flowchart</strong> for SVG, PNG, or Mermaid files alongside your
                     markdown export.
                   </p>
-                  <RoomFlowchartPanel
-                    storyPlan={storyPlan}
-                    puzzles={puzzles}
-                    themeName={selectedTheme?.name}
-                    fileBase="room-flow-export"
-                  />
+                  <Suspense fallback={<p className="muted">Loading flowchart…</p>}>
+                    <RoomFlowchartPanel
+                      storyPlan={storyPlan}
+                      puzzles={puzzles}
+                      themeName={selectedTheme?.name}
+                      fileBase="room-flow-export"
+                    />
+                  </Suspense>
                   <NarrativeFlowGuide storyPlan={storyPlan} />
                 </div>
               ) : null}

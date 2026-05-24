@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SiteShell } from "@/components/layout/SiteShell";
 import { ResetChecklistModal } from "@/components/live/ResetChecklistModal";
 import {
   deriveConnectivityStatus,
@@ -150,7 +151,8 @@ export function GmConsolePage() {
   const stageCount = 6;
 
   return (
-    <div className="gm-console-root">
+    <SiteShell variant="fullBleed">
+      <div className="gm-console-root">
       <header className="gm-console-header live-glass-panel">
         <div>
           <p className="gm-console-eyebrow">Gamemaster Live Console</p>
@@ -452,6 +454,7 @@ export function GmConsolePage() {
       ) : null}
 
       <ResetChecklistModal open={resetOpen} onClose={() => setResetOpen(false)} sessionId={sessionId} />
-    </div>
+      </div>
+    </SiteShell>
   );
 }

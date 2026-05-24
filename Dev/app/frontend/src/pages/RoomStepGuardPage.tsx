@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import { SiteShell } from "@/components/layout/SiteShell";
 import { getOrCreateDeviceId } from "@/deviceId";
 
 const AUTH_STORAGE_KEY = "escape-room-builder-auth-v1";
@@ -56,17 +57,17 @@ export function RoomStepGuardPage({ step, wizardStep }: RoomStepGuardPageProps) 
 
   if (!ready) {
     return (
-      <div className="page-shell page-shell--layered">
+      <SiteShell>
         <p className="muted" style={{ padding: "2rem" }}>
           Verifying access…
         </p>
-      </div>
+      </SiteShell>
     );
   }
 
   if (deniedMessage) {
     return (
-      <div className="page-shell page-shell--layered">
+      <SiteShell>
         <section className="card mission-panel glass-panel" style={{ margin: "2rem auto", maxWidth: 520 }}>
           <h2>Access restricted</h2>
           <p className="muted">{deniedMessage}</p>
@@ -74,7 +75,7 @@ export function RoomStepGuardPage({ step, wizardStep }: RoomStepGuardPageProps) 
             View plans
           </button>
         </section>
-      </div>
+      </SiteShell>
     );
   }
 

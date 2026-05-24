@@ -1,21 +1,82 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { SiteShell } from "@/components/layout/SiteShell";
 import App from "./App.tsx";
-import { AdminDashboardPage } from "./pages/AdminDashboardPage.tsx";
-import { GmConsolePage } from "./pages/GmConsolePage.tsx";
-import { PlayerDisplayPage } from "./pages/PlayerDisplayPage.tsx";
-import { RoomStepGuardPage } from "./pages/RoomStepGuardPage.tsx";
+
+const AdminDashboardPage = lazy(() =>
+  import("./pages/AdminDashboardPage.tsx").then((m) => ({ default: m.AdminDashboardPage })),
+);
+const GmConsolePage = lazy(() => import("./pages/GmConsolePage.tsx").then((m) => ({ default: m.GmConsolePage })));
+const PlayerDisplayPage = lazy(() =>
+  import("./pages/PlayerDisplayPage.tsx").then((m) => ({ default: m.PlayerDisplayPage })),
+);
+const RoomStepGuardPage = lazy(() =>
+  import("./pages/RoomStepGuardPage.tsx").then((m) => ({ default: m.RoomStepGuardPage })),
+);
+
+function RouteFallback({ label }: { label: string }) {
+  return (
+    <SiteShell>
+      <p className="muted" style={{ padding: "2rem" }}>
+        {label}
+      </p>
+    </SiteShell>
+  );
+}
 
 export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<App />} />
-        <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
-        <Route path="/room/build" element={<RoomStepGuardPage step="build" wizardStep="themes-puzzles" />} />
-        <Route path="/room/export" element={<RoomStepGuardPage step="export" wizardStep="output-review" />} />
-        <Route path="/gm/:sessionId" element={<GmConsolePage />} />
-        <Route path="/console/:sessionId" element={<GmConsolePage />} />
-        <Route path="/room/:sessionId/player-display" element={<PlayerDisplayPage />} />
+        <Route
+          path="/admin/dashboard"
+          element={
+            <Suspense fallback={<RouteFallback label="Loading admin panel…" />}>
+              <AdminDashboardPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/room/build"
+          element={
+            <Suspense fallback={<RouteFallback label="Verifying access…" />}>
+              <RoomStepGuardPage step="build" wizardStep="themes-puzzles" />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/room/export"
+          element={
+            <Suspense fallback={<RouteFallback label="Verifying access…" />}>
+              <RoomStepGuardPage step="export" wizardStep="output-review" />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/gm/:sessionId"
+          element={
+            <Suspense fallback={<RouteFallback label="Loading GM console…" />}>
+              <GmConsolePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/console/:sessionId"
+          element={
+            <Suspense fallback={<RouteFallback label="Loading GM console…" />}>
+              <GmConsolePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/room/:sessionId/player-display"
+          element={
+            <Suspense fallback={<RouteFallback label="Loading player display…" />}>
+              <PlayerDisplayPage />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

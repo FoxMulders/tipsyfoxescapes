@@ -33,6 +33,7 @@ export const ENVIRONMENT_PRESETS = [
 export type EnvironmentPresetScope = "home" | "all";
 
 const CUSTOM_VALUE = "__custom_environment__";
+const EMPTY_VALUE = "__empty_environment__";
 
 function itemKey(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
@@ -58,14 +59,15 @@ export function EnvironmentSelect({
     () => presets.find((p) => itemKey(p) === itemKey(value)),
     [value, presets],
   );
-  const selectValue = matchedPreset ?? (value.trim() ? CUSTOM_VALUE : "");
+  const selectValue = matchedPreset ?? (value.trim() ? CUSTOM_VALUE : EMPTY_VALUE);
   const [customOpen, setCustomOpen] = useState(selectValue === CUSTOM_VALUE);
 
   return (
     <div className="space-y-2">
       <Select
-        value={selectValue || undefined}
+        value={selectValue}
         onValueChange={(next) => {
+          if (next === EMPTY_VALUE) return;
           if (next === CUSTOM_VALUE) {
             setCustomOpen(true);
             if (matchedPreset) onChange("");
@@ -81,9 +83,12 @@ export function EnvironmentSelect({
         }}
       >
         <SelectTrigger id={id} className={cn(invalid && "border-destructive ring-destructive/40")} aria-invalid={invalid}>
-          <SelectValue />
+          <SelectValue placeholder="Select environment…" />
         </SelectTrigger>
         <SelectContent>
+          <SelectItem value={EMPTY_VALUE} disabled className="hidden">
+            Select environment
+          </SelectItem>
           {presets.map((entry) => (
             <SelectItem key={entry} value={entry}>
               {entry}
@@ -96,7 +101,7 @@ export function EnvironmentSelect({
       {(customOpen || selectValue === CUSTOM_VALUE) && !matchedPreset ? (
         <input
           className={cn(
-            "flex h-10 w-full rounded-md border border-slate-800/50 bg-input/80 px-3 py-2 text-sm backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-ring",
+            "flex h-10 w-full rounded-md border border-border bg-input/80 px-3 py-2 text-sm backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-ring",
             invalid && "border-destructive",
           )}
           type="text"

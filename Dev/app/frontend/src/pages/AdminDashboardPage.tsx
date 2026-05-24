@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { AdminDashboard } from "@/pages/AdminDashboard";
+import { SiteShell } from "@/components/layout/SiteShell";
 import { getOrCreateDeviceId } from "@/deviceId";
 
 const AUTH_STORAGE_KEY = "escape-room-builder-auth-v1";
@@ -51,11 +52,11 @@ export function AdminDashboardPage() {
 
   if (allowed === null) {
     return (
-      <div className="page-shell page-shell--layered">
+      <SiteShell>
         <p className="muted" style={{ padding: "2rem" }}>
           Loading admin panel…
         </p>
-      </div>
+      </SiteShell>
     );
   }
 
@@ -64,13 +65,13 @@ export function AdminDashboardPage() {
   }
 
   return (
-    <div className="page-shell page-shell--layered">
+    <SiteShell>
       <header className="admin-dashboard-page-header">
         <Link to="/" className="secondary-btn" onClick={() => navigate("/")}>
           ← Back to builder
         </Link>
       </header>
       <AdminDashboard apiBase={API_BASE} authToken={authToken} deviceId={getOrCreateDeviceId()} />
-    </div>
+    </SiteShell>
   );
 }

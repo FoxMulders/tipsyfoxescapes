@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import mermaid from "mermaid";
 import {
   buildRoomFlowchartMermaid,
   wrapMermaidMarkdown,
@@ -40,7 +39,7 @@ const svgToPngBlob = async (svg: string): Promise<Blob> => {
   canvas.height = h;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas unavailable.");
-  ctx.fillStyle = "#0f172a";
+  ctx.fillStyle = "hsl(222 47% 6%)";
   ctx.fillRect(0, 0, w, h);
   ctx.drawImage(img, 0, 0, w, h);
   return new Promise((resolve, reject) => {
@@ -65,6 +64,7 @@ export function RoomFlowchartPanel({ storyPlan, puzzles, themeName, fileBase = "
     setBusy(true);
     setRenderError(null);
     try {
+      const { default: mermaid } = await import("mermaid");
       mermaid.initialize({
         startOnLoad: false,
         securityLevel: "loose",

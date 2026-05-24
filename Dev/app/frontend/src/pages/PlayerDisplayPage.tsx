@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { Link, useParams } from "react-router-dom";
+import { SiteShell } from "@/components/layout/SiteShell";
 import { formatMsClock, initLiveSession, postPlayerReady } from "@/live/api";
 import { useLiveStream } from "@/live/useLiveStream";
 import "@/live/live.css";
@@ -30,7 +31,8 @@ export function PlayerDisplayPage() {
   const total = snapshot?.state?.puzzles.length ?? 0;
 
   return (
-    <div className={`player-display-root player-display-root--${mode}`}>
+    <SiteShell variant="fullBleed">
+      <div className={`player-display-root player-display-root--${mode}`}>
       <header className="player-display-header">
         <p className="player-display-brand">Tipsy Fox Escapes</p>
         <h1 className="player-display-title">{planName}</h1>
@@ -89,6 +91,7 @@ export function PlayerDisplayPage() {
           Builder
         </Link>
       </footer>
-    </div>
+      </div>
+    </SiteShell>
   );
 }

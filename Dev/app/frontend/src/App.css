@@ -1,21 +1,5 @@
 :root {
   --shell-panel-gap: 1rem;
-  --bg: #050a0c;
-  --bg-deep: #070f12;
-  --auth-surface-bg: hsl(220 28% 7%);
-  --auth-surface-border: rgba(255, 255, 255, 0.1);
-  --surface: rgba(10, 18, 22, 0.38);
-  --surface-strong: rgba(12, 22, 28, 0.48);
-  --border: rgba(72, 130, 140, 0.35);
-  --border-strong: rgba(92, 168, 178, 0.48);
-  --text: #e8f4f2;
-  --muted: #9cb4b8;
-  --primary: #3db8c8;
-  --primary-strong: #2a9aad;
-  --accent: #7dd3c9;
-  --danger: #ff8ea0;
-  --success: #7de0ab;
-  --shadow: 0 18px 44px rgba(0, 0, 0, 0.48);
 }
 
 * {
@@ -31,7 +15,7 @@
 
 html {
   min-height: 100%;
-  background-color: #060d10;
+  background-color: var(--bg-deep);
 }
 
 body {
@@ -41,6 +25,22 @@ body {
   /* Atmospheric art is painted in .app-atmosphere; keep body transparent */
   background: transparent;
   min-height: 100vh;
+}
+
+.site-shell {
+  position: relative;
+  z-index: 1;
+}
+
+.site-shell--fullbleed {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+}
+
+.site-shell--fullbleed .gm-console-root,
+.site-shell--fullbleed .player-display-root {
+  background: transparent;
 }
 
 .page-shell {
@@ -80,7 +80,7 @@ body {
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  background: #080a0e;
+  background: var(--bg-deep);
 }
 
 .app-atmosphere[data-backdrop="art"] .app-atmosphere__image-layer {
@@ -596,7 +596,8 @@ body {
   max-width: 100%;
   overflow: auto;
   border-radius: 8px;
-  background: #f8fafc;
+  background: hsl(222 40% 9% / 0.92);
+  border: 1px solid var(--border);
   padding: 0.35rem;
 }
 
@@ -1555,9 +1556,9 @@ button:hover {
   margin: 1rem 0 1.25rem;
   padding: 1.1rem 1.15rem;
   border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: linear-gradient(165deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.78));
-  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.35);
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
 }
 
 .square-checkout-head h3 {
@@ -1570,8 +1571,8 @@ button:hover {
   margin: 0.75rem 0 1rem;
   padding: 0.65rem 0.75rem;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  background: #f8fafc;
+  border: 1px solid hsl(217 28% 28% / 0.55);
+  background: hsl(217 28% 12% / 0.85);
 }
 
 .square-checkout-submit {
@@ -1582,20 +1583,31 @@ button:hover {
   margin: 0 0 0.35rem;
 }
 
+.social-google,
+.social-facebook,
+.social-github {
+  background: hsl(217 28% 12% / 0.85);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.social-google:hover:not(:disabled),
+.social-facebook:hover:not(:disabled),
+.social-github:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: hsl(217 28% 16% / 0.9);
+}
+
 .social-google {
-  background: #f4f7ff;
-  color: #16243f;
-  border-color: #c4d4f5;
+  border-left: 3px solid #4285f4;
 }
 
 .social-facebook {
-  background: #3057a8;
-  border-color: #3057a8;
+  border-left: 3px solid #1877f2;
 }
 
 .social-github {
-  background: #202834;
-  border-color: #202834;
+  border-left: 3px solid hsl(215 18% 62%);
 }
 
 .muted {
@@ -2209,9 +2221,9 @@ button:hover {
 
 .diagram-img {
   max-width: 100%;
-  border: 1px solid rgba(70, 145, 155, 0.38);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: #ffffff;
+  background: hsl(222 40% 9% / 0.92);
 }
 
 .code-block {
