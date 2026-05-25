@@ -2767,6 +2767,8 @@ export default function App() {
     | "output-review"
     | "output-export";
   const [wizardStep, setWizardStep] = useState<WizardStep>("setup");
+  /** Highest wizard step reached this draft session — enables map clicks back to completed steps. */
+  const [furthestWizardIndex, setFurthestWizardIndex] = useState(0);
   const [hoverPreviewThemeId, setHoverPreviewThemeId] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const navigate = useNavigate();
@@ -3121,6 +3123,33 @@ export default function App() {
   const flowWizardStep: WizardStep = wizardSteps.includes(wizardStep) ? wizardStep : (wizardSteps[0] ?? "setup");
   const wizardIndex = wizardSteps.indexOf(flowWizardStep);
   const missionStepLabels = useMemo(() => wizardSteps.map(wizardStepLabel), [wizardSteps]);
+
+  useEffect(() => {
+    setFurthestWizardIndex((prev) => Math.max(prev, wizardIndex));
+  }, [wizardIndex]);
+
+  useEffect(() => {
+    setFurthestWizardIndex((prev) => Math.min(prev, Math.max(0, wizardSteps.length - 1)));
+  }, [wizardSteps.length]);
+
+  const canNavigateToWizardIndex = (index: number): boolean => {
+    if (index < 0 || index >= wizardSteps.length) return false;
+    if (index <= furthestWizardIndex) return true;
+    if (index <= wizardIndex) return true;
+    if (index > wizardIndex) {
+      if (index > wizardSteps.indexOf("setup") && !buildPlanningBody("strict")) return false;
+      const step = wizardSteps[index];
+      if (
+        (step === "themes-puzzles" || step === "output-review" || step === "output-export") &&
+        !selectedThemeId &&
+        themePath !== "custom"
+      ) {
+        return false;
+      }
+      return true;
+    }
+    return false;
+  };
   const juniorForkSegmentIndex = useMemo(() => {
     if (!youthAddOnEnabled) return null;
     const i = wizardSteps.indexOf("themes-puzzles");
@@ -3323,7 +3352,9 @@ export default function App() {
   const navigateWizardToIndex = async (targetIndex: number): Promise<void> => {
     if (targetIndex < 0 || targetIndex >= wizardSteps.length || targetIndex === wizardIndex) return;
     const targetStep = wizardSteps[targetIndex];
-    if (targetIndex > wizardIndex) {
+    const revisitingCompletedStep = targetIndex <= furthestWizardIndex;
+
+    if (targetIndex > wizardIndex && !revisitingCompletedStep) {
       if (targetIndex > wizardSteps.indexOf("setup") && !buildPlanningBody("strict")) {
         flagMissingFields(collectStrictPlanningMissing());
         toast.error("Complete room details before advancing.");
@@ -3340,17 +3371,21 @@ export default function App() {
         return;
       }
     }
-    if (targetStep === "themes-puzzles" && wizardIndex < wizardSteps.indexOf("themes-puzzles")) {
-      await proceedFromThemesToPuzzles();
-      return;
-    }
-    if (targetStep === "output-review" && flowWizardStep !== "output-review") {
-      await proceedToOutputReview();
-      return;
+    if (!revisitingCompletedStep) {
+      if (targetStep === "themes-puzzles" && wizardIndex < wizardSteps.indexOf("themes-puzzles")) {
+        await proceedFromThemesToPuzzles();
+        return;
+      }
+      if (targetStep === "output-review" && flowWizardStep !== "output-review") {
+        await proceedToOutputReview();
+        return;
+      }
     }
     setWizardStep(targetStep);
-    if (targetStep === "themes") setActivePanel("themes");
+    if (targetStep === "themes" || targetStep === "themes-puzzles") setActivePanel("themes");
     if (targetStep === "setup") setActivePanel("plan");
+    if (targetStep === "output-review" || targetStep === "output-export") setActivePanel("output");
+    if (targetStep === "saved") setActivePanel("saved");
   };
 
   const proceedFromSetupToThemes = async (): Promise<void> => {
@@ -3546,6 +3581,20 @@ export default function App() {
     setCustomMixLogic(snapshot.customMixLogic ?? "");
     setCustomMixPhysical(snapshot.customMixPhysical ?? "");
     setCustomMixElectronic(snapshot.customMixElectronic ?? "");
+    const restoredStep = snapshot.wizardStep as WizardStep;
+    let restoredFurthest = wizardSteps.indexOf(restoredStep);
+    if (restoredFurthest < 0) restoredFurthest = 0;
+    const themesIdx = wizardSteps.indexOf("themes");
+    const puzzlesIdx = wizardSteps.indexOf("themes-puzzles");
+    const reviewIdx = wizardSteps.indexOf("output-review");
+    const exportIdx = wizardSteps.indexOf("output-export");
+    if (snapshot.selectedThemeId?.trim() && themesIdx >= 0) restoredFurthest = Math.max(restoredFurthest, themesIdx);
+    if (snapshot.selectedThemeId?.trim() && snapshot.puzzles?.length && puzzlesIdx >= 0) {
+      restoredFurthest = Math.max(restoredFurthest, puzzlesIdx);
+    }
+    if (snapshot.approvedForBuild && reviewIdx >= 0) restoredFurthest = Math.max(restoredFurthest, reviewIdx);
+    if (restoredStep === "output-export" && exportIdx >= 0) restoredFurthest = Math.max(restoredFurthest, exportIdx);
+    setFurthestWizardIndex(restoredFurthest);
   };
 
   const applyWorkspaceDraftFromOAuth = (draft: OAuthWorkspaceDraft): void => {
@@ -6903,7 +6952,7 @@ export default function App() {
                 youthAddOnEnabled={youthAddOnEnabled}
                 forkSegmentIndex={juniorForkSegmentIndex}
                 onStepClick={(index) => void navigateWizardToIndex(index)}
-                canNavigateToStep={(index) => index <= wizardIndex || buildPlanningBody("strict") !== null}
+                canNavigateToStep={canNavigateToWizardIndex}
               />
             </div>
             <div className="flow-shell-scroll-region flow-shell-scroll-region--body">
@@ -7718,6 +7767,7 @@ export default function App() {
                 setShowPlanPicker(false);
                 setActivePanel("plan");
                 setWizardStep("setup");
+                setFurthestWizardIndex(0);
               }}
             >
               Start New Plan
