@@ -72,7 +72,6 @@ import { FlowStepIntro } from "@/components/planning/FlowStepIntro";
 import { BuilderErrorBoundary } from "@/components/BuilderErrorBoundary";
 import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
 import {
-  PlansAndBillingSection,
   PricingValueFocus,
   pricingCtaLabel,
   type BillingPlan,
@@ -132,6 +131,9 @@ const APP_BUILD_STAMP = typeof __APP_SEMVER__ !== "undefined" ? __APP_SEMVER__ :
 
 const RoomFlowchartPanel = lazy(() =>
   import("./components/RoomFlowchartPanel.tsx").then((m) => ({ default: m.RoomFlowchartPanel })),
+);
+const PlansAndBillingSection = lazy(() =>
+  import("@/components/account/PlansAndBillingSection").then((m) => ({ default: m.PlansAndBillingSection })),
 );
 
 const BRAND_NAME = "Tipsy Fox Escapes";
@@ -4273,8 +4275,12 @@ export default function App() {
   // localStorage, adopt it here so this tab doesn't fail with a stale token.
   useEffect(() => {
     const unsubscribe = subscribeCrossTabAuth((newSession) => {
-      if (!newSession?.authToken.trim()) return; // Ignore sign-outs from other tabs.
-      if (newSession.authToken === authSessionRef.current.authToken) return; // Already current.
+      if (!newSession?.authToken.trim()) {
+        clearWizardBusyStateRef.current();
+        persistAuthRef.current("", null);
+        return;
+      }
+      if (newSession.authToken === authSessionRef.current.authToken) return;
       // Adopt the refreshed token synchronously so the next API call uses it.
       authSessionRef.current = {
         authToken: newSession.authToken,
@@ -4938,7 +4944,9 @@ export default function App() {
       const preservePlanningOnBootstrap =
         oauthReturnBootstrapRef.current ||
         Boolean(peekOAuthPlanningStash()) ||
-        Boolean(peekOAuthReturnSnapshot());
+        Boolean(peekOAuthReturnSnapshot()) ||
+        wizardNavigationBusyRef.current ||
+        Boolean(sessionId.trim());
       if (!preservePlanningOnBootstrap) {
         setSessionId("");
         setThemes([]);
@@ -4956,20 +4964,33 @@ export default function App() {
         setExistingPuzzles([]);
       }
       void (async () => {
+        clearWizardBusyStateRef.current();
         const snapshot = consumeOAuthReturnSnapshot();
-        if (snapshot) applyOAuthReturnSnapshot(snapshot);
+        if (snapshot) {
+          applyOAuthReturnSnapshot(snapshot);
+        } else {
+          const workspaceDraft = consumeWorkspaceDraftForOAuth();
+          if (workspaceDraft) applyWorkspaceDraftFromOAuth(workspaceDraft);
+        }
         const restored = await tryRestore(snapshot?.sessionId);
         if (!restored) {
-          await createSession(
-            { existingPuzzles: snapshot?.existingPuzzles ?? [] },
-            { seedThemes: !snapshot },
-          );
+          const snapshotHasDraft =
+            Boolean(snapshot?.themes?.length) ||
+            Boolean(snapshot?.puzzles?.length) ||
+            Boolean(snapshot?.selectedThemeId?.trim());
+          if (snapshot?.sessionId?.trim()) {
+            setSessionId(snapshot.sessionId.trim());
+          }
+          if (!snapshotHasDraft) {
+            await createSession(
+              { existingPuzzles: snapshot?.existingPuzzles ?? [] },
+              { seedThemes: !snapshot },
+            );
+          }
         } else {
           const sid = sessionId.trim() || snapshot?.sessionId?.trim();
           if (sid) await syncPlanningInputToServer(sid, "draft");
         }
-        const workspaceDraft = consumeWorkspaceDraftForOAuth();
-        if (workspaceDraft) applyWorkspaceDraftFromOAuth(workspaceDraft);
         oauthReturnBootstrapRef.current = false;
         clearOAuthReturnMarker();
       })().finally(() => {
@@ -6822,6 +6843,7 @@ export default function App() {
             </section>
           ) : null}
           {accountSection === "plans" && !authUser.isAdmin && billingPlans.length > 0 ? (
+            <Suspense fallback={<section className="card mission-panel"><p className="muted">Loading plans & billing…</p></section>}>
             <PlansAndBillingSection
               authUser={authUser}
               billingPlans={billingPlans}
@@ -6846,6 +6868,7 @@ export default function App() {
               onActiveEscapePlanRoomChange={setActiveEscapePlanRoomId}
               operatorPlanQuote={operatorPlanQuote}
             />
+            </Suspense>
           ) : null}
           {accountSection === "overview" ? (
           <>

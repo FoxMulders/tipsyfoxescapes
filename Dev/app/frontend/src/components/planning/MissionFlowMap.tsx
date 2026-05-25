@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 export function MissionFlowMap({
@@ -19,6 +19,7 @@ export function MissionFlowMap({
   /** When true, step clicks are blocked (e.g. generation in flight). */
   navigationDisabled?: boolean;
 }) {
+  const mapRootRef = useRef<HTMLDivElement>(null);
   const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const n = stepLabels.length;
   const compact = n >= 6;
@@ -58,8 +59,19 @@ export function MissionFlowMap({
 
   const glowId = `missionFlowGlow-${reactId}`;
 
+  useEffect(() => {
+    if (!navigationDisabled) return;
+    const root = mapRootRef.current;
+    if (!root) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && root.contains(active)) {
+      active.blur();
+    }
+  }, [navigationDisabled]);
+
   return (
     <div
+      ref={mapRootRef}
       className={cn(
         "mission-flow-map mission-flow-map--header mission-flow-map--compact-sticky",
         compact && "mission-flow-map--compact",
@@ -147,7 +159,8 @@ export function MissionFlowMap({
               className={cn(`mission-flow-node mission-flow-node--${st}`, clickable && "mission-flow-node--clickable")}
               style={clickable ? { cursor: "pointer" } : undefined}
               role={clickable ? "button" : undefined}
-              tabIndex={clickable ? 0 : undefined}
+              tabIndex={clickable ? 0 : -1}
+              aria-disabled={navigationDisabled || !clickable ? true : undefined}
               aria-current={st === "active" ? "step" : undefined}
               aria-label={`${label}${st === "active" ? " (current)" : st === "done" ? " (completed)" : ""}`}
               onClick={
