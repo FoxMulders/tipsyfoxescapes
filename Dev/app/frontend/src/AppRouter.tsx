@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { SiteShell } from "@/components/layout/SiteShell";
 
 const App = lazy(() => import("./App.tsx"));
@@ -27,8 +28,9 @@ function RouteFallback({ label }: { label: string }) {
 
 export function AppRouter() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <AppErrorBoundary>
+      <BrowserRouter>
+        <Routes>
         <Route
           path="/"
           element={
@@ -86,7 +88,8 @@ export function AppRouter() {
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </AppErrorBoundary>
   );
 }

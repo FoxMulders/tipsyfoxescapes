@@ -107,16 +107,12 @@ import {
   customThemeCoachSynthesize,
   customThemeCoachTurn,
   enhancePlanInBrowser,
-  generateContextualInspirationInBrowser,
-  INSPIRATION_CATALOG,
   isBrowserAiAvailable,
   polishThemeBriefInBrowser,
   probeBrowserLanguageModel,
   refineThemeFitReasonInBrowser,
-  type ContextualInspirationResult,
   type CustomThemeCoachContext,
   type CustomThemeCoachMessage,
-  type InspirationCatalogEntry,
 } from "./browserAi.ts";
 import { getOrCreateDeviceId } from "./deviceId.ts";
 import { HomePostExportModal } from "@/components/live/HomePostExportModal";
@@ -134,6 +130,9 @@ const RoomFlowchartPanel = lazy(() =>
 );
 const PlansAndBillingSection = lazy(() =>
   import("@/components/account/PlansAndBillingSection").then((m) => ({ default: m.PlansAndBillingSection })),
+);
+const InspirationDrawerPanel = lazy(() =>
+  import("@/components/planning/InspirationDrawerPanel").then((m) => ({ default: m.InspirationDrawerPanel })),
 );
 
 const BRAND_NAME = "Tipsy Fox Escapes";
@@ -430,18 +429,6 @@ type SavedPlanPayload = {
 };
 const API_BASE = "";
 const THEME_SESSION_EXPIRED_MESSAGE = "Session expired. Please log in to view and save your theme ideas,";
-/** Curated reading for hosts building physical / logic puzzles (Room details). */
-const INSPIRATION_DRAWER_CATEGORY_ORDER: InspirationCatalogEntry["category"][] = [
-  "Tech & DIY",
-  "Design & theory",
-  "Community & playthroughs",
-  "Visual ideas",
-  "Starter articles",
-];
-
-function inspirationCatalogEntryById(id: string): InspirationCatalogEntry | undefined {
-  return INSPIRATION_CATALOG.find((e) => e.id === id);
-}
 const HISTORY_STORAGE_KEY = "escape-room-builder-input-history-v1";
 /** After idle sign-out, saved draft plan id so the next login can reopen the builder automatically. */
 const IDLE_RESUME_PLAN_ID_KEY = "escape-room-builder-idle-resume-plan-v1";
@@ -2351,14 +2338,6 @@ function ThemeDescriptionBlocks({ text }: { text: string }) {
 
 type ThemeCoachUiMessage = { id: string; role: "user" | "assistant"; content: string };
 
-/** Structured result from the server-side /api/inspiration/generate endpoint. */
-interface InspirationApiResult {
-  theme: string;
-  narrativeHook: string;
-  puzzlesAndProps: Array<{ puzzleConcept: string; requiredProps: string[] }>;
-  source: "openai" | "mock";
-}
-
 function newCoachMessageId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -2634,35 +2613,6 @@ export default function App() {
   const [briefPolishBusy, setBriefPolishBusy] = useState<boolean>(false);
   const [arduinoPreviewPuzzleId, setArduinoPreviewPuzzleId] = useState<string | null>(null);
   const [inspirationOpen, setInspirationOpen] = useState<boolean>(false);
-  const [inspirationAiBrief, setInspirationAiBrief] = useState<ContextualInspirationResult | null>(null);
-  const [inspirationServerResult, setInspirationServerResult] = useState<InspirationApiResult | null>(null);
-  const [inspirationAiBusy, setInspirationAiBusy] = useState<boolean>(false);
-  const [inspirationAiError, setInspirationAiError] = useState<string>("");
-  const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
-  const aiEnabledFetchedRef = useRef(false);
-
-  useEffect(() => {
-    if (!inspirationOpen) return;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") setInspirationOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [inspirationOpen]);
-
-  useEffect(() => {
-    if (!inspirationOpen || aiEnabledFetchedRef.current) return;
-    aiEnabledFetchedRef.current = true;
-    fetch("/api/config")
-      .then((r) => r.json())
-      .then((data: { isAiEnabled?: boolean }) => {
-        setAiEnabled(Boolean(data.isAiEnabled));
-      })
-      .catch(() => {
-        setAiEnabled(true);
-      });
-  }, [inspirationOpen]);
-
   useEffect(() => {
     if (!targetInterfaceInitRef.current) {
       targetInterfaceInitRef.current = true;
@@ -2879,91 +2829,6 @@ export default function App() {
     customMixLogic,
     customMixPhysical,
     customMixElectronic,
-  ]);
-
-  const runContextualInspiration = useCallback(async (): Promise<void> => {
-    setInspirationAiError("");
-    setInspirationServerResult(null);
-    setInspirationAiBrief(null);
-    setInspirationAiBusy(true);
-    try {
-      // 1. Try server-side API (OpenAI when key configured, otherwise env-aware mock).
-      try {
-        // Compute node count inline (plannerMainPuzzleTarget is declared later in the component).
-        const pc = Number(playersConcurrent);
-        const sd = Number(sessionDurationMinutes);
-        const customN = useCustomMainPuzzleCount ? Number.parseInt(customMainPuzzleCountStr.trim(), 10) : NaN;
-        const targetNodeCount = !isNaN(customN) && Number.isFinite(customN)
-          ? Math.min(24, Math.max(1, Math.trunc(customN)))
-          : (Number.isFinite(pc) && pc >= 1 && Number.isFinite(sd) && sd >= 1
-            ? estimateClientPuzzleCount(Math.floor(pc), Math.floor(sd))
-            : 4);
-        const payload = {
-          environmentType: environmentType.trim(),
-          availableItems: availableItems.trim(),
-          targetNodeCount,
-          themeMustMatchEnvironment,
-          eventType: eventType.trim(),
-          themeName: selectedTheme?.name ?? customThemeName.trim(),
-        };
-        const resp = await fetch("/api/inspiration/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        if (resp.ok) {
-          const data = (await resp.json()) as InspirationApiResult;
-          if (data.theme && Array.isArray(data.puzzlesAndProps) && data.puzzlesAndProps.length > 0) {
-            setInspirationServerResult(data);
-            return;
-          }
-        }
-      } catch {
-        // Server unavailable — fall through to browser AI.
-      }
-
-      // 2. Fall back to on-device browser AI when available.
-      if (coachBrowserAiReady) {
-        const themeName = selectedTheme?.name ?? (customThemeName.trim() || "Not selected yet");
-        const themeTldr = selectedTheme ? resolveThemeTldr(selectedTheme) : "";
-        const desc = selectedTheme?.description ?? customThemeDescription ?? "";
-        const excerpt = collapseWs(desc).slice(0, 900);
-        const result = await generateContextualInspirationInBrowser({
-          environmentType: environmentType.trim(),
-          availableItems: availableItems.trim(),
-          eventType: eventType.trim(),
-          themeName,
-          themeTldr,
-          themeDescriptionExcerpt: excerpt,
-          isCommercialVenue: commercialVenueContext,
-        });
-        if (result && (result.intro || result.propIdeas.length > 0 || result.proTip)) {
-          setInspirationAiBrief(result);
-          return;
-        }
-      }
-
-      // 3. Both paths failed.
-      setInspirationAiError(
-        "Could not generate inspiration. The server API is available without configuration and returns sample concepts — if you see this, try refreshing the page.",
-      );
-    } finally {
-      setInspirationAiBusy(false);
-    }
-  }, [
-    coachBrowserAiReady,
-    selectedTheme,
-    customThemeName,
-    customThemeDescription,
-    environmentType,
-    availableItems,
-    eventType,
-    commercialVenueContext,
-    themeMustMatchEnvironment,
-    playersConcurrent,
-    sessionDurationMinutes,
-    useCustomMainPuzzleCount,
-    customMainPuzzleCountStr,
   ]);
 
   customThemeCoachMessagesRef.current = customThemeCoachMessages;
@@ -8434,180 +8299,24 @@ export default function App() {
           </button>
         ) : null}
         {inspirationOpen ? (
-          <>
-            <div
-              className="inspiration-drawer-backdrop"
-              role="presentation"
-              aria-hidden="true"
-              onClick={() => setInspirationOpen(false)}
+          <Suspense fallback={null}>
+            <InspirationDrawerPanel
+              open={inspirationOpen}
+              onClose={() => setInspirationOpen(false)}
+              plannerMainPuzzleTarget={plannerMainPuzzleTarget}
+              themeMustMatchEnvironment={themeMustMatchEnvironment}
+              environmentType={environmentType}
+              availableItems={availableItems}
+              eventType={eventType}
+              themeName={selectedTheme?.name ?? customThemeName.trim()}
+              themeTldr={selectedTheme ? resolveThemeTldr(selectedTheme) : ""}
+              themeDescriptionExcerpt={collapseWs(
+                selectedTheme?.description ?? customThemeDescription ?? "",
+              ).slice(0, 900)}
+              commercialVenueContext={commercialVenueContext}
+              coachBrowserAiReady={coachBrowserAiReady}
             />
-            <aside
-              className="inspiration-drawer"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="inspiration-drawer-title"
-            >
-              <div className="inspiration-drawer-head">
-                <h2 id="inspiration-drawer-title">Inspiration drawer</h2>
-                <button type="button" className="secondary-btn" onClick={() => setInspirationOpen(false)}>
-                  Close
-                </button>
-              </div>
-              <p className="muted inspiration-drawer-lead">
-                Curated libraries below. <strong>On-device AI</strong> can tie <strong>your environment, props, and theme</strong> to
-                these links—same privacy model as the theme coach (nothing leaves your machine).
-              </p>
-              <div className="inspiration-ai-panel">
-                <button
-                  type="button"
-                  className="primary-btn inspiration-ai-generate-btn"
-                  disabled={inspirationAiBusy}
-                  aria-busy={inspirationAiBusy}
-                  onClick={() => void runContextualInspiration()}
-                >
-                  {inspirationAiBusy
-                    ? "Generating…"
-                    : `Generate AI concept (${plannerMainPuzzleTarget} puzzle node${plannerMainPuzzleTarget === 1 ? "" : "s"})`}
-                </button>
-                {aiEnabled === false ? (
-                  <p className="inspiration-ai-config-warn" role="status">
-                    <span aria-hidden="true">⚠</span>{" "}
-                    AI generation unavailable — <code>OPENAI_API_KEY</code> is not configured in your environment. Sample concepts will be shown instead.
-                  </p>
-                ) : null}
-                {inspirationAiError ? <p className="error-banner inspiration-ai-error">{inspirationAiError}</p> : null}
-
-                {/* Structured result from server-side API */}
-                {inspirationServerResult ? (
-                  <div className="inspiration-ai-result inspiration-structured-result" role="region" aria-label="AI-generated escape room concept">
-                    <div className="inspiration-concept-header">
-                      <h3 className="inspiration-concept-theme">{inspirationServerResult.theme}</h3>
-                      {inspirationServerResult.source === "mock" ? (
-                        <span className="inspiration-source-badge inspiration-source-badge--mock">Sample concept</span>
-                      ) : (
-                        <span className="inspiration-source-badge inspiration-source-badge--ai">AI-generated</span>
-                      )}
-                    </div>
-                    {inspirationServerResult.narrativeHook ? (
-                      <p className="inspiration-narrative-hook">{inspirationServerResult.narrativeHook}</p>
-                    ) : null}
-                    {inspirationServerResult.puzzlesAndProps.length > 0 ? (
-                      <>
-                        <h4 className="inspiration-ai-subhead">
-                          Puzzle nodes — {inspirationServerResult.puzzlesAndProps.length} node{inspirationServerResult.puzzlesAndProps.length === 1 ? "" : "s"}
-                          {themeMustMatchEnvironment ? " · environmental fit enforced" : ""}
-                        </h4>
-                        <ol className="inspiration-puzzle-nodes-list">
-                          {inspirationServerResult.puzzlesAndProps.map((node, idx) => (
-                            <li key={`node-${idx}`} className="inspiration-puzzle-node-item">
-                              <p className="inspiration-puzzle-concept">{node.puzzleConcept}</p>
-                              {node.requiredProps.length > 0 ? (
-                                <p className="inspiration-puzzle-props muted">
-                                  <strong>Props:</strong> {node.requiredProps.join(", ")}
-                                </p>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ol>
-                      </>
-                    ) : null}
-                    {inspirationServerResult.source === "mock" ? (
-                      <p className="muted inspiration-mock-notice">
-                        This is a sample concept matched to your environment. Set <code>OPENAI_API_KEY</code> in your backend <code>.env</code> to get personalized AI-generated plans.
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {/* On-device browser AI result (fallback) */}
-                {inspirationAiBrief ? (
-                  <div className="inspiration-ai-result" role="region" aria-label="On-device AI inspiration">
-                    <p className="muted inspiration-source-note">Generated by on-device AI</p>
-                    {inspirationAiBrief.intro ? <p className="inspiration-ai-intro">{inspirationAiBrief.intro}</p> : null}
-                    {inspirationAiBrief.propIdeas.length > 0 ? (
-                      <>
-                        <h3 className="inspiration-ai-subhead">Props → puzzle angles</h3>
-                        <ul className="inspiration-ai-prop-list">
-                          {inspirationAiBrief.propIdeas.map((row, idx) => (
-                            <li key={`prop-idea-${idx}`} className="inspiration-ai-prop-item">
-                              {row.props.length > 0 ? (
-                                <p className="inspiration-ai-prop-line">
-                                  <strong>{row.props.join(", ")}</strong>
-                                </p>
-                              ) : null}
-                              <p className="inspiration-ai-angle">{row.puzzleAngle}</p>
-                              {row.searchHints && row.searchHints.length > 0 ? (
-                                <p className="muted inspiration-ai-hints">
-                                  <strong>Search:</strong> {row.searchHints.join(" · ")}
-                                </p>
-                              ) : null}
-                              {row.resourceIds.length > 0 ? (
-                                <ul className="inspiration-ai-resource-chips">
-                                  {row.resourceIds.map((rid) => {
-                                    const entry = inspirationCatalogEntryById(rid);
-                                    if (!entry) return null;
-                                    return (
-                                      <li key={rid}>
-                                        <a href={entry.url} target="_blank" rel="noreferrer">
-                                          {entry.label}
-                                        </a>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    ) : null}
-                    {inspirationAiBrief.resourceNotes.length > 0 ? (
-                      <>
-                        <h3 className="inspiration-ai-subhead">Where to dig next</h3>
-                        <ul className="inspiration-ai-notes-list">
-                          {inspirationAiBrief.resourceNotes.map((note, idx) => {
-                            const entry = inspirationCatalogEntryById(note.resourceId);
-                            if (!entry) return null;
-                            return (
-                              <li key={`${note.resourceId}-${idx}`}>
-                                <a href={entry.url} target="_blank" rel="noreferrer">
-                                  {entry.label}
-                                </a>
-                                <span className="muted"> — {note.note}</span>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </>
-                    ) : null}
-                    {inspirationAiBrief.proTip ? (
-                      <p className="inspiration-ai-protip">
-                        <strong>Pro tip:</strong> {inspirationAiBrief.proTip}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-              {INSPIRATION_DRAWER_CATEGORY_ORDER.map((category) => {
-                const links = INSPIRATION_CATALOG.filter((e) => e.category === category);
-                if (links.length === 0) return null;
-                return (
-                  <Fragment key={category}>
-                    <h3 className="inspiration-drawer-category">{category}</h3>
-                    <ul className="inspiration-drawer-list">
-                      {links.map((link) => (
-                        <li key={link.id}>
-                          <a className="inspiration-drawer-link" href={link.url} target="_blank" rel="noreferrer">
-                            {link.label}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </Fragment>
-                );
-              })}
-            </aside>
-          </>
+          </Suspense>
         ) : null}
       </div>
       {upgradePromptOpen && authUser ? (

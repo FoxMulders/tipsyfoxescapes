@@ -22,17 +22,23 @@ const readJsonFile = (label: string, absolutePath: string): string => {
   return readFileSync(safePath, "utf8");
 };
 
-export const readAppSemver = (): string => {
+const readBundledRelease = (): { version?: string; build?: string } | null => {
   const root = appRoot();
   const bundled = join(root, "api", "app-version.json");
-  if (existsSync(bundled)) {
-    try {
-      const data = JSON.parse(readJsonFile("app-version.json", bundled)) as { version?: string };
-      if (typeof data.version === "string" && data.version.trim()) return data.version.trim();
-    } catch {
-      /* fall through */
-    }
+  if (!existsSync(bundled)) return null;
+  try {
+    return JSON.parse(readJsonFile("app-version.json", bundled)) as { version?: string; build?: string };
+  } catch {
+    return null;
   }
+};
+
+export const readAppSemver = (): string => {
+  const bundled = readBundledRelease();
+  if (bundled && typeof bundled.version === "string" && bundled.version.trim()) {
+    return bundled.version.trim();
+  }
+  const root = appRoot();
   try {
     const pkg = JSON.parse(readJsonFile("frontend/package.json", join(root, "frontend", "package.json"))) as {
       version?: string;
@@ -44,6 +50,10 @@ export const readAppSemver = (): string => {
 };
 
 export const resolveLocalBuildId = (): string => {
+  const bundled = readBundledRelease();
+  if (bundled && typeof bundled.build === "string" && bundled.build.trim()) {
+    return bundled.build.trim();
+  }
   const sha = String(process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT ?? "").trim();
   if (sha) return sha.slice(0, 7);
   const deployment = String(process.env.VERCEL_DEPLOYMENT_ID ?? "").trim();

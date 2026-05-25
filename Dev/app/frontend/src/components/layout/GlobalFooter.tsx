@@ -33,6 +33,7 @@ export function GlobalFooter({ buildStamp }: GlobalFooterProps) {
   }, []);
 
   const versionLabel = release?.version ?? buildStamp;
+  const buildLabel = release?.build?.trim();
 
   return (
     <div className="page-footer-block global-site-footer">
@@ -59,7 +60,10 @@ export function GlobalFooter({ buildStamp }: GlobalFooterProps) {
       <div className="footer-logo-wrap">
         <img src="/tipsy-fox-logo.JPEG" alt="The Tipsy Fox logo" className="footer-logo" />
         <p className="footer-copyright muted">© {new Date().getFullYear()} Tipsy Fox Escapes. All rights reserved.</p>
-        <p className="footer-build-stamp">Build: {versionLabel}</p>
+        <p className="footer-build-stamp">
+          Build: {versionLabel}
+          {buildLabel ? ` · ${buildLabel}` : ""}
+        </p>
       </div>
     </div>
   );
