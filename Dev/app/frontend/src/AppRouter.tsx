@@ -1,7 +1,8 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { SiteShell } from "@/components/layout/SiteShell";
-import App from "./App.tsx";
+
+const App = lazy(() => import("./App.tsx"));
 
 const AdminDashboardPage = lazy(() =>
   import("./pages/AdminDashboardPage.tsx").then((m) => ({ default: m.AdminDashboardPage })),
@@ -28,7 +29,14 @@ export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<App />} />
+        <Route
+          path="/"
+          element={
+            <Suspense fallback={<RouteFallback label="Loading Escape Room Builder…" />}>
+              <App />
+            </Suspense>
+          }
+        />
         <Route
           path="/admin/dashboard"
           element={

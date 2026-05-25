@@ -69,6 +69,7 @@ import {
   type StoredAuthSession,
 } from "./authStorage.ts";
 import { FlowStepIntro } from "@/components/planning/FlowStepIntro";
+import { BuilderErrorBoundary } from "@/components/BuilderErrorBoundary";
 import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
 import {
   PlansAndBillingSection,
@@ -2754,6 +2755,8 @@ export default function App() {
   const themesAutoFetchInFlight = useRef(false);
   const puzzlesRequestInFlight = useRef(false);
   const wizardNavLastRef = useRef<{ at: number; index: number }>({ at: 0, index: -1 });
+  const wizardNavigationBusyRef = useRef(false);
+  const clearWizardBusyStateRef = useRef<() => void>(() => {});
   const idleLastActivityRef = useRef(0);
   const idleTimeoutSignOutStartedRef = useRef(false);
   const [idlePromptOpen, setIdlePromptOpen] = useState(false);
@@ -3144,6 +3147,7 @@ export default function App() {
         : (["setup", "themes", "themes-puzzles", "output-review", "output-export"] as WizardStep[]),
     [hasSavedPlans],
   );
+  const prevWizardStepsRef = useRef(wizardSteps);
   const flowWizardStep: WizardStep = wizardSteps.includes(wizardStep) ? wizardStep : (wizardSteps[0] ?? "setup");
   const wizardIndex = wizardSteps.indexOf(flowWizardStep);
   const missionStepLabels = useMemo(() => wizardSteps.map(wizardStepLabel), [wizardSteps]);
@@ -3153,8 +3157,18 @@ export default function App() {
   }, [wizardIndex]);
 
   useEffect(() => {
-    setFurthestWizardIndex((prev) => Math.min(prev, Math.max(0, wizardSteps.length - 1)));
-  }, [wizardSteps.length]);
+    const prev = prevWizardStepsRef.current;
+    if (prev !== wizardSteps) {
+      setFurthestWizardIndex((furthest) => {
+        const stepAtFurthest = prev[furthest];
+        if (stepAtFurthest && wizardSteps.includes(stepAtFurthest)) {
+          return wizardSteps.indexOf(stepAtFurthest);
+        }
+        return Math.min(furthest, Math.max(0, wizardSteps.length - 1));
+      });
+      prevWizardStepsRef.current = wizardSteps;
+    }
+  }, [wizardSteps]);
 
   const canNavigateToWizardIndex = (index: number): boolean => {
     if (index < 0 || index >= wizardSteps.length) return false;
@@ -3742,6 +3756,7 @@ export default function App() {
   persistAuthRef.current = persistAuth;
   const signOut = (): void => {
     setError("");
+    clearWizardBusyStateRef.current();
     try {
       window.localStorage.removeItem(IDLE_RESUME_PLAN_ID_KEY);
     } catch {
@@ -6163,9 +6178,25 @@ export default function App() {
 
   useEffect(() => {
     if (!wizardSteps.includes(wizardStep)) {
-      setWizardStep(wizardSteps[0] ?? "setup");
+      const setupIdx = wizardSteps.indexOf("setup");
+      setWizardStep(setupIdx >= 0 ? "setup" : (wizardSteps[0] ?? "setup"));
     }
   }, [wizardSteps, wizardStep]);
+
+  useEffect(() => {
+    wizardNavigationBusyRef.current = wizardNavigationBusy;
+  }, [wizardNavigationBusy]);
+
+  clearWizardBusyStateRef.current = (): void => {
+    setThemeIdeasLoading(false);
+    setPuzzlesGenerating(false);
+    setOutputReviewBusy(false);
+    setCustomThemeSaving(false);
+    setCustomThemeCoachBusy(false);
+    setPuzzleWindowBusy(null);
+    puzzlesRequestInFlight.current = false;
+    themesAutoFetchInFlight.current = false;
+  };
 
   useEffect(() => {
     if (!authUser) return;
@@ -6200,6 +6231,11 @@ export default function App() {
     window.addEventListener("touchstart", markActive, scrollOpts);
     const intervalMs = 15_000;
     const tick = (): void => {
+      if (wizardNavigationBusyRef.current) {
+        idleLastActivityRef.current = Date.now();
+        setIdlePromptOpen(false);
+        return;
+      }
       const inactiveMs = Date.now() - idleLastActivityRef.current;
       if (inactiveMs >= AUTH_IDLE_SIGNOUT_MS) {
         if (idleTimeoutSignOutStartedRef.current) return;
@@ -6212,6 +6248,7 @@ export default function App() {
           } catch {
             // ignore
           }
+          clearWizardBusyStateRef.current();
           if (resumePlanId) {
             try {
               window.localStorage.setItem(IDLE_RESUME_PLAN_ID_KEY, resumePlanId);
@@ -6988,6 +7025,7 @@ export default function App() {
       ) : null}
       {appView === "builder" ? (
       <>
+      <BuilderErrorBoundary>
       <div className="builder-workspace">
         <section className="stage-main">
           <section className="card mission-panel flow-shell builder-workspace-shell">
@@ -8674,6 +8712,7 @@ export default function App() {
           </div>
         </div>
       ) : null}
+      </BuilderErrorBoundary>
       </>
       ) : null}
       {sessionId ? (

@@ -3551,6 +3551,19 @@ label.checkbox-field {
   stroke: rgba(0, 242, 255, 0.85);
 }
 
+.builder-error-fallback {
+  margin: 1rem 0;
+  border-color: rgba(255, 120, 90, 0.45);
+}
+
+.builder-error-fallback-detail {
+  margin: 0.75rem 0 1rem;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.82rem;
+  color: rgba(255, 200, 180, 0.92);
+  word-break: break-word;
+}
+
 .service-health-banner {
   margin: 0.35rem 0 0.65rem;
   padding: 0.55rem 0.75rem;
