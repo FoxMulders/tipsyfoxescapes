@@ -7,7 +7,7 @@ import { loadEnv } from "./loadEnv.js";
 
 loadEnv();
 import { readAppSemver, resolveLocalBuildId } from "./appVersion.js";
-import { productionPersistenceWarnings, resolveAuthStoreMode } from "./productionHealth.js";
+import { productionPersistenceWarnings, oauthExchangeInvalidMessage, resolveAuthStoreMode } from "./productionHealth.js";
 import { billingPlanById, quotePlanCheckout, resolveBillingPlanId, type BillingPlanId } from "./billing/catalog.js";
 import { countActiveVenueLiveSessions, getActiveLiveConnectionStats, registerLiveRoutes } from "./liveGame.js";
 import { fleetActivationError, liveOpsFrozenError } from "./enterpriseGate.js";
@@ -4413,7 +4413,7 @@ app.post("/api/auth/oauth/complete", async (req, res) => {
       res.status(401).json({
         error: {
           code: "EXCHANGE_INVALID",
-          message: "Sign-in link expired or already used. Please sign in again.",
+          message: oauthExchangeInvalidMessage(),
           details: [],
         },
       });

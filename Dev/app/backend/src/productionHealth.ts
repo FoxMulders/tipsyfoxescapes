@@ -22,3 +22,11 @@ export const resolveAuthStoreMode = (): "kv" | "ephemeral" | "local" => {
   if (!process.env.VERCEL) return "local";
   return isKvConfigured() ? "kv" : "ephemeral";
 };
+
+/** User-facing copy when a one-time OAuth exchange code cannot be redeemed. */
+export const oauthExchangeInvalidMessage = (): string => {
+  if (process.env.VERCEL && !isKvConfigured()) {
+    return "Sign-in could not finish because session storage is not configured for production (missing Vercel KV / Upstash Redis). Link a Redis store to this project in Vercel, redeploy, then try again.";
+  }
+  return "Sign-in link expired or already used. Please sign in again.";
+};

@@ -8,6 +8,7 @@ export function MissionFlowMap({
   forkSegmentIndex,
   onStepClick,
   canNavigateToStep,
+  navigationDisabled = false,
 }: {
   stepLabels: readonly string[];
   activeIndex: number;
@@ -15,6 +16,8 @@ export function MissionFlowMap({
   forkSegmentIndex: number | null;
   onStepClick?: (index: number) => void;
   canNavigateToStep?: (index: number) => boolean;
+  /** When true, step clicks are blocked (e.g. generation in flight). */
+  navigationDisabled?: boolean;
 }) {
   const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const n = stepLabels.length;
@@ -61,10 +64,12 @@ export function MissionFlowMap({
         "mission-flow-map mission-flow-map--header mission-flow-map--compact-sticky",
         compact && "mission-flow-map--compact",
         useFork && "mission-flow-map--fork",
+        navigationDisabled && "mission-flow-map--navigation-disabled",
       )}
       role="navigation"
       aria-label="Mission progress map"
       data-testid="mission-flow-map"
+      aria-busy={navigationDisabled || undefined}
     >
       <svg
         className="mission-flow-svg mission-flow-svg--compact block w-full max-h-[3.25rem] overflow-visible"
@@ -133,7 +138,8 @@ export function MissionFlowMap({
         {stepLabels.map((label, i) => {
           const st = nodeState(i);
           const cx = xs[i] ?? 0;
-          const clickable = Boolean(onStepClick) && (canNavigateToStep?.(i) ?? true);
+          const clickable =
+            !navigationDisabled && Boolean(onStepClick) && (canNavigateToStep?.(i) ?? true);
           return (
             <g
               key={`flow-node-${i}-${label}`}

@@ -20,6 +20,7 @@ import {
 export { handleGitHubWebhook };
 import { readJsonBlob, writeJsonBlob } from "./kvJsonStore.js";
 import { AuthTokenStore } from "./authSession.js";
+import { oauthExchangeInvalidMessage } from "./productionHealth.js";
 
 export type OAuthProvider = "google" | "facebook" | "github";
 
@@ -457,7 +458,7 @@ export const handleOAuthComplete = async (req: OAuthBodyRequest, res: ServerResp
         JSON.stringify({
           error: {
             code: "EXCHANGE_INVALID",
-            message: "Sign-in link expired or already used. Please sign in again.",
+            message: oauthExchangeInvalidMessage(),
             details: [],
           },
         }),

@@ -28,6 +28,13 @@ import { TopNavBar } from "@/components/layout/TopNavBar";
 import { AppAtmosphere } from "@/components/layout/AppAtmosphere";
 import { useTopNavHeight } from "@/hooks/useTopNavHeight";
 import { clearOAuthReturnMarker, hasOAuthReturnMarker, setOAuthReturnMarker } from "./oauthClientCookie.ts";
+import { completeOAuthExchange } from "./oauthExchangeComplete.ts";
+import {
+  ephemeralAuthStoreWarning,
+  fetchServiceHealth,
+  socialLoginBlockedMessage,
+  type ServiceHealth,
+} from "./serviceHealth.ts";
 import {
   clearPendingSocialOAuth,
   launchSocialOAuthRedirect,
@@ -2571,6 +2578,7 @@ export default function App() {
   const [themeSessionExpiredNotice, setThemeSessionExpiredNotice] = useState("");
   const [selectedThemeId, setSelectedThemeId] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const [serviceHealth, setServiceHealth] = useState<ServiceHealth | null>(null);
   const [sessionId, setSessionId] = useState<string>("");
   const [playersConcurrent, setPlayersConcurrent] = useState<string>("2");
   const [participantsTotal, setParticipantsTotal] = useState<string>("6");
@@ -2745,12 +2753,22 @@ export default function App() {
   >(async () => undefined);
   const themesAutoFetchInFlight = useRef(false);
   const puzzlesRequestInFlight = useRef(false);
+  const wizardNavLastRef = useRef<{ at: number; index: number }>({ at: 0, index: -1 });
   const idleLastActivityRef = useRef(0);
   const idleTimeoutSignOutStartedRef = useRef(false);
   const [idlePromptOpen, setIdlePromptOpen] = useState(false);
   const [idleDraftBusy, setIdleDraftBusy] = useState(false);
   const [snapshotSyncHint, setSnapshotSyncHint] = useState<string | null>(null);
   const [outputReviewBusy, setOutputReviewBusy] = useState(false);
+  const wizardNavigationBusy =
+    themeIdeasLoading ||
+    puzzlesGenerating ||
+    outputReviewBusy ||
+    customThemeSaving ||
+    customThemeCoachBusy ||
+    Boolean(puzzleWindowBusy);
+  const socialLoginBlocked = socialLoginBlockedMessage(serviceHealth);
+  const persistenceWarning = ephemeralAuthStoreWarning(serviceHealth);
   const persistAuthRef = useRef<(token: string, user: AuthUser | null) => void>(() => {});
   const themeCoachHydratedForSessionRef = useRef<string>("");
   const builderShellRef = useRef<HTMLElement | null>(null);
@@ -2792,6 +2810,12 @@ export default function App() {
   useEffect(() => {
     setVenueBuildType(targetInterface === "commercial_venue" ? "professional_empty" : "prebuilt_space");
   }, [targetInterface]);
+
+  useEffect(() => {
+    void fetchServiceHealth(API_BASE).then((row) => {
+      if (row) setServiceHealth(row);
+    });
+  }, []);
 
   useTopNavHeight(topNavRef, builderShellRef, [appView, authUser?.id, authUser?.billingTier]);
 
@@ -3351,6 +3375,15 @@ export default function App() {
 
   const navigateWizardToIndex = async (targetIndex: number): Promise<void> => {
     if (targetIndex < 0 || targetIndex >= wizardSteps.length || targetIndex === wizardIndex) return;
+    const now = Date.now();
+    if (wizardNavLastRef.current.index === targetIndex && now - wizardNavLastRef.current.at < 320) {
+      return;
+    }
+    wizardNavLastRef.current = { at: now, index: targetIndex };
+    if (wizardNavigationBusy) {
+      toast.error("Wait for the current step to finish before switching steps.");
+      return;
+    }
     const targetStep = wizardSteps[targetIndex];
     const revisitingCompletedStep = targetIndex <= furthestWizardIndex;
 
@@ -4427,6 +4460,11 @@ export default function App() {
 
   const handleSocialAuth = (provider: "google" | "facebook" | "github"): void => {
     setError("");
+    if (socialLoginBlocked) {
+      setSocialAuthProvider(null);
+      setError(socialLoginBlocked);
+      return;
+    }
     setSocialAuthProvider(provider);
 
     try {
@@ -4510,28 +4548,15 @@ export default function App() {
       oauthReturnBootstrapRef.current = hasOAuthReturnMarker();
       void (async () => {
         try {
-          const response = await fetch(`${API_BASE}/api/auth/oauth/complete`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Device-Id": deviceId },
-            body: JSON.stringify({ code: oauthExchangeCode }),
+          const health = (await fetchServiceHealth(API_BASE)) ?? serviceHealth;
+          if (health) setServiceHealth(health);
+          const result = await completeOAuthExchange(API_BASE, oauthExchangeCode, deviceId, health);
+          const normalized = normalizeAuthUser(result.user);
+          persistAuth(result.authToken, normalized, {
+            refreshToken: result.refreshToken ?? "",
+            accessExpiresAt: typeof result.accessExpiresAt === "number" ? result.accessExpiresAt : 0,
           });
-          const data = (await response.json()) as {
-            authToken?: string;
-            refreshToken?: string;
-            accessExpiresAt?: number;
-            refreshExpiresAt?: number;
-            user?: AuthUser;
-            error?: { message?: string };
-          };
-          if (!response.ok || !data.authToken) {
-            throw new Error(data.error?.message ?? "Sign-in exchange failed. Please try again.");
-          }
-          const normalized = normalizeAuthUser(data.user);
-          persistAuth(data.authToken, normalized, {
-            refreshToken: data.refreshToken ?? "",
-            accessExpiresAt: typeof data.accessExpiresAt === "number" ? data.accessExpiresAt : 0,
-          });
-          const profileOk = await refreshProfile({ retryOnStaleToken: true, tokenOverride: data.authToken });
+          const profileOk = await refreshProfile({ retryOnStaleToken: true, tokenOverride: result.authToken });
           if (profileOk) {
             setError("");
             if (emailVerified === "1") {
@@ -6053,6 +6078,23 @@ export default function App() {
       setShowPlanPicker(false);
       setActivePanel("output");
       setWizardStep("output-review");
+      {
+        const themesIdx = wizardSteps.indexOf("themes");
+        const puzzlesIdx = wizardSteps.indexOf("themes-puzzles");
+        const reviewIdx = wizardSteps.indexOf("output-review");
+        const exportIdx = wizardSteps.indexOf("output-export");
+        let loadedFurthest = reviewIdx >= 0 ? reviewIdx : 0;
+        if (themesIdx >= 0 && payload.selectedThemeId?.trim()) {
+          loadedFurthest = Math.max(loadedFurthest, themesIdx);
+        }
+        if (puzzlesIdx >= 0 && payload.puzzles.length > 0) {
+          loadedFurthest = Math.max(loadedFurthest, puzzlesIdx);
+        }
+        if (data.savedPlan.approvedForBuild && exportIdx >= 0) {
+          loadedFurthest = Math.max(loadedFurthest, exportIdx);
+        }
+        setFurthestWizardIndex(loadedFurthest);
+      }
       setAppView("builder");
       return true;
     } catch {
@@ -6463,12 +6505,18 @@ export default function App() {
           <p className="muted">
             Or continue with social sign-in:
           </p>
+          {persistenceWarning ? (
+            <p className="service-health-banner" role="status">
+              {persistenceWarning}
+            </p>
+          ) : null}
           <nav className="social-auth-grid" aria-label="Social sign-in">
             <button
               type="button"
               className="social-btn social-google"
-              disabled={!!socialAuthProvider || authSubmitting}
+              disabled={!!socialAuthProvider || authSubmitting || Boolean(socialLoginBlocked)}
               aria-busy={socialAuthProvider === "google"}
+              title={socialLoginBlocked ?? undefined}
               onClick={() => handleSocialAuth("google")}
             >
               {socialAuthProvider === "google" ? "Redirecting…" : "Google"}
@@ -6476,8 +6524,9 @@ export default function App() {
             <button
               type="button"
               className="social-btn social-facebook"
-              disabled={!!socialAuthProvider || authSubmitting}
+              disabled={!!socialAuthProvider || authSubmitting || Boolean(socialLoginBlocked)}
               aria-busy={socialAuthProvider === "facebook"}
+              title={socialLoginBlocked ?? undefined}
               onClick={() => handleSocialAuth("facebook")}
             >
               {socialAuthProvider === "facebook" ? "Redirecting…" : "Facebook"}
@@ -6485,8 +6534,9 @@ export default function App() {
             <button
               type="button"
               className="social-btn social-github"
-              disabled={!!socialAuthProvider || authSubmitting}
+              disabled={!!socialAuthProvider || authSubmitting || Boolean(socialLoginBlocked)}
               aria-busy={socialAuthProvider === "github"}
+              title={socialLoginBlocked ?? undefined}
               onClick={() => handleSocialAuth("github")}
             >
               {socialAuthProvider === "github" ? "Redirecting…" : "GitHub"}
@@ -6953,6 +7003,7 @@ export default function App() {
                 forkSegmentIndex={juniorForkSegmentIndex}
                 onStepClick={(index) => void navigateWizardToIndex(index)}
                 canNavigateToStep={canNavigateToWizardIndex}
+                navigationDisabled={wizardNavigationBusy}
               />
             </div>
             <div className="flow-shell-scroll-region flow-shell-scroll-region--body">

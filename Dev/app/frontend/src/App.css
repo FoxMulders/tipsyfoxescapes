@@ -3551,6 +3551,26 @@ label.checkbox-field {
   stroke: rgba(0, 242, 255, 0.85);
 }
 
+.service-health-banner {
+  margin: 0.35rem 0 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 180, 80, 0.45);
+  background: rgba(80, 45, 0, 0.35);
+  color: rgba(255, 220, 170, 0.95);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.mission-flow-map--navigation-disabled {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.mission-flow-map--navigation-disabled .mission-flow-node--clickable {
+  cursor: default;
+}
+
 .mission-flow-node-label {
   font-family: "Inter", "Segoe UI", sans-serif;
   font-size: 10px;
