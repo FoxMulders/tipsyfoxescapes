@@ -860,7 +860,7 @@ pre.code-inline {
 
 .flow-shell-map-bar {
   position: sticky;
-  top: var(--app-top-nav-height, 4.75rem);
+  top: var(--app-top-nav-height, 0px);
   z-index: 35;
   flex: 0 0 auto;
   width: 100%;
