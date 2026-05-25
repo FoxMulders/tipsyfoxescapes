@@ -1,17 +1,25 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertAbsolutePath } from "./resolveModuleFilename.js";
 
 /** App root (Dev/app). Works in tsx dev, Vercel cwd, and CJS bundles where import.meta.url is empty. */
 const appRoot = (): string => {
   if (process.env.VERCEL) return process.cwd();
   try {
     const meta = import.meta.url;
-    if (!meta) return process.cwd();
-    return join(dirname(fileURLToPath(meta)), "../..");
+    if (typeof meta === "string" && meta.trim()) {
+      return join(dirname(fileURLToPath(meta)), "../..");
+    }
   } catch {
-    return process.cwd();
+    /* fall through */
   }
+  return process.cwd();
+};
+
+const readJsonFile = (label: string, absolutePath: string): string => {
+  const safePath = assertAbsolutePath(label, absolutePath);
+  return readFileSync(safePath, "utf8");
 };
 
 export const readAppSemver = (): string => {
@@ -19,14 +27,16 @@ export const readAppSemver = (): string => {
   const bundled = join(root, "api", "app-version.json");
   if (existsSync(bundled)) {
     try {
-      const data = JSON.parse(readFileSync(bundled, "utf8")) as { version?: string };
+      const data = JSON.parse(readJsonFile("app-version.json", bundled)) as { version?: string };
       if (typeof data.version === "string" && data.version.trim()) return data.version.trim();
     } catch {
       /* fall through */
     }
   }
   try {
-    const pkg = JSON.parse(readFileSync(join(root, "frontend", "package.json"), "utf8")) as { version?: string };
+    const pkg = JSON.parse(readJsonFile("frontend/package.json", join(root, "frontend", "package.json"))) as {
+      version?: string;
+    };
     return typeof pkg.version === "string" ? pkg.version : "0.0.0";
   } catch {
     return "0.0.0";

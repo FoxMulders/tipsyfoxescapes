@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { ensureDataDir, getDataDir } from "./dataDir.js";
+import { assertAbsolutePath } from "./resolveModuleFilename.js";
 
 const kvRest = (): { url: string; token: string } | null => {
   const url = (process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL ?? "").trim().replace(/\/$/, "");
@@ -61,7 +62,10 @@ export const kvSetJson = async (name: string, value: unknown): Promise<void> => 
   }
 };
 
-const filePath = (name: string): string => path.join(getDataDir(), name);
+const filePath = (name: string): string => {
+  const blobName = assertAbsolutePath("kvJsonStore blob name", name);
+  return path.join(getDataDir(), blobName);
+};
 
 /** Prefer KV on Vercel; fall back to DATA_DIR file (local dev / warm same-instance). */
 export const readJsonBlob = async <T>(name: string): Promise<T | null> => {

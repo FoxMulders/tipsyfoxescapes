@@ -1,6 +1,8 @@
 import { promises as fs } from "fs";
 import path from "path";
 import crypto from "crypto";
+import { getDataDir } from "../dataDir.js";
+import { assertAbsolutePath } from "../resolveModuleFilename.js";
 
 export type PendingCheckoutOrder = {
   id: string;
@@ -19,13 +21,14 @@ export type PendingCheckoutOrder = {
 
 type PendingOrdersFile = { orders: PendingCheckoutOrder[] };
 
-const pendingOrdersPath = path.join(process.cwd(), "data", "billing-pending-orders.json");
+const pendingOrdersPath = (): string =>
+  path.join(getDataDir(), assertAbsolutePath("pending orders file", "billing-pending-orders.json"));
 let cache: PendingCheckoutOrder[] | null = null;
 
 const load = async (): Promise<PendingCheckoutOrder[]> => {
   if (cache) return cache;
   try {
-    const raw = await fs.readFile(pendingOrdersPath, "utf8");
+    const raw = await fs.readFile(pendingOrdersPath(), "utf8");
     const parsed = JSON.parse(raw) as PendingOrdersFile;
     cache = Array.isArray(parsed.orders) ? parsed.orders : [];
   } catch (err) {
@@ -37,8 +40,8 @@ const load = async (): Promise<PendingCheckoutOrder[]> => {
 
 const persist = async (): Promise<void> => {
   if (!cache) return;
-  await fs.mkdir(path.dirname(pendingOrdersPath), { recursive: true });
-  await fs.writeFile(pendingOrdersPath, JSON.stringify({ orders: cache }, null, 2), "utf8");
+  await fs.mkdir(path.dirname(pendingOrdersPath()), { recursive: true });
+  await fs.writeFile(pendingOrdersPath(), JSON.stringify({ orders: cache }, null, 2), "utf8");
 };
 
 export const createPendingOrder = async (input: {
