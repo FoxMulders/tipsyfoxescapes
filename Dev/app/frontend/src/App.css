@@ -3518,7 +3518,17 @@ label.checkbox-field {
 
 .mission-flow-map--compact .mission-flow-node-label,
 .mission-flow-map--compact-sticky .mission-flow-node-label {
-  font-size: 6.5px;
+  font-size: clamp(6.5px, 1.45vw, 8.5px);
+}
+
+@media (min-width: 520px) {
+  .workspace-stepper .mission-flow-node-label {
+    font-size: 0.68rem;
+  }
+
+  .mission-flow-map--compact-sticky .mission-flow-node-label {
+    font-size: 6.5px;
+  }
 }
 
 .mission-flow-map--compact-sticky .mission-flow-node-num {

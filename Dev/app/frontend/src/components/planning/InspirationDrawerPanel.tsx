@@ -1,10 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import {
-  generateContextualInspirationInBrowser,
-  INSPIRATION_CATALOG,
-  type ContextualInspirationResult,
-  type InspirationCatalogEntry,
-} from "@/browserAi";
+import { generateContextualInspirationInBrowser, type ContextualInspirationResult } from "@/browserAiInspiration";
+import { INSPIRATION_CATALOG, type InspirationCatalogEntry } from "@/inspirationCatalog";
 
 const INSPIRATION_DRAWER_CATEGORY_ORDER: InspirationCatalogEntry["category"][] = [
   "Tech & DIY",

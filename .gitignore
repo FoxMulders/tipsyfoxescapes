@@ -36,3 +36,6 @@ Dev/app/data/*.json
 
 # Coverage
 coverage/
+.vercel
+.env*
+supabase/.temp/

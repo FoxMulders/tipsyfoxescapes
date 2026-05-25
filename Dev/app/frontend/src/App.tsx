@@ -71,12 +71,7 @@ import {
 import { FlowStepIntro } from "@/components/planning/FlowStepIntro";
 import { BuilderErrorBoundary } from "@/components/BuilderErrorBoundary";
 import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
-import {
-  PricingValueFocus,
-  pricingCtaLabel,
-  type BillingPlan,
-} from "@/components/account/PlansAndBillingSection";
-import { PricingPlanCard } from "@/components/PricingPlanCard";
+import { type BillingPlan } from "@/components/account/PlansAndBillingSection";
 import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
 import { RoomDetailsStep } from "@/components/planning/RoomDetailsStep";
@@ -104,18 +99,20 @@ import {
   persistPlanningSessionId,
 } from "./planningSessionStore.ts";
 import {
-  customThemeCoachSynthesize,
-  customThemeCoachTurn,
   enhancePlanInBrowser,
   isBrowserAiAvailable,
   polishThemeBriefInBrowser,
   probeBrowserLanguageModel,
   refineThemeFitReasonInBrowser,
-  type CustomThemeCoachContext,
-  type CustomThemeCoachMessage,
 } from "./browserAi.ts";
+import type { CustomThemeCoachContext, CustomThemeCoachMessage } from "./browserAiCoach.ts";
+import {
+  getCoachCoverageStatus,
+  looksSensitiveForCoach,
+  newCoachMessageId,
+  type ThemeCoachUiMessage,
+} from "@/components/themes/themeCoachUtils";
 import { getOrCreateDeviceId } from "./deviceId.ts";
-import { HomePostExportModal } from "@/components/live/HomePostExportModal";
 import { initLiveSession } from "@/live/api";
 import {
   operatingModeToTargetInterface,
@@ -133,6 +130,15 @@ const PlansAndBillingSection = lazy(() =>
 );
 const InspirationDrawerPanel = lazy(() =>
   import("@/components/planning/InspirationDrawerPanel").then((m) => ({ default: m.InspirationDrawerPanel })),
+);
+const CustomThemeCoachPanel = lazy(() =>
+  import("@/components/themes/CustomThemeCoachPanel").then((m) => ({ default: m.CustomThemeCoachPanel })),
+);
+const UpgradePromptDialog = lazy(() =>
+  import("@/components/billing/UpgradePromptDialog").then((m) => ({ default: m.UpgradePromptDialog })),
+);
+const HomePostExportModal = lazy(() =>
+  import("@/components/live/HomePostExportModal").then((m) => ({ default: m.HomePostExportModal })),
 );
 
 const BRAND_NAME = "Tipsy Fox Escapes";
@@ -2334,209 +2340,6 @@ function ThemeDescriptionBlocks({ text }: { text: string }) {
 
   if (blocks.length === 0) return null;
   return <div className="theme-desc-root">{blocks}</div>;
-}
-
-type ThemeCoachUiMessage = { id: string; role: "user" | "assistant"; content: string };
-
-function newCoachMessageId(): string {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `coach-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-const COACH_COVERAGE_CHECKS = [
-  { key: "audience", label: "Audience / ages", re: /\bage|ages|audience|kids?|adult|family|mixed\b/i },
-  { key: "tone", label: "Tone / vibe", re: /\btone|vibe|spooky|serious|comedic|horror|lighthearted|mood\b/i },
-  { key: "boundaries", label: "Safety boundaries", re: /\bboundar|no jump|jump scare|content warning|safe|limit\b/i },
-  { key: "centerpiece", label: "Centerpiece moment", re: /\bcenterpiece|wow moment|set piece|signature|hero prop\b/i },
-  { key: "tech", label: "Tech vs analog", re: /\belectronic|arduino|microcontroller|analog|tech\b/i },
-  { key: "ops", label: "Reset / ops constraints", re: /\breset|staff|facilitation|turnover|runtime|minutes|budget\b/i },
-] as const;
-
-const looksSensitiveForCoach = (text: string): string | null => {
-  const t = text.trim();
-  if (!t) return null;
-  if (/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i.test(t)) return "private key block";
-  if (/\b(?:api[_ -]?key|secret|password|passwd|token|bearer)\b\s*[:=]/i.test(t)) return "credential pattern";
-  if (/\b(?:ghp_|github_pat_|sk-[A-Za-z0-9]|AIza[0-9A-Za-z_-]{20,})\b/.test(t)) return "API token pattern";
-  if (/[A-Za-z0-9+/]{80,}={0,2}/.test(t)) return "high-entropy secret-like string";
-  return null;
-};
-
-const getCoachCoverageStatus = (messages: ThemeCoachUiMessage[]): { done: number; total: number; doneLabels: string[] } => {
-  const userText = messages
-    .filter((m) => m.role === "user")
-    .map((m) => m.content)
-    .join("\n\n");
-  const doneLabels = COACH_COVERAGE_CHECKS.filter((check) => check.re.test(userText)).map((check) => check.label);
-  return { done: doneLabels.length, total: COACH_COVERAGE_CHECKS.length, doneLabels };
-};
-
-function CustomThemeCoachPanel({
-  messages,
-  draft,
-  onDraftChange,
-  busy,
-  localError,
-  aiAvailable,
-  accountSyncAvailable,
-  coachPrereqsOk,
-  coverage,
-  onStart,
-  onSend,
-  onSynthesize,
-  onClear,
-}: {
-  messages: ThemeCoachUiMessage[];
-  draft: string;
-  onDraftChange: (value: string) => void;
-  busy: boolean;
-  localError: string;
-  aiAvailable: boolean;
-  accountSyncAvailable: boolean;
-  coachPrereqsOk: boolean;
-  coverage: { done: number; total: number; doneLabels: string[] };
-  onStart: () => void;
-  onSend: () => void;
-  onSynthesize: () => void;
-  onClear: () => void;
-}) {
-  const canApply = messages.some((m) => m.role === "user");
-  const hasAssistantMessage = messages.some((m) => m.role === "assistant");
-  const startDisabled = busy || !aiAvailable || hasAssistantMessage || !coachPrereqsOk;
-  const startTitle = !coachPrereqsOk
-    ? "Complete room details and a theme name first."
-    : !aiAvailable
-      ? "On-device Prompt API is not available in this session yet. Enable Chrome flags, wait for the model, then refresh—or try again in a moment."
-      : hasAssistantMessage
-        ? "The coach has already started. Use Clear chat if you want a fresh opening."
-        : busy
-          ? "Please wait…"
-          : undefined;
-  const composerLocked = busy || !coachPrereqsOk;
-  return (
-    <div className="theme-coach-card" role="region" aria-label="Theme coach chat">
-      <h3 className="theme-coach-heading">Theme coach · built-in AI</h3>
-      <p className="muted theme-coach-lead">
-        The coach asks short questions about tone, audience, and how your real room fits the story—so puzzle generation matches
-        what you want.
-      </p>
-      {!coachPrereqsOk ? (
-        <p className="theme-coach-locked-note" role="status">
-          Complete <strong>Room details</strong> on the previous step (environment, timing, and headcounts),
-          then enter a <strong>theme name</strong> above. The coach unlocks once both are in place so it can use your real room
-          context.
-        </p>
-      ) : null}
-      <p className="muted theme-coach-security-note">
-        Security mode is on: do not paste passwords, API keys, tokens, private keys, or personal data into this chat. Messages
-        that look like secrets are blocked before send.
-      </p>
-      {!accountSyncAvailable ? (
-        <p className="muted theme-coach-account-note">
-          Sign in to store this conversation on your account for this planning session. Other accounts cannot read it; without
-          sign-in, chat stays only in this browser until you leave the page.
-        </p>
-      ) : (
-        <p className="muted theme-coach-account-note">
-          Chat is saved to your signed-in account for this planning session only.
-        </p>
-      )}
-      {!aiAvailable ? (
-        <div className="theme-coach-unavailable" role="note">
-          <p className="muted theme-coach-unavailable-lead">
-            On-device coach AI is not detected in this browser session. You can still write the theme description in the{" "}
-            <strong>field above</strong> and continue without the coach.
-          </p>
-          <p className="muted theme-coach-unavailable-flags">
-            In <strong>Chrome</strong> on desktop (recent stable or newer), enable built-in Gemini Nano, then relaunch: open{" "}
-            <code className="chrome-flag-chip">chrome://flags/#optimization-guide-on-device-model</code> → <strong>Enabled</strong>, and{" "}
-            <code className="chrome-flag-chip">chrome://flags/#prompt-api-for-gemini-nano</code> or{" "}
-            <code className="chrome-flag-chip">chrome://flags/#prompt-api-for-gemini-nano-multimodal-input</code> → <strong>Enabled</strong>.{" "}
-            On <code>localhost</code>, confirm with DevTools: <code className="chrome-flag-chip">await LanguageModel.availability()</code>{" "}
-            (expect <strong>available</strong> or <strong>downloadable</strong>). Hardware and disk requirements apply—see the{" "}
-            <a href="https://developer.chrome.com/docs/ai/get-started" target="_blank" rel="noreferrer">
-              Chrome built-in AI get-started guide
-            </a>
-            .
-          </p>
-          <p className="muted theme-coach-unavailable-foot">
-            <strong>Send</strong> and <strong>Apply answers</strong> stay off until the Prompt API is available here.
-          </p>
-        </div>
-      ) : null}
-      <p className="muted theme-coach-coverage">
-        Interview coverage: {coverage.done}/{coverage.total} core topics captured
-        {coverage.doneLabels.length > 0 ? ` (${coverage.doneLabels.join(", ")})` : ""}.
-      </p>
-      {localError ? <p className="error-banner theme-coach-error">{localError}</p> : null}
-      <div className="theme-coach-messages" tabIndex={0} aria-live="polite">
-        {messages.length === 0 ? (
-          <p className="muted theme-coach-empty">
-            {coachPrereqsOk
-              ? "When you start the coach, it will assess what is already clear from your room details and theme name, then ask focused questions here."
-              : "The coach stays closed until room details and a theme name are ready—see the note above."}
-          </p>
-        ) : (
-          messages.map((msg) => (
-            <div key={msg.id} className={`theme-coach-bubble theme-coach-bubble--${msg.role}`}>
-              <span className="theme-coach-bubble-label">{msg.role === "assistant" ? "Coach" : "You"}</span>
-              <div className="theme-coach-bubble-text">{msg.content}</div>
-            </div>
-          ))
-        )}
-        {busy ? <p className="muted theme-coach-thinking">Thinking…</p> : null}
-      </div>
-      <div className="theme-coach-composer">
-        <label className="theme-coach-composer-label">
-          Your reply
-          <textarea
-            className="theme-coach-textarea"
-            rows={2}
-            value={draft}
-            onChange={(event) => onDraftChange(event.target.value)}
-            placeholder={
-              coachPrereqsOk ? "Type your answer, then Send." : "Unlock the coach with room details + theme name first."
-            }
-            disabled={composerLocked}
-          />
-        </label>
-        <div className="theme-coach-actions">
-          <button type="button" className="secondary-btn" onClick={onStart} disabled={startDisabled} title={startTitle}>
-            Start conversation
-          </button>
-          <button
-            type="button"
-            className="primary-btn"
-            onClick={onSend}
-            disabled={
-              busy ||
-              !aiAvailable ||
-              !coachPrereqsOk ||
-              !draft.trim() ||
-              !messages.some((m) => m.role === "assistant")
-            }
-            title={!aiAvailable ? "Built-in browser AI is required to send messages to the coach." : undefined}
-          >
-            Send
-          </button>
-        </div>
-      </div>
-      <div className="theme-coach-footer-actions">
-        <button
-          type="button"
-          className="secondary-btn"
-          onClick={onSynthesize}
-          disabled={busy || !aiAvailable || !coachPrereqsOk || !canApply}
-        >
-          Apply answers to description
-        </button>
-        <button type="button" className="secondary-btn" onClick={onClear} disabled={busy || messages.length === 0}>
-          Clear chat
-        </button>
-      </div>
-    </div>
-  );
 }
 
 export default function App() {
@@ -5206,6 +5009,7 @@ export default function App() {
     setCustomThemeCoachBusy(true);
     try {
       const ctx = getCustomThemeCoachContext();
+      const { customThemeCoachTurn } = await import("./browserAiCoach.ts");
       const reply = await customThemeCoachTurn(ctx, toCoachHistory(customThemeCoachMessages), null);
       if (!reply) {
         setCustomThemeCoachError("The coach did not return a reply. Try again or check browser AI settings.");
@@ -5243,6 +5047,7 @@ export default function App() {
     setCustomThemeCoachBusy(true);
     try {
       const ctx = getCustomThemeCoachContext();
+      const { customThemeCoachTurn } = await import("./browserAiCoach.ts");
       const reply = await customThemeCoachTurn(ctx, historyBefore, text);
       if (!reply) {
         setCustomThemeCoachError("No reply from the coach. Try again.");
@@ -5271,6 +5076,7 @@ export default function App() {
     setCustomThemeCoachBusy(true);
     try {
       const ctx = getCustomThemeCoachContext();
+      const { customThemeCoachSynthesize } = await import("./browserAiCoach.ts");
       const desc = await customThemeCoachSynthesize(ctx, toCoachHistory(customThemeCoachMessages));
       if (!desc) {
         setCustomThemeCoachError("Could not build a description from the chat. Try again or edit manually.");
@@ -5355,6 +5161,7 @@ export default function App() {
         setCustomThemeCoachError("");
         try {
           const ctx = getCustomThemeCoachContext();
+          const { customThemeCoachTurn } = await import("./browserAiCoach.ts");
           const reply = await customThemeCoachTurn(ctx, [], null);
           if (cancelled) return;
           if (!reply) {
@@ -7111,42 +6918,48 @@ export default function App() {
                         />
                       </label>
                     </div>
-                    {simpleRoomSetup ? (
-                      <details className="theme-coach-details">
-                        <summary>Optional: guided theme coach (questions and on-device AI)</summary>
-                        <CustomThemeCoachPanel
-                          messages={customThemeCoachMessages}
-                          draft={customThemeCoachDraft}
-                          onDraftChange={setCustomThemeCoachDraft}
-                          busy={customThemeCoachBusy}
-                          localError={customThemeCoachError}
-                          aiAvailable={coachBrowserAiReady}
-                          accountSyncAvailable={Boolean(authToken)}
-                          coachPrereqsOk={customThemeCoachPrereqsOk}
-                          coverage={coachCoverage}
-                          onStart={() => void handleStartCustomThemeCoach()}
-                          onSend={() => void handleSendCustomThemeCoach()}
-                          onSynthesize={() => void handleSynthesizeCustomThemeCoach()}
-                          onClear={resetCustomThemeCoach}
-                        />
-                      </details>
-                    ) : (
-                      <CustomThemeCoachPanel
-                        messages={customThemeCoachMessages}
-                        draft={customThemeCoachDraft}
-                        onDraftChange={setCustomThemeCoachDraft}
-                        busy={customThemeCoachBusy}
-                        localError={customThemeCoachError}
-                        aiAvailable={coachBrowserAiReady}
-                        accountSyncAvailable={Boolean(authToken)}
-                        coachPrereqsOk={customThemeCoachPrereqsOk}
-                        coverage={coachCoverage}
-                        onStart={() => void handleStartCustomThemeCoach()}
-                        onSend={() => void handleSendCustomThemeCoach()}
-                        onSynthesize={() => void handleSynthesizeCustomThemeCoach()}
-                        onClear={resetCustomThemeCoach}
-                      />
-                    )}
+                    {themePath === "custom" ? (
+                      simpleRoomSetup ? (
+                        <details className="theme-coach-details">
+                          <summary>Optional: guided theme coach (questions and on-device AI)</summary>
+                          <Suspense fallback={<p className="muted theme-coach-loading">Loading theme coach…</p>}>
+                            <CustomThemeCoachPanel
+                              messages={customThemeCoachMessages}
+                              draft={customThemeCoachDraft}
+                              onDraftChange={setCustomThemeCoachDraft}
+                              busy={customThemeCoachBusy}
+                              localError={customThemeCoachError}
+                              aiAvailable={coachBrowserAiReady}
+                              accountSyncAvailable={Boolean(authToken)}
+                              coachPrereqsOk={customThemeCoachPrereqsOk}
+                              coverage={coachCoverage}
+                              onStart={() => void handleStartCustomThemeCoach()}
+                              onSend={() => void handleSendCustomThemeCoach()}
+                              onSynthesize={() => void handleSynthesizeCustomThemeCoach()}
+                              onClear={resetCustomThemeCoach}
+                            />
+                          </Suspense>
+                        </details>
+                      ) : (
+                        <Suspense fallback={<p className="muted theme-coach-loading">Loading theme coach…</p>}>
+                          <CustomThemeCoachPanel
+                            messages={customThemeCoachMessages}
+                            draft={customThemeCoachDraft}
+                            onDraftChange={setCustomThemeCoachDraft}
+                            busy={customThemeCoachBusy}
+                            localError={customThemeCoachError}
+                            aiAvailable={coachBrowserAiReady}
+                            accountSyncAvailable={Boolean(authToken)}
+                            coachPrereqsOk={customThemeCoachPrereqsOk}
+                            coverage={coachCoverage}
+                            onStart={() => void handleStartCustomThemeCoach()}
+                            onSend={() => void handleSendCustomThemeCoach()}
+                            onSynthesize={() => void handleSynthesizeCustomThemeCoach()}
+                            onClear={resetCustomThemeCoach}
+                          />
+                        </Suspense>
+                      )
+                    ) : null}
                     {themePath === "custom" && (customThemeName.trim() || customThemeDescription.trim()) ? (
                       <div className="theme-step-description-dock theme-custom-dock-below" role="region" aria-label="Custom theme preview">
                         <div className="theme-dock-header">
@@ -8320,61 +8133,27 @@ export default function App() {
         ) : null}
       </div>
       {upgradePromptOpen && authUser ? (
-        <div className="idle-session-overlay" role="dialog" aria-modal="true" aria-labelledby="upgrade-prompt-title">
-          <div className="idle-session-dialog glass-panel upgrade-prompt-dialog">
-            <h2 id="upgrade-prompt-title">Choose a plan</h2>
-            <p className="muted">{upgradePromptMessage}</p>
-            {billingPlans.length > 0 ? (
-              <div className="pricing-grid pricing-grid--compact">
-                {billingPlans
-                  .filter((plan) => plan.purchasable)
-                  .map((plan) => {
-                    const isSelected = plan.id === selectedBillingPlanId;
-                    return (
-                      <PricingPlanCard
-                        key={plan.id}
-                        plan={plan}
-                        selected={isSelected}
-                        interactive
-                        onSelect={setSelectedBillingPlanId}
-                        comparedToSlot={<PricingValueFocus text={plan.comparedTo ?? ""} />}
-                        footer={
-                          <button
-                            type="button"
-                            className={isSelected || plan.highlight ? "primary-btn" : "secondary-btn"}
-                            disabled={!squarePaymentsReady || checkoutPlanId === plan.id}
-                            onClick={() => void handlePurchasePlan(plan.id)}
-                          >
-                            {pricingCtaLabel(
-                              plan,
-                              checkoutPlanId === plan.id,
-                              plan.id === SCALABLE_OPERATOR_PLAN_ID ? operatorPlanQuote?.totalCents : undefined,
-                            )}
-                          </button>
-                        }
-                      />
-                    );
-                  })}
-              </div>
-            ) : null}
-            <div className="idle-session-actions">
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={() => {
-                  setUpgradePromptOpen(false);
-                  setAccountSection("plans");
-                  setAppView("account");
-                }}
-              >
-                View all plans in Account
-              </button>
-              <button type="button" className="secondary-btn" onClick={() => setUpgradePromptOpen(false)}>
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <Suspense fallback={null}>
+          <UpgradePromptDialog
+            message={upgradePromptMessage}
+            billingPlans={billingPlans}
+            selectedBillingPlanId={selectedBillingPlanId}
+            squarePaymentsReady={squarePaymentsReady}
+            checkoutPlanId={checkoutPlanId}
+            scalableOperatorPlanId={SCALABLE_OPERATOR_PLAN_ID}
+            operatorPlanQuoteTotalCents={
+              selectedBillingPlan?.id === SCALABLE_OPERATOR_PLAN_ID ? operatorPlanQuote?.totalCents : undefined
+            }
+            onSelectPlan={setSelectedBillingPlanId}
+            onPurchasePlan={(planId) => void handlePurchasePlan(planId)}
+            onViewAllPlans={() => {
+              setUpgradePromptOpen(false);
+              setAccountSection("plans");
+              setAppView("account");
+            }}
+            onClose={() => setUpgradePromptOpen(false)}
+          />
+        </Suspense>
       ) : null}
       {idlePromptOpen && authUser ? (
         <div className="idle-session-overlay" role="dialog" aria-modal="true" aria-labelledby="idle-session-title">
@@ -8447,16 +8226,18 @@ export default function App() {
       </BuilderErrorBoundary>
       </>
       ) : null}
-      {sessionId ? (
-        <HomePostExportModal
-          open={postExportOpen}
-          onClose={() => setPostExportOpen(false)}
-          sessionId={sessionId}
-          operatingMode={liveOperatingMode}
-          hasGmConsole={liveHasGmConsole}
-          planName={selectedTheme?.name ?? ""}
-          onDownloadRunbook={() => downloadExportFile("md")}
-        />
+      {sessionId && postExportOpen ? (
+        <Suspense fallback={null}>
+          <HomePostExportModal
+            open={postExportOpen}
+            onClose={() => setPostExportOpen(false)}
+            sessionId={sessionId}
+            operatingMode={liveOperatingMode}
+            hasGmConsole={liveHasGmConsole}
+            planName={selectedTheme?.name ?? ""}
+            onDownloadRunbook={() => downloadExportFile("md")}
+          />
+        </Suspense>
       ) : null}
       <GlobalFooter buildStamp={APP_BUILD_STAMP} />
       </div>
