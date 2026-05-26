@@ -20,6 +20,8 @@ type RoomFlowchartPanelProps = {
   fileBase?: string;
 };
 
+const PNG_SCALE = 3;
+
 const downloadBlob = (body: BlobPart, mime: string, filename: string): void => {
   const blob = new Blob([body], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -31,7 +33,7 @@ const downloadBlob = (body: BlobPart, mime: string, filename: string): void => {
   URL.revokeObjectURL(url);
 };
 
-const svgToPngBlob = async (svg: string): Promise<Blob> => {
+const svgToPngBlob = async (svg: string, scale = PNG_SCALE): Promise<Blob> => {
   const encoded = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   const img = new Image();
   await new Promise<void>((resolve, reject) => {
@@ -39,8 +41,8 @@ const svgToPngBlob = async (svg: string): Promise<Blob> => {
     img.onerror = () => reject(new Error("Could not rasterize flowchart."));
     img.src = encoded;
   });
-  const w = Math.max(img.naturalWidth || 1200, 800);
-  const h = Math.max(img.naturalHeight || 600, 400);
+  const w = Math.max(Math.round((img.naturalWidth || 1200) * scale), 800 * scale);
+  const h = Math.max(Math.round((img.naturalHeight || 600) * scale), 400 * scale);
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
@@ -57,13 +59,31 @@ const svgToPngBlob = async (svg: string): Promise<Blob> => {
 export function RoomFlowchartPanel({ storyPlan, puzzles, themeName, fileBase = "room-flow" }: RoomFlowchartPanelProps) {
   const reactId = useId().replace(/:/g, "");
   const containerRef = useRef<HTMLDivElement>(null);
-  const lightboxRef = useRef<HTMLDivElement>(null);
   const [svgMarkup, setSvgMarkup] = useState<string>("");
+  const [lightboxSvg, setLightboxSvg] = useState<string>("");
   const [renderError, setRenderError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxBusy, setLightboxBusy] = useState(false);
 
   const mermaidSource = buildRoomFlowchartMermaid(storyPlan, puzzles);
+
+  const renderMermaidToSvg = useCallback(
+    async (renderKey: string): Promise<string> => {
+      if (!mermaidSource) throw new Error("No flowchart source.");
+      const { default: mermaid } = await import("mermaid");
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "loose",
+        theme: "dark",
+        flowchart: { curve: "basis", padding: 16, htmlLabels: true, useMaxWidth: false },
+      });
+      const renderId = `erb_flow_${reactId}_${renderKey}_${Date.now()}`;
+      const { svg } = await mermaid.render(renderId, mermaidSource);
+      return svg;
+    },
+    [mermaidSource, reactId],
+  );
 
   const renderChart = useCallback(async () => {
     if (!mermaidSource || !containerRef.current) {
@@ -73,37 +93,44 @@ export function RoomFlowchartPanel({ storyPlan, puzzles, themeName, fileBase = "
     setBusy(true);
     setRenderError(null);
     try {
-      const { default: mermaid } = await import("mermaid");
-      mermaid.initialize({
-        startOnLoad: false,
-        securityLevel: "loose",
-        theme: "dark",
-        flowchart: { curve: "basis", padding: 12, htmlLabels: true },
-      });
-      const renderId = `erb_flow_${reactId}_${Date.now()}`;
-      const { svg } = await mermaid.render(renderId, mermaidSource);
+      const svg = await renderMermaidToSvg("inline");
       setSvgMarkup(svg);
       containerRef.current.innerHTML = svg;
-      if (lightboxRef.current) lightboxRef.current.innerHTML = svg;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Could not render flowchart.";
       setRenderError(msg);
       setSvgMarkup("");
       if (containerRef.current) containerRef.current.innerHTML = "";
-      if (lightboxRef.current) lightboxRef.current.innerHTML = "";
     } finally {
       setBusy(false);
     }
-  }, [mermaidSource, reactId]);
+  }, [mermaidSource, renderMermaidToSvg]);
 
   useEffect(() => {
     void renderChart();
   }, [renderChart]);
 
   useEffect(() => {
-    if (!lightboxOpen || !svgMarkup || !lightboxRef.current) return;
-    lightboxRef.current.innerHTML = svgMarkup;
-  }, [lightboxOpen, svgMarkup]);
+    if (!lightboxOpen || !mermaidSource) return;
+    let cancelled = false;
+    setLightboxBusy(true);
+    setLightboxSvg("");
+    void (async () => {
+      try {
+        const svg = await renderMermaidToSvg("lightbox");
+        if (!cancelled) setLightboxSvg(svg);
+      } catch (err) {
+        if (!cancelled) {
+          setRenderError(err instanceof Error ? err.message : "Could not render enlarged flowchart.");
+        }
+      } finally {
+        if (!cancelled) setLightboxBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lightboxOpen, mermaidSource, renderMermaidToSvg]);
 
   if (!mermaidSource) {
     return (
@@ -125,18 +152,24 @@ export function RoomFlowchartPanel({ storyPlan, puzzles, themeName, fileBase = "
   };
 
   const downloadSvg = () => {
-    if (!svgMarkup) return;
-    downloadBlob(svgMarkup, "image/svg+xml;charset=utf-8", `${baseName}.svg`);
+    const svg = lightboxSvg || svgMarkup;
+    if (!svg) return;
+    downloadBlob(svg, "image/svg+xml;charset=utf-8", `${baseName}.svg`);
   };
 
   const downloadPng = async () => {
-    if (!svgMarkup) return;
+    const svg = lightboxSvg || svgMarkup;
+    if (!svg) return;
     try {
-      const blob = await svgToPngBlob(svgMarkup);
+      const blob = await svgToPngBlob(svg);
       downloadBlob(blob, "image/png", `${baseName}.png`);
     } catch (err) {
       setRenderError(err instanceof Error ? err.message : "PNG download failed.");
     }
+  };
+
+  const openLightbox = (): void => {
+    setLightboxOpen(true);
   };
 
   return (
@@ -149,21 +182,16 @@ export function RoomFlowchartPanel({ storyPlan, puzzles, themeName, fileBase = "
         <button type="button" className="secondary-btn" onClick={downloadMd} disabled={busy}>
           .md
         </button>
-        <button type="button" className="secondary-btn" onClick={downloadSvg} disabled={busy || !svgMarkup}>
+        <button type="button" className="secondary-btn" onClick={downloadSvg} disabled={busy || (!svgMarkup && !lightboxSvg)}>
           .svg
         </button>
-        <button type="button" className="secondary-btn" onClick={() => void downloadPng()} disabled={busy || !svgMarkup}>
+        <button type="button" className="secondary-btn" onClick={() => void downloadPng()} disabled={busy || (!svgMarkup && !lightboxSvg)}>
           .png
         </button>
         <button type="button" className="secondary-btn" onClick={() => void renderChart()} disabled={busy}>
           {busy ? "Rendering…" : "Refresh chart"}
         </button>
-        <button
-          type="button"
-          className="secondary-btn"
-          onClick={() => setLightboxOpen(true)}
-          disabled={busy || !svgMarkup}
-        >
+        <button type="button" className="secondary-btn" onClick={openLightbox} disabled={busy || !svgMarkup}>
           Enlarge
         </button>
       </div>
@@ -172,7 +200,7 @@ export function RoomFlowchartPanel({ storyPlan, puzzles, themeName, fileBase = "
         type="button"
         className="room-flowchart-canvas room-flowchart-canvas--interactive"
         aria-label="Open room flowchart enlarged"
-        onClick={() => setLightboxOpen(true)}
+        onClick={openLightbox}
         disabled={busy || !svgMarkup}
       >
         <div ref={containerRef} className="room-flowchart-canvas-inner" aria-hidden />
@@ -189,7 +217,15 @@ export function RoomFlowchartPanel({ storyPlan, puzzles, themeName, fileBase = "
             <DialogTitle>{themeName ? `${themeName} — room flow` : "Room flowchart"}</DialogTitle>
             <DialogDescription>Scroll and pan to read puzzle nodes, gates, and progression paths.</DialogDescription>
           </DialogHeader>
-          <div ref={lightboxRef} className="room-flowchart-lightbox-scroll" aria-label="Enlarged room flow diagram" />
+          <div className="room-flowchart-lightbox-scroll" aria-label="Enlarged room flow diagram">
+            {lightboxBusy ? <p className="muted room-flowchart-lightbox-loading">Rendering chart…</p> : null}
+            {!lightboxBusy && lightboxSvg ? (
+              <div className="room-flowchart-lightbox-svg" dangerouslySetInnerHTML={{ __html: lightboxSvg }} />
+            ) : null}
+            {!lightboxBusy && !lightboxSvg ? (
+              <p className="muted">Chart could not be painted. Use Refresh chart and try again.</p>
+            ) : null}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

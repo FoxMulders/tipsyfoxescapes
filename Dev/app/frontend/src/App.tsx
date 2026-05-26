@@ -13,6 +13,7 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
+import { computePlanCompletionPercent } from "./planCompletionScore.ts";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -23,6 +24,7 @@ import {
 } from "./oauthReturnSnapshot.ts";
 import { isSignInForPuzzlesMessage, toastErrorOnce, toastMessageOnce, TOAST_ID } from "./toastNotify.ts";
 import { GlobalFooter } from "@/components/layout/GlobalFooter";
+import { BuilderLegalDisclaimer } from "@/components/layout/BuilderLegalDisclaimer";
 import { PlanningSnapshotSheet } from "@/components/layout/PlanningSnapshotSheet";
 import { TopNavBar } from "@/components/layout/TopNavBar";
 import { AppAtmosphere } from "@/components/layout/AppAtmosphere";
@@ -164,6 +166,7 @@ type Puzzle = {
   physical_anchor_prop?: string;
   narrative_justification?: string;
   bill_of_materials?: string[];
+  required_parts_and_props?: string[];
   build_documentation_url?: string;
   audienceTrack?: "main" | "youth_addon";
   gatesAdultProgression?: boolean;
@@ -428,6 +431,7 @@ type SavedPlanPayload = {
   puzzles: Puzzle[];
   suggestedAdditions: string[];
   suggestedAdditionsRequired?: string[];
+  suggestedSafetyProtocols?: string[];
   storyPlan: StoryPlan | null;
   compatibilityPassed: boolean;
   exportContent: string;
@@ -2254,6 +2258,16 @@ function OutputReviewNarrativeField({ label, text }: { label: string; text: stri
   );
 }
 
+function splitProgressionUnlockLines(unlocks: string): string[] {
+  const trimmed = unlocks.trim();
+  if (!trimmed) return [];
+  const segments = trimmed
+    .split(/\s*(?:;|\u2192|->)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return segments.length > 0 ? segments : [trimmed];
+}
+
 function OutputReviewProgressionGuide({
   progressionRule,
   puzzleLinks,
@@ -2271,8 +2285,12 @@ function OutputReviewProgressionGuide({
           {puzzleLinks.map((link) => (
             <li key={link.puzzleId} className="output-review-progression-item">
               <strong>{link.puzzleTitle}</strong>
-              <span className="output-review-progression-role">{link.storyRole}</span>
-              <span className="output-review-progression-unlocks">{link.unlocks}</span>
+              <p className="output-review-progression-role">{link.storyRole}</p>
+              {splitProgressionUnlockLines(link.unlocks).map((line, idx) => (
+                <p key={`${link.puzzleId}-unlock-${idx}`} className="output-review-progression-unlocks">
+                  {line}
+                </p>
+              ))}
             </li>
           ))}
         </ol>
@@ -2433,6 +2451,7 @@ export default function App() {
   const [puzzleWindowBusy, setPuzzleWindowBusy] = useState<PuzzleWindowBusy | null>(null);
   const [suggestedAdditions, setSuggestedAdditions] = useState<string[]>([]);
   const [suggestedAdditionsRequired, setSuggestedAdditionsRequired] = useState<string[]>([]);
+  const [suggestedSafetyProtocols, setSuggestedSafetyProtocols] = useState<string[]>([]);
   const [storyPlan, setStoryPlan] = useState<StoryPlan | null>(null);
   const [compatibilityPassed, setCompatibilityPassed] = useState<boolean | null>(null);
   const [exportContent, setExportContent] = useState<string>("");
@@ -3435,6 +3454,7 @@ export default function App() {
       setRefusedPuzzleSlots([]);
       setSuggestedAdditions([]);
       setSuggestedAdditionsRequired([]);
+      setSuggestedSafetyProtocols([]);
       setStoryPlan(null);
       setCompatibilityPassed(null);
       setExportContent("");
@@ -3663,6 +3683,32 @@ export default function App() {
   const hasFullCatalogAccess = Boolean(authUser?.hasFullCatalog);
   const canNavigateToOutputReview = Boolean(selectedThemeId.trim());
 
+  const planCompletionPercent = useMemo(
+    () =>
+      computePlanCompletionPercent({
+        hasSession: Boolean(sessionId.trim()),
+        hasTheme: Boolean(selectedThemeId.trim()),
+        puzzleCount: puzzles.length,
+        refusedSlots: refusedPuzzleSlots.length,
+        hasStoryPlan: Boolean(storyPlan),
+        approvedForBuild,
+        planSaved: planSavedSuccessfully,
+      }),
+    [
+      sessionId,
+      selectedThemeId,
+      puzzles.length,
+      refusedPuzzleSlots.length,
+      storyPlan,
+      approvedForBuild,
+      planSavedSuccessfully,
+    ],
+  );
+
+  const trialEvalExportAllowed = Boolean(
+    authUser?.billingTier === "trial" && authUser.trialRemaining && authUser.canExportRunbook,
+  );
+
   const isGenerationAuthExpired = (
     response: Response,
     data?: { error?: { code?: string; message?: string } },
@@ -3684,6 +3730,7 @@ export default function App() {
     setRefusedPuzzleSlots([]);
     setSuggestedAdditions([]);
     setSuggestedAdditionsRequired([]);
+    setSuggestedSafetyProtocols([]);
     setStoryPlan(null);
     setCompatibilityPassed(null);
     setExportContent("");
@@ -4362,12 +4409,15 @@ export default function App() {
       return undefined;
     }
     const nextThemes = data.themes;
-    setThemes(nextThemes);
-    setSelectedThemeId((prev) => {
-      if (prev && nextThemes.some((theme) => theme.id === prev)) return prev;
-      return "";
+    flushSync(() => {
+      setThemes(nextThemes);
+      setSelectedThemeId((prev) => {
+        if (prev && nextThemes.some((theme) => theme.id === prev)) return prev;
+        return "";
+      });
+      setThemeSessionExpiredNotice("");
+      setThemeIdeasLoading(false);
     });
-    setThemeSessionExpiredNotice("");
     return nextThemes;
   };
 
@@ -4401,6 +4451,7 @@ export default function App() {
         storyPlan?: StoryPlan;
         suggestedAdditions?: string[];
         suggestedAdditionsRequired?: string[];
+        suggestedSafetyProtocols?: string[];
         user?: unknown;
         error?: { message?: string; code?: string };
       };
@@ -4439,6 +4490,7 @@ export default function App() {
       const previewOnly = data.puzzleAccess === "preview";
       const baseSuggestedAdditions = previewOnly ? [] : (data.suggestedAdditions ?? []);
       const baseSuggestedRequired = previewOnly ? [] : (data.suggestedAdditionsRequired ?? []);
+      const baseSafetyProtocols = previewOnly ? [] : (data.suggestedSafetyProtocols ?? []);
       const activeTheme = themeForEnhance ?? themes.find((theme) => theme.id === themeId);
       let aiEnhancement: Awaited<ReturnType<typeof enhancePlanInBrowser>> = null;
       if (!previewOnly) {
@@ -4491,6 +4543,7 @@ export default function App() {
       setStoryPlan(enhancedStoryPlan);
       setSuggestedAdditionsRequired(baseSuggestedRequired);
       setSuggestedAdditions(aiEnhancement?.suggestedAdditions?.length ? aiEnhancement.suggestedAdditions : baseSuggestedAdditions);
+      setSuggestedSafetyProtocols(baseSafetyProtocols);
       return true;
     } catch (err) {
       setError(classifyApiCatchError(err));
@@ -4565,6 +4618,7 @@ export default function App() {
       setRefusedPuzzleSlots([]);
       setSuggestedAdditions([]);
       setSuggestedAdditionsRequired([]);
+      setSuggestedSafetyProtocols([]);
       setStoryPlan(null);
       setCompatibilityPassed(null);
       setExportContent("");
@@ -4656,6 +4710,7 @@ export default function App() {
         setRefusedPuzzleSlots([]);
         setSuggestedAdditions([]);
         setSuggestedAdditionsRequired([]);
+        setSuggestedSafetyProtocols([]);
         setStoryPlan(null);
         setCompatibilityPassed(null);
         setExportContent("");
@@ -5239,11 +5294,13 @@ export default function App() {
       storyPlan?: StoryPlan | null;
       suggestedAdditions?: string[];
       suggestedAdditionsRequired?: string[];
+      suggestedSafetyProtocols?: string[];
     },
   ) => {
     const activeTheme = themes.find((theme) => theme.id === selectedThemeId);
     const baseSuggestedAdditions = data.suggestedAdditions ?? suggestedAdditions;
     const baseSuggestedRequired = data.suggestedAdditionsRequired ?? suggestedAdditionsRequired;
+    const baseSafetyProtocols = data.suggestedSafetyProtocols ?? suggestedSafetyProtocols;
     let aiEnhancement: Awaited<ReturnType<typeof enhancePlanInBrowser>> = null;
     try {
       aiEnhancement = await enhancePlanInBrowser({
@@ -5289,6 +5346,7 @@ export default function App() {
     setStoryPlan(enhancedStoryPlan);
     setSuggestedAdditionsRequired(baseSuggestedRequired);
     setSuggestedAdditions(aiEnhancement?.suggestedAdditions?.length ? aiEnhancement.suggestedAdditions : baseSuggestedAdditions);
+    setSuggestedSafetyProtocols(baseSafetyProtocols);
   };
 
   const replacePuzzle = async (puzzleId: string) => {
@@ -5437,7 +5495,7 @@ export default function App() {
       setError("Mark the plan as approved for build before exporting.");
       return;
     }
-    if (!planSavedSuccessfully) {
+    if (!planSavedSuccessfully && !trialEvalExportAllowed) {
       setError("Save the plan successfully before exporting (step 2 in the export flow).");
       return;
     }
@@ -5644,8 +5702,10 @@ export default function App() {
       await refreshSavedPlans();
       void refreshProfile();
       setPlanSavedSuccessfully(true);
-      setActivePanel("saved");
-      setWizardStep("saved");
+      if (flowWizardStep !== "output-export") {
+        setActivePanel("saved");
+        setWizardStep("saved");
+      }
     } catch {
       setError("Could not save plan. Check backend and try again.");
     }
@@ -5812,6 +5872,7 @@ export default function App() {
       setRefusedPuzzleSlots([]);
       setSuggestedAdditions(payload.suggestedAdditions);
       setSuggestedAdditionsRequired(payload.suggestedAdditionsRequired ?? []);
+      setSuggestedSafetyProtocols(payload.suggestedSafetyProtocols ?? []);
       setStoryPlan(payload.storyPlan);
       setCompatibilityPassed(payload.compatibilityPassed);
       setExportContent(payload.exportContent ?? "");
@@ -6898,6 +6959,7 @@ export default function App() {
                         onClick={() => {
                           setThemePath("generated");
                           resetCustomThemeCoach();
+                          setThemeIdeasLoading(true);
                           void loadThemes("/api/themes/generate");
                         }}
                       >
@@ -7603,6 +7665,16 @@ export default function App() {
           {flowWizardStep === "output-review" ? (
             <section className="card mission-panel glass-panel output-review-panel" id="builder-output-anchor">
               <h2>Output: Review</h2>
+              <div className="button-row output-review-nav-row output-review-nav-row--top">
+                {canGoWizardBack ? (
+                  <button type="button" className="secondary-btn" onClick={goWizardBack}>
+                    ← Back
+                  </button>
+                ) : null}
+                <button type="button" className="primary-btn" onClick={() => setWizardStep("output-export")}>
+                  Continue to Export
+                </button>
+              </div>
               <div className="output-review-body">
               {puzzles.length > 0 || refusedPuzzleSlots.length > 0 ? (
                 <>
@@ -7726,6 +7798,21 @@ export default function App() {
                   ) : null}
                 </div>
               ) : null}
+              {suggestedSafetyProtocols.length > 0 ? (
+                <div className="suggested-additions-panel suggested-additions-panel--safety">
+                  <div className="suggested-additions-block suggested-additions-block--safety">
+                    <h3>Safety Protocols &amp; Guidelines</h3>
+                    <p className="muted suggested-additions-lead">
+                      Construction hazards, space constraints, and operational precautions — isolated from general staging copy.
+                    </p>
+                    <ul className="suggested-additions-list suggested-additions-list--safety">
+                      {suggestedSafetyProtocols.map((item) => (
+                        <li key={`safety-${item}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : null}
               {storyPlan ? (
                 <>
                 <div className="output-review-story output-review-glass-surface">
@@ -7829,7 +7916,8 @@ export default function App() {
                 </>
               ) : null}
               </div>
-              <div className="button-row">
+              <BuilderLegalDisclaimer compact />
+              <div className="button-row output-review-nav-row output-review-nav-row--bottom">
                 {canGoWizardBack ? (
                   <button type="button" className="secondary-btn" onClick={goWizardBack}>
                     ← Back
@@ -7895,7 +7983,9 @@ export default function App() {
                       title={authUser?.canSaveRooms ? undefined : "Purchase a room pack to save plans"}
                       onClick={() => (authUser?.canSaveRooms ? void saveCurrentPlan() : openUpgradePrompt())}
                     >
-                      {authUser?.canSaveRooms ? "Save plan" : "Save plan (paid)"}
+                      {authUser?.canSaveRooms
+                        ? `Save plan (${planCompletionPercent}% complete)`
+                        : "Save plan (paid)"}
                     </button>
                   </div>
                   <div className="export-action-flow__rail export-action-flow__rail--accent" aria-hidden />
@@ -7906,16 +7996,23 @@ export default function App() {
                     <button
                       type="button"
                       className="primary-btn export-action-flow__btn"
-                      disabled={exportBusy || !authUser?.canExportRunbook || !approvedForBuild || !planSavedSuccessfully}
+                      disabled={
+                        exportBusy ||
+                        !authUser?.canExportRunbook ||
+                        !approvedForBuild ||
+                        (!planSavedSuccessfully && !trialEvalExportAllowed)
+                      }
                       aria-busy={exportBusy}
                       title={
                         !authUser?.canExportRunbook
                           ? "Purchase an export credit or upgrade to export a full runbook."
                           : !approvedForBuild
                             ? "Approve the plan for build first."
-                            : !planSavedSuccessfully
+                            : !planSavedSuccessfully && !trialEvalExportAllowed
                               ? "Save the plan successfully before exporting."
-                              : undefined
+                              : trialEvalExportAllowed && !planSavedSuccessfully
+                                ? "Trial evaluation export — save is optional for your first export."
+                                : undefined
                       }
                       onClick={() =>
                         authUser?.canExportRunbook ? void exportPlan() : openUpgradePrompt()
@@ -7928,8 +8025,15 @@ export default function App() {
                 <p className="muted export-action-flow__hint">
                   Complete all three steps in order: approve, save without errors, then export. Planning syncs with strict validation when
                   you export (markdown + PDF).
+                  {trialEvalExportAllowed && !planSavedSuccessfully ? (
+                    <>
+                      {" "}
+                      On trial, you may export once after approval to evaluate the PDF without saving first.
+                    </>
+                  ) : null}
                 </p>
               </div>
+              <BuilderLegalDisclaimer />
               <div className="button-row export-back-row">
                 {canGoWizardBack ? (
                   <button type="button" className="secondary-btn" onClick={goWizardBack}>

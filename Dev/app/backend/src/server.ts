@@ -130,6 +130,8 @@ type Puzzle = {
   narrative_justification?: string;
   /** Procurement list for this puzzle (parts + anchor prop). */
   bill_of_materials?: string[];
+  /** Mandatory parts/props the host must stage for this beat. */
+  required_parts_and_props?: string[];
   /** Official wiring / fabrication guide URL. */
   build_documentation_url?: string;
   electronicDetails?: {
@@ -271,6 +273,8 @@ type SessionState = {
   suggestedAdditions: string[];
   /** Must-address gaps (missing locks, clue surface, Arduino bench, etc.). */
   suggestedAdditionsRequired: string[];
+  /** Safety protocols isolated from general staging copy. */
+  suggestedSafetyProtocols: string[];
   currentStoryPlan?: StoryPlan;
   /** Home host vs retail venue live-ops mode (derived from plan tier when unset). */
   operatingMode?: OperatingMode;
@@ -388,6 +392,7 @@ const deserializeSessionFromDisk = (raw: Record<string, unknown>): SessionState 
   return {
     ...data,
     planningInput: normalizeSessionPlanningInput(data.planningInput),
+    suggestedSafetyProtocols: data.suggestedSafetyProtocols ?? [],
     seenThemeIds: new Set(data.seenThemeIds ?? []),
     seenThemeTitlesLower: new Set(data.seenThemeTitlesLower ?? []),
     seenPuzzleIds: new Set(data.seenPuzzleIds ?? []),
@@ -480,6 +485,7 @@ type SavedPlan = {
     puzzles: Puzzle[];
     suggestedAdditions: string[];
     suggestedAdditionsRequired?: string[];
+    suggestedSafetyProtocols?: string[];
     storyPlan: StoryPlan | null;
     compatibilityPassed: boolean;
     exportContent: string;
@@ -2047,9 +2053,10 @@ const annotatePuzzlesWithInventoryAnchors = (session: SessionState, puzzles: Puz
 const buildSuggestedAdditionLists = (
   session: SessionState,
   puzzles: Puzzle[],
-): { required: string[]; optional: string[] } => {
+): { required: string[]; optional: string[]; safety: string[] } => {
   const required: string[] = [];
   const optional: string[] = [];
+  const safety: string[] = [];
   const pc = session.planningInput.playersConcurrent;
   const mins = session.planningInput.sessionDurationMinutes;
   const pathKind = getRecommendedFlowPathKind(session);
@@ -2072,7 +2079,7 @@ const buildSuggestedAdditionLists = (
     required.push(
       "Map the empty shell before ordering props: entry/briefing zone, 2–4 puzzle stations, GM control position, and a finale cluster.",
     );
-    optional.push(
+    safety.push(
       "Professional empty room: install lock hardware on dedicated puzzle boxes or strike plates you add—never repurpose real egress latches.",
     );
     optional.push(
@@ -2090,18 +2097,13 @@ const buildSuggestedAdditionLists = (
     "Prop discipline: list props you **might** use across the run (deduction aids, containers, electronics). The generator may tie only **high-confidence** matches to a specific puzzle; you can still stage unused items for mood as long as they do not read as fake puzzles.",
   );
   if (inv.length > 0) {
-    const anchoredNames = new Set(
-      puzzles.map((puzzle) => puzzle.physical_anchor_prop?.trim()).filter((name): name is string => Boolean(name)),
-    );
-    const anchoredItems = inv.filter((item) => anchoredNames.has(item));
-    if (anchoredItems.length > 0) {
-      optional.push(
-        `Inventory-led build: ${anchoredItems.length} listed prop(s) anchor live puzzle beats—photograph each in its documented home between groups.`,
-      );
-      for (const raw of anchoredItems) {
-        const { puzzleUses } = describeInventoryItem(raw, session.planningInput.environmentType);
-        optional.push(`**${raw}** — ${puzzleUses}`);
-      }
+    const mainPuzzles = puzzles.filter((p) => p.audienceTrack !== "youth_addon");
+    for (let i = 0; i < mainPuzzles.length; i += 1) {
+      const puzzle = mainPuzzles[i]!;
+      const anchor = puzzle.physical_anchor_prop?.trim();
+      if (!anchor) continue;
+      const { puzzleUses } = describeInventoryItem(anchor, session.planningInput.environmentType);
+      optional.push(`Used for: Puzzle #${i + 1} — ${puzzle.title} (${anchor}): ${puzzleUses}`);
     }
   }
 
@@ -2117,22 +2119,22 @@ const buildSuggestedAdditionLists = (
     );
   }
   if (electronicCount > 0) {
-    optional.push(
-      "Electronic / Arduino beats: prototype on the bench, then run a formal **QA** pass (every valid and invalid input, reset, unplug mid-sequence, heat, and trip hazards) before mounting in the set—ship original behaviors, not clones of public tutorials.",
+    safety.push(
+      "Electronic / Arduino beats: prototype on the bench, then run a formal QA pass (every valid and invalid input, reset, unplug mid-sequence, heat, and trip hazards) before mounting in the set.",
     );
   }
   if (!isProfessionalEmptyVenue(session) && (room.includes("living room") || room.includes("house"))) {
-    optional.push("Add temporary cable covers/tape routes to keep wiring safe in shared household spaces.");
-    optional.push("Add removable prop mounts (command hooks/strips) to avoid permanent room modifications.");
+    safety.push("Add temporary cable covers/tape routes to keep wiring safe in shared household spaces.");
+    safety.push("Add removable prop mounts (command hooks/strips) to avoid permanent room modifications.");
   }
   if (isProfessionalEmptyVenue(session)) {
-    optional.push("Cable trenches or surface raceways along walls keep Arduino harnesses off the player path in a commercial shell.");
+    safety.push("Cable trenches or surface raceways along walls keep Arduino harnesses off the player path in a commercial shell.");
   }
   if (room.includes("garage") || room.includes("basement")) {
-    optional.push("Add focused lighting for clue visibility and a clear safe path around stored equipment.");
+    safety.push("Add focused lighting for clue visibility and a clear safe path around stored equipment.");
   }
   if (session.planningInput.youthAddOnEnabled) {
-    optional.push(
+    safety.push(
       "Junior add-on: provide kid-height surfaces, stable seating, and bright signage; keep reset props within reach of a helper.",
     );
     if (session.planningInput.youthAddOnGatesAdultFlow) {
@@ -2142,7 +2144,7 @@ const buildSuggestedAdditionLists = (
     }
   }
 
-  return { required, optional };
+  return { required, optional, safety };
 };
 
 const estimatePuzzleCount = (playersConcurrent: number, sessionDurationMinutes: number): number => {
@@ -2354,7 +2356,7 @@ const stripBadInventoryAnchorsFromPuzzles = (puzzles: Puzzle[], issueFields: str
 const finalizePuzzlesAndStoryPlan = (
   session: SessionState,
   puzzles: Puzzle[],
-): { puzzles: Puzzle[]; storyPlan: StoryPlan; lists: { required: string[]; optional: string[] } } => {
+): { puzzles: Puzzle[]; storyPlan: StoryPlan; lists: { required: string[]; optional: string[]; safety: string[] } } => {
   let nextPuzzles = puzzles;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     nextPuzzles = annotatePuzzlesWithInventoryAnchors(session, nextPuzzles);
@@ -2628,20 +2630,42 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
       difficulty: "medium",
     },
     {
-      id: "pz_physical_2",
-      category: "physical",
-      themeTags: ["generic", "magnet"],
-      title: "Magnetic Lock Sequence",
-      objective: "Align magnetic triggers in order.",
+      id: "pz_electronic_maglock",
+      category: "electronic",
+      themeTags: ["generic", "maglock", "electronic"],
+      title: "Maglock / Magnetic Lock Sequence",
+      objective: "Align magnetic triggers in order to release the maglock strike.",
       howItWorks:
-        "Magnetic sensors are hidden behind marked points. Players move a magnet in the correct order and timing to activate all sensors and unlock the next clue container.",
+        "Reed switches or hall sensors hidden behind marked points detect a hand magnet in sequence. An Arduino or maglock driver energizes the strike only when the correct polarity/order is satisfied—this is an electronic maglock module, not a furniture prop.",
       referenceLinks: [
         {
           title: "Adafruit reed switch guide",
           url: "https://learn.adafruit.com/search?q=reed%20switch",
         }],
-      solveSteps: ["Find magnet points", "Activate sequence"],
+      solveSteps: ["Locate marked sensor points", "Sweep magnet in order", "Confirm maglock release"],
       difficulty: "medium",
+      electronicDetails: {
+        parts: [
+          "12V maglock strike or fail-safe maglock",
+          "Maglock driver relay module",
+          "3–5 reed switches or hall sensors",
+          "Hand magnet",
+          "12V PSU (adequate amperage for strike)",
+          "Arduino Uno (optional sequencing logic)",
+        ],
+        wiringDiagram: [
+          "Sensor inputs -> Arduino digital pins (D2–D6) with pull-ups",
+          "Correct sequence -> relay IN -> maglock +12V supply",
+          "Common ground between PSU, relay, and controller",
+        ],
+        wiringDiagramSvg: "",
+        buildSteps: [
+          "Bench-test maglock draw and heat before mounting.",
+          "Verify fail-safe behavior on power loss.",
+          "Mount strike on dedicated puzzle door—not egress hardware.",
+        ],
+        arduinoCode: "// Sequence maglock release when sensors trigger in order\n",
+      },
     },
     {
       id: "pz_physical_3",
@@ -4632,6 +4656,7 @@ app.post("/api/planning/session", async (req, res) => {
     currentPuzzles: [],
     suggestedAdditions: [],
     suggestedAdditionsRequired: [],
+    suggestedSafetyProtocols: [],
     roomManifest: defaultRoomManifest(),
   });
   const created = sessions.get(newSessionId)!;
@@ -5207,6 +5232,7 @@ app.post("/api/puzzles/generate", async (req, res) => {
   session.currentPuzzles = generatedForResponse;
   session.suggestedAdditionsRequired = finalized.lists.required;
   session.suggestedAdditions = finalized.lists.optional;
+  session.suggestedSafetyProtocols = finalized.lists.safety;
   session.currentStoryPlan = finalized.storyPlan;
   const compatibilityPassed = generatedForResponse.every((puzzle) =>
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
@@ -5247,6 +5273,7 @@ app.post("/api/puzzles/generate", async (req, res) => {
     storyPlan: clientStory,
     suggestedAdditions: fullAccess ? session.suggestedAdditions : [],
     suggestedAdditionsRequired: fullAccess ? session.suggestedAdditionsRequired : [],
+    suggestedSafetyProtocols: fullAccess ? session.suggestedSafetyProtocols : [],
     roomManifest: session.roomManifest,
     manifestCreditConsumed: manifestResult.creditConsumed,
     trialConsumed: manifestResult.trialConsumed,
@@ -5332,6 +5359,7 @@ app.post("/api/puzzles/:puzzleId/replace", async (req, res) => {
   session.currentPuzzles = replaceFinal.puzzles;
   session.suggestedAdditionsRequired = replaceFinal.lists.required;
   session.suggestedAdditions = replaceFinal.lists.optional;
+  session.suggestedSafetyProtocols = replaceFinal.lists.safety;
   session.currentStoryPlan = replaceFinal.storyPlan;
   const compatibilityPassed = session.currentPuzzles.every((puzzle) =>
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
@@ -5349,6 +5377,7 @@ app.post("/api/puzzles/:puzzleId/replace", async (req, res) => {
     ),
     suggestedAdditions: fullAccess ? session.suggestedAdditions : [],
     suggestedAdditionsRequired: fullAccess ? session.suggestedAdditionsRequired : [],
+    suggestedSafetyProtocols: fullAccess ? session.suggestedSafetyProtocols : [],
     puzzleAccess: fullAccess ? "full" : "preview",
   });
 });
@@ -5389,6 +5418,7 @@ app.post("/api/puzzles/:puzzleId/reject", async (req, res) => {
     session.currentPuzzles = rejectFinal.puzzles;
     session.suggestedAdditionsRequired = rejectFinal.lists.required;
     session.suggestedAdditions = rejectFinal.lists.optional;
+    session.suggestedSafetyProtocols = rejectFinal.lists.safety;
     session.currentStoryPlan = rejectFinal.storyPlan;
   }
   const compatibilityPassed = session.currentPuzzles.every((puzzle) =>
@@ -5406,6 +5436,7 @@ app.post("/api/puzzles/:puzzleId/reject", async (req, res) => {
     ),
     suggestedAdditions: fullAccess ? session.suggestedAdditions : [],
     suggestedAdditionsRequired: fullAccess ? session.suggestedAdditionsRequired : [],
+    suggestedSafetyProtocols: fullAccess ? session.suggestedSafetyProtocols : [],
     puzzleAccess: fullAccess ? "full" : "preview",
   });
 });
@@ -5490,6 +5521,7 @@ app.post("/api/puzzles/fill-slot", async (req, res) => {
   session.currentPuzzles = fillFinal.puzzles;
   session.suggestedAdditionsRequired = fillFinal.lists.required;
   session.suggestedAdditions = fillFinal.lists.optional;
+  session.suggestedSafetyProtocols = fillFinal.lists.safety;
   session.currentStoryPlan = fillFinal.storyPlan;
   const compatibilityPassed = session.currentPuzzles.every((puzzle) =>
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
@@ -5505,6 +5537,7 @@ app.post("/api/puzzles/fill-slot", async (req, res) => {
     ),
     suggestedAdditions: fullAccess ? session.suggestedAdditions : [],
     suggestedAdditionsRequired: fullAccess ? session.suggestedAdditionsRequired : [],
+    suggestedSafetyProtocols: fullAccess ? session.suggestedSafetyProtocols : [],
     puzzleAccess: fullAccess ? "full" : "preview",
   });
 });
@@ -5705,6 +5738,14 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
       ? session.suggestedAdditions.map((item) => `- ${item}`)
       : ["- No optional elements listed."]),
     "",
+    "## Safety Protocols & Guidelines",
+    ...(session.suggestedSafetyProtocols.length > 0
+      ? session.suggestedSafetyProtocols.map((item) => `- ${item}`)
+      : [
+          "- Verify all physical builds for pinch points, trip hazards, and fire egress before rehearsal.",
+          "- Tipsy Fox Escapes provides frameworks only — hosts assume full liability for construction and operation.",
+        ]),
+    "",
     "## Theme Fit Rationale",
     ...session.currentPuzzles.map(
       (puzzle) =>
@@ -5878,6 +5919,7 @@ app.post("/api/plans/:sessionId/save", async (req, res) => {
       puzzles: session.currentPuzzles,
       suggestedAdditions: session.suggestedAdditions,
       suggestedAdditionsRequired: session.suggestedAdditionsRequired,
+      suggestedSafetyProtocols: session.suggestedSafetyProtocols,
       storyPlan: session.currentStoryPlan ?? null,
       compatibilityPassed,
       exportContent: "",
@@ -5970,6 +6012,7 @@ const rehydrateLiveSessionFromSavedPlan = (plan: SavedPlan, ownerUserId: string)
     currentPuzzles: withPuzzleQaForTheme(d.puzzles.map((p) => ({ ...p })), selectedTheme?.name ?? "Saved plan"),
     suggestedAdditions: [...(d.suggestedAdditions ?? [])],
     suggestedAdditionsRequired: [...(d.suggestedAdditionsRequired ?? [])],
+    suggestedSafetyProtocols: [...(d.suggestedSafetyProtocols ?? [])],
     currentStoryPlan: d.storyPlan ?? undefined,
     roomManifest: defaultRoomManifest(),
   };

@@ -50,6 +50,7 @@ export interface Puzzle {
   physical_anchor_prop?: string;
   narrative_justification?: string;
   bill_of_materials?: string[];
+  required_parts_and_props?: string[];
   build_documentation_url?: string;
 }
 

@@ -13,6 +13,7 @@ export type PuzzleManufacturingFields = {
   physical_anchor_prop?: string;
   narrative_justification?: string;
   bill_of_materials?: string[];
+  required_parts_and_props?: string[];
   build_documentation_url?: string;
 };
 
@@ -155,6 +156,7 @@ export const enrichPuzzlesWithManufacturingSchema = <T extends PuzzleWithManufac
         deps.environmentType,
       ),
       bill_of_materials: buildBillOfMaterials(puzzle, anchor),
+      required_parts_and_props: buildBillOfMaterials(puzzle, anchor),
     };
 
     if (anchor) {
@@ -201,6 +203,7 @@ export const enrichPuzzlesWithManufacturingSchema = <T extends PuzzleWithManufac
         ...next,
         build_documentation_url: bundle.buildDocumentationUrl,
         bill_of_materials: [...new Set(bom.map((r) => r.trim()).filter(Boolean))],
+        required_parts_and_props: [...new Set(bom.map((r) => r.trim()).filter(Boolean))],
         referenceLinks: mergedRefs,
         electronicDetails: {
           ...puzzle.electronicDetails,
