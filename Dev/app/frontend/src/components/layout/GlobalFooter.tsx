@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { BuilderLegalDisclaimer } from "@/components/layout/BuilderLegalDisclaimer";
 
 type GlobalFooterProps = {
   buildStamp: string;
@@ -60,6 +61,7 @@ export function GlobalFooter({ buildStamp }: GlobalFooterProps) {
       <div className="footer-logo-wrap">
         <img src="/tipsy-fox-logo.JPEG" alt="The Tipsy Fox logo" className="footer-logo" />
         <p className="footer-copyright muted">© {new Date().getFullYear()} Tipsy Fox Escapes. All rights reserved.</p>
+        <BuilderLegalDisclaimer compact />
         <p className="footer-build-stamp">
           Build: {versionLabel}
           {buildLabel ? ` · ${buildLabel}` : ""}

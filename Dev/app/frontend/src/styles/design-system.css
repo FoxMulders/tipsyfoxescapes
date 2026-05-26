@@ -1,0 +1,133 @@
+/**
+ * Tipsy Fox Escapes — unified design tokens (8px grid) and interaction primitives.
+ * Keep in sync with index.css @theme inline.
+ */
+
+:root {
+  /* —— 8px spacing scale —— */
+  --space-0: 0;
+  --space-1: 0.5rem; /* 8px */
+  --space-2: 1rem; /* 16px */
+  --space-3: 1.5rem; /* 24px */
+  --space-4: 2rem; /* 32px */
+  --space-5: 2.5rem; /* 40px */
+  --space-6: 3rem; /* 48px */
+
+  /* —— Typography —— */
+  --font-display: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* —— Mystery / escape-room palette —— */
+  --tf-teal: hsl(187 92% 48%);
+  --tf-teal-dim: hsl(187 70% 38%);
+  --tf-teal-glow: hsl(187 92% 48% / 0.35);
+  --tf-amber: hsl(38 92% 58%);
+  --tf-amber-dim: hsl(38 70% 42%);
+  --tf-crimson: hsl(0 72% 55%);
+  --tf-navy: hsl(222 47% 6%);
+  --tf-navy-elevated: hsl(222 40% 9%);
+  --tf-navy-panel: hsl(222 38% 11%);
+  --tf-muted: hsl(215 18% 62%);
+  --tf-text: hsl(210 40% 96%);
+
+  /* —— Surfaces & edges —— */
+  --surface-glass: hsl(222 40% 9% / 0.72);
+  --surface-glass-strong: hsl(222 40% 10% / 0.88);
+  --edge-subtle: hsl(187 45% 42% / 0.22);
+  --edge-accent: hsl(187 55% 48% / 0.45);
+  --edge-glow: 0 0 0 1px var(--edge-accent), 0 0 24px var(--tf-teal-glow);
+
+  /* —— Motion —— */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 320ms;
+
+  /* —— Layout —— */
+  --content-max: 58rem;
+  --workspace-max: 87.5rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-pill: 999px;
+}
+
+/* —— Global interactive affordances —— */
+button,
+.primary-btn,
+.secondary-btn,
+[role="button"] {
+  font-family: var(--font-display);
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    background-color var(--duration-normal) var(--ease-out),
+    border-color var(--duration-normal) var(--ease-out),
+    box-shadow var(--duration-normal) var(--ease-out),
+    filter var(--duration-normal) var(--ease-out);
+}
+
+button:focus-visible,
+.primary-btn:focus-visible,
+.secondary-btn:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--tf-teal);
+  outline-offset: 2px;
+  box-shadow: var(--edge-glow);
+}
+
+button:active:not(:disabled),
+.primary-btn:active:not(:disabled),
+.secondary-btn:active:not(:disabled) {
+  transform: scale(0.98) translateY(0);
+}
+
+button:disabled,
+.primary-btn:disabled,
+.secondary-btn:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+  transform: none;
+}
+
+input,
+textarea,
+select {
+  font-family: var(--font-display);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--edge-subtle);
+  background: var(--surface-glass-strong);
+  color: var(--tf-text);
+  padding: var(--space-1) var(--space-2);
+  transition:
+    border-color var(--duration-normal) var(--ease-out),
+    box-shadow var(--duration-normal) var(--ease-out);
+}
+
+input:hover:not(:disabled),
+textarea:hover:not(:disabled),
+select:hover:not(:disabled) {
+  border-color: var(--edge-accent);
+}
+
+.field-hint {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--tf-muted);
+  line-height: var(--leading-normal);
+}
+
+.field-hint--constraint {
+  font-style: italic;
+  opacity: 0.85;
+}

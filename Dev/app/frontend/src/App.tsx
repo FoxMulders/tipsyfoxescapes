@@ -25,6 +25,12 @@ import {
 import { isSignInForPuzzlesMessage, toastErrorOnce, toastMessageOnce, TOAST_ID } from "./toastNotify.ts";
 import { GlobalFooter } from "@/components/layout/GlobalFooter";
 import { BuilderLegalDisclaimer } from "@/components/layout/BuilderLegalDisclaimer";
+import { OutputReviewActionBar } from "@/components/builder/OutputReviewActionBar";
+import { StagingPropListItem } from "@/components/builder/StagingPropListItem";
+import { PuzzleCategoryBadge } from "@/components/puzzle/PuzzleCategoryBadge";
+import { PuzzleRequiredPartsBlock } from "@/components/puzzle/PuzzleRequiredPartsBlock";
+import { PuzzleSolveStepsBlock } from "@/components/puzzle/PuzzleSolveStepsBlock";
+import { isMaglockPuzzle } from "@/lib/puzzleDisplayUtils";
 import { PlanningSnapshotSheet } from "@/components/layout/PlanningSnapshotSheet";
 import { TopNavBar } from "@/components/layout/TopNavBar";
 import { AppAtmosphere } from "@/components/layout/AppAtmosphere";
@@ -599,9 +605,7 @@ function PuzzleRefusedWindow({
           <h4 className="puzzle-output-title">Puzzle removed</h4>
           <p className="puzzle-type-field">
             <span className="puzzle-field-label">Type</span>
-            <span className={`puzzle-type-pill puzzle-type-pill--${slot.category}`}>
-              {formatPuzzleCategory(slot.category)}
-            </span>
+            <PuzzleCategoryBadge puzzle={{ id: slot.slotId, title: "Refused slot", category: slot.category }} />
           </p>
         </div>
       </header>
@@ -704,6 +708,11 @@ function PuzzleWindowCard({
   rejectBusy: boolean;
 }) {
   const previewLocked = isPuzzlePreviewLocked(puzzle);
+  const maglock = isMaglockPuzzle(puzzle);
+  const requiredParts =
+    puzzle.required_parts_and_props?.length
+      ? puzzle.required_parts_and_props
+      : puzzle.bill_of_materials ?? [];
   const makerElectronicsLocked = Boolean(authUser && !authUser.hasMakerElectronics);
   const electronicsBlurLabel = !authUser
     ? "Sign in to see wiring diagrams, build steps, and diagram SVG for your room."
@@ -722,9 +731,7 @@ function PuzzleWindowCard({
           </h4>
           <p className="puzzle-type-field">
             <span className="puzzle-field-label">Type</span>
-            <span className={`puzzle-type-pill puzzle-type-pill--${puzzle.category}`}>
-              {formatPuzzleCategory(puzzle.category)}
-            </span>
+            <PuzzleCategoryBadge puzzle={puzzle} />
           </p>
         </div>
         <button
@@ -776,6 +783,10 @@ function PuzzleWindowCard({
         themeDescription={selectedThemeDescription}
         puzzle={puzzle}
       />
+      {!previewLocked && requiredParts.length > 0 ? (
+        <PuzzleRequiredPartsBlock parts={requiredParts} category={puzzle.category} isMaglock={maglock} />
+      ) : null}
+      {!previewLocked && puzzle.solveSteps?.length ? <PuzzleSolveStepsBlock steps={puzzle.solveSteps} /> : null}
       {puzzle.puzzleQa && !puzzle.puzzleQa.passed ? (
         <div className="puzzle-qa-callout" role="note">
           <p className="puzzle-qa-callout__title">
@@ -7665,16 +7676,12 @@ export default function App() {
           {flowWizardStep === "output-review" ? (
             <section className="card mission-panel glass-panel output-review-panel" id="builder-output-anchor">
               <h2>Output: Review</h2>
-              <div className="button-row output-review-nav-row output-review-nav-row--top">
-                {canGoWizardBack ? (
-                  <button type="button" className="secondary-btn" onClick={goWizardBack}>
-                    ← Back
-                  </button>
-                ) : null}
-                <button type="button" className="primary-btn" onClick={() => setWizardStep("output-export")}>
-                  Continue to Export
-                </button>
-              </div>
+              <OutputReviewActionBar
+                placement="top"
+                canGoBack={canGoWizardBack}
+                onBack={goWizardBack}
+                onContinueExport={() => setWizardStep("output-export")}
+              />
               <div className="output-review-body">
               {puzzles.length > 0 || refusedPuzzleSlots.length > 0 ? (
                 <>
@@ -7781,7 +7788,7 @@ export default function App() {
                       </p>
                       <ul className="suggested-additions-list">
                         {suggestedAdditionsRequired.map((item) => (
-                          <li key={`req-${item}`}>{item}</li>
+                          <StagingPropListItem key={`req-${item}`} item={item} />
                         ))}
                       </ul>
                     </div>
@@ -7791,7 +7798,7 @@ export default function App() {
                       <h3>Suggested elements to add</h3>
                       <ul className="suggested-additions-list">
                         {suggestedAdditions.map((item) => (
-                          <li key={`opt-${item}`}>{item}</li>
+                          <StagingPropListItem key={`opt-${item}`} item={item} />
                         ))}
                       </ul>
                     </div>
@@ -7799,9 +7806,9 @@ export default function App() {
                 </div>
               ) : null}
               {suggestedSafetyProtocols.length > 0 ? (
-                <div className="suggested-additions-panel suggested-additions-panel--safety">
+                <div className="safety-protocols-panel suggested-additions-panel suggested-additions-panel--safety">
                   <div className="suggested-additions-block suggested-additions-block--safety">
-                    <h3>Safety Protocols &amp; Guidelines</h3>
+                    <h3 className="safety-protocols-panel__title">Safety Protocols &amp; Guidelines</h3>
                     <p className="muted suggested-additions-lead">
                       Construction hazards, space constraints, and operational precautions — isolated from general staging copy.
                     </p>
@@ -7917,16 +7924,12 @@ export default function App() {
               ) : null}
               </div>
               <BuilderLegalDisclaimer compact />
-              <div className="button-row output-review-nav-row output-review-nav-row--bottom">
-                {canGoWizardBack ? (
-                  <button type="button" className="secondary-btn" onClick={goWizardBack}>
-                    ← Back
-                  </button>
-                ) : null}
-                <button type="button" className="primary-btn" onClick={() => setWizardStep("output-export")}>
-                  Continue to Export
-                </button>
-              </div>
+              <OutputReviewActionBar
+                placement="bottom"
+                canGoBack={canGoWizardBack}
+                onBack={goWizardBack}
+                onContinueExport={() => setWizardStep("output-export")}
+              />
             </section>
           ) : null}
 
@@ -7978,14 +7981,23 @@ export default function App() {
                     </span>
                     <button
                       type="button"
-                      className="secondary-btn export-action-flow__btn"
+                      className="secondary-btn export-action-flow__btn save-plan-btn"
                       disabled={!authUser?.canSaveRooms}
                       title={authUser?.canSaveRooms ? undefined : "Purchase a room pack to save plans"}
                       onClick={() => (authUser?.canSaveRooms ? void saveCurrentPlan() : openUpgradePrompt())}
                     >
-                      {authUser?.canSaveRooms
-                        ? `Save plan (${planCompletionPercent}% complete)`
-                        : "Save plan (paid)"}
+                      {authUser?.canSaveRooms ? (
+                        <>
+                          <span
+                            className="save-plan-btn__meter"
+                            style={{ ["--save-pct" as string]: `${planCompletionPercent}%` }}
+                            aria-hidden
+                          />
+                          Save plan ({planCompletionPercent}% complete)
+                        </>
+                      ) : (
+                        "Save plan (paid)"
+                      )}
                     </button>
                   </div>
                   <div className="export-action-flow__rail export-action-flow__rail--accent" aria-hidden />

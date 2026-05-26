@@ -1,4 +1,13 @@
 import { useEffect, useState, type ReactNode } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 const ACK_KEY = "erb_intl_usage_ack_v1";
 
@@ -37,38 +46,44 @@ export function LocationAccessGate({ children }: { children: ReactNode }) {
     };
   }, [state]);
 
+  const acknowledge = (): void => {
+    window.sessionStorage.setItem(ACK_KEY, "1");
+    setState("allowed");
+  };
+
   if (state === "checking") {
     return (
-      <div className="location-gate location-gate--checking" role="status">
-        <p className="muted">Verifying regional access…</p>
+      <div className="location-gate location-gate--checking" role="status" aria-live="polite">
+        <div className="location-gate__spinner" aria-hidden />
+        <p className="location-gate__status">Verifying regional access…</p>
       </div>
     );
   }
 
-  if (state === "blocked") {
-    return (
-      <div className="location-gate location-gate--blocked card mission-panel">
-        <h2>International access acknowledgment</h2>
-        <p>
-          Tipsy Fox Escapes is operated from Canada. You appear to be connecting from outside Canada. You may continue after
-          confirming you understand regional terms, safety responsibilities, and that puzzle frameworks are provided without
-          construction liability.
-        </p>
-        <div className="button-row">
-          <button
-            type="button"
-            className="primary-btn"
-            onClick={() => {
-              window.sessionStorage.setItem(ACK_KEY, "1");
-              setState("allowed");
-            }}
-          >
-            I understand — continue to builder
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
+  return (
+    <>
+      {state === "allowed" ? children : null}
+      <Dialog open={state === "blocked"} onOpenChange={() => undefined}>
+        <DialogContent className="location-gate-dialog">
+          <DialogHeader>
+            <DialogTitle>International access acknowledgment</DialogTitle>
+            <DialogDescription>
+              Tipsy Fox Escapes is operated from Canada. You appear to be connecting from outside Canada. Review regional
+              terms and safety responsibilities before entering the builder workspace.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="location-gate-dialog__list">
+            <li>Puzzle frameworks and storylines are provided without construction liability.</li>
+            <li>You are responsible for verifying physical builds are safe to install and operate.</li>
+            <li>Export and save features follow the same terms as our Canadian-hosted service.</li>
+          </ul>
+          <DialogFooter className="location-gate-dialog__footer">
+            <Button type="button" className="location-gate-dialog__cta" onClick={acknowledge}>
+              I understand — continue to builder
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }

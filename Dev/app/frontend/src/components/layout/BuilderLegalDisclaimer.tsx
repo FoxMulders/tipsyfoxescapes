@@ -3,9 +3,20 @@ const DISCLAIMER =
 
 export function BuilderLegalDisclaimer({ compact = false }: { compact?: boolean }) {
   return (
-    <aside className={`builder-legal-disclaimer${compact ? " builder-legal-disclaimer--compact" : ""}`} role="note">
-      <h4 className="builder-legal-disclaimer__title">Liability disclaimer</h4>
-      <p className="builder-legal-disclaimer__body">{DISCLAIMER}</p>
+    <aside
+      className={`builder-legal-disclaimer${compact ? " builder-legal-disclaimer--compact" : ""}`}
+      role="note"
+      aria-label="Liability disclaimer"
+    >
+      <div className="builder-legal-disclaimer__icon-wrap" aria-hidden>
+        <span className="builder-legal-disclaimer__icon">⚖</span>
+      </div>
+      <div className="builder-legal-disclaimer__content">
+        <h4 className="builder-legal-disclaimer__title">Liability disclaimer</h4>
+        <p className="builder-legal-disclaimer__body">{DISCLAIMER}</p>
+      </div>
     </aside>
   );
 }
+
+export { DISCLAIMER as BUILDER_LEGAL_DISCLAIMER_TEXT };

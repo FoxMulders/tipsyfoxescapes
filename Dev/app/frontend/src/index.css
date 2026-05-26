@@ -26,9 +26,9 @@
   --color-ring: hsl(187 92% 48% / 0.45);
 }
 
-/* Legacy App.css tokens — keep in sync with @theme inline above */
+/* Legacy App.css tokens — keep in sync with @theme inline and styles/design-system.css */
 :root {
-  --shell-panel-gap: 1rem;
+  --shell-panel-gap: var(--space-2, 1rem);
   --bg: hsl(222 47% 6%);
   --bg-deep: hsl(222 47% 5%);
   --auth-surface-bg: hsl(222 40% 8%);
