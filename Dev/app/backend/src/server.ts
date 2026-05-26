@@ -91,6 +91,11 @@ import {
   enrichPuzzlesWithManufacturingSchema,
   PUZZLE_GENERATION_INVENTORY_POLICY,
 } from "./puzzleManufacturingSchema.js";
+import {
+  buildBookCoverPremise,
+  buildHostSituation,
+} from "../../shared/qa/storyDesignRules.js";
+import { auditStoryDesign } from "./storyDesignQa.js";
 import { loadPlanningSessions, persistPlanningSessions } from "./runtimePersistence.js";
 import { handleFacebookWebhookVerify } from "./oauthServerless.js";
 import { handleGitHubWebhook } from "./githubWebhook.js";
@@ -1426,10 +1431,37 @@ const describeInventoryItemUncased = (item: string, room: string): { placement: 
       puzzleUses: "Shackle color codes, multi-lock sequencing, or ‘wrong lock’ decoys with one true shear line.",
     };
   }
-  if (/\bflashlight\b|\btorch\b|\blamp\b|\bblacklight\b|\buv\b/.test(s)) {
+  if (/\bflashlight\b|\btorch\b|\bblacklight\b|\buv\b/.test(s)) {
     return {
       placement: `${z} Provide fresh batteries in a labeled bin; tape down cord runs if mains-powered.`,
       puzzleUses: "Hidden UV text, selective shadows, Morse-blink timing, or ‘paint only visible under angled light’.",
+    };
+  }
+  if (/\bfloor lamp\b|\bdesk lamp\b|\btable lamp\b/.test(s)) {
+    return {
+      placement: `${z} Loosen the shade only when the beat requires it; tape the base cord for trip safety.`,
+      puzzleUses:
+        "Angle the beam to reveal heat-reactive ink, cast shadow glyphs on a nearby surface, or blink a timed Morse clue—only when light or shadow is the mechanism.",
+    };
+  }
+  if (/\blamp\b/.test(s)) {
+    return {
+      placement: `${z} Label ‘do not unplug’ if the beat needs constant power; keep spare bulbs staged for resets.`,
+      puzzleUses: "Timed blink patterns, selective illumination, or shade-position codes—do not use a lamp as a magnet board or weight trigger.",
+    };
+  }
+  if (/\bbookshelf\b|\bookcase\b|\bbook shelf\b/.test(s)) {
+    return {
+      placement: `${z} Flag the clue volume with a ribbon; decoys should differ in size or spine color.`,
+      puzzleUses:
+        "Spine-number ciphers, out-of-order volumes, bookmark slots, or a keyword spelled across selected spines—not a pressure plate or magnetic lock.",
+    };
+  }
+  if (/\barea rug\b|\brug\b|\bcarpet\b/.test(s)) {
+    return {
+      placement: `${z} Tape corners flat for trip safety; mark the playable border with painter’s tape if needed.`,
+      puzzleUses:
+        "Border pattern as a compass rose, corner lift tab for a floor-safe envelope, rug grid mapped to a wall chart, or color wedges that index a cipher—give the rug one concrete beat.",
     };
   }
   if (/\bmagnet\b|\bfridge\s+magnet\b|\bmagnets?\b/.test(s)) {
@@ -1951,10 +1983,27 @@ const scoreInventoryForPuzzle = (puzzle: Puzzle, item: string): number => {
   const s = item.toLowerCase();
   let score = 0;
   const cat = puzzle.category;
-  const wantsMass = /\b(balance|weight|pressure|scale|plate|equilibrium|mass|load|heavy|tilt|lever)\b/.test(t);
-  const wantsMagnet = /\b(magnet|polarity|ferrous|steel|attract)\b/.test(t);
-  const wantsCipher = /\b(cipher|decode|code|index|message|phrase|encode|crypt|encoded)\b/.test(t);
+  const wantsLight = /\b(light|shadow|hidden|glow|uv|blink|morse|beam|shade|illumin|dark)\b/.test(t);
+  const wantsMass = /\b(balance|weight|pressure|scale|plate|equilibrium|mass|load|heavy|tilt|lever|switch)\b/.test(t);
+  const wantsMagnet = /\b(magnet|polarity|ferrous|steel|attract|repel)\b/.test(t);
+  const wantsCipher = /\b(cipher|decode|code|index|message|phrase|encode|crypt|encoded|spine|volume|shelf|library)\b/.test(t);
   const wantsNumberRing = /\b(wedge|sector|ring|radial|spoke|segment)\b/.test(t) || wantsCipher;
+
+  if (/\bfloor lamp\b|\bdesk lamp\b|\btable lamp\b|\blamp\b/.test(s)) {
+    if (wantsLight) score += 20;
+    else if (wantsMagnet || wantsMass) score -= 18;
+    else score += 2;
+  }
+  if (/\bbookshelf\b|\bookcase\b|\bbook shelf\b/.test(s)) {
+    if (wantsCipher || /\b(book|spine|volume|title|library)\b/.test(t)) score += 22;
+    else if (wantsMass && !wantsCipher) score -= 15;
+    else score += 4;
+  }
+  if (/\barea rug\b|\brug\b|\bcarpet\b/.test(s)) {
+    if (/\b(pattern|grid|color|corner|lift|border|compass|wedge|index)\b/.test(t)) score += 16;
+    else if (wantsMagnet && !/\b(pocket|corner|lift)\b/.test(t)) score -= 10;
+    else score += 5;
+  }
 
   if (/\bmini[-\s]?fridge\b|\bfridge\b|\brefrigerator\b/.test(s) && !/\bmagnet\b/.test(s)) {
     if (wantsMass) score += 22;
@@ -1976,11 +2025,12 @@ const scoreInventoryForPuzzle = (puzzle: Puzzle, item: string): number => {
   if (cat === "physical" && /\b(rope|string|tape|box|lock|scale|weight|table|chair|tool)\b/.test(s)) score += 7;
   if (cat === "logic" && /\b(pen|marker|clock|timer)\b/.test(s)) score += 5;
   if (/\b(lock|padlock|hasp|key)\b/.test(s) && /\b(lock|latch|unlock|container|door)\b/.test(t)) score += 14;
-  if (/\b(flashlight|blacklight|uv|lamp)\b/.test(s) && /\b(light|shadow|hidden|glow|uv)\b/.test(t)) score += 12;
+  if (/\b(flashlight|blacklight|uv)\b/.test(s) && wantsLight) score += 14;
+  if (/\b(lock|padlock|hasp|key)\b/.test(s) && /\b(lock|latch|unlock|container|door)\b/.test(t)) score += 14;
   return score;
 };
 
-const MIN_INVENTORY_ANCHOR_SCORE = 10;
+const MIN_INVENTORY_ANCHOR_SCORE = 14;
 
 const annotatePuzzlesWithInventoryAnchors = (session: SessionState, puzzles: Puzzle[]): Puzzle[] =>
   enrichPuzzlesWithManufacturingSchema(puzzles, {
@@ -2040,12 +2090,18 @@ const buildSuggestedAdditionLists = (
     "Prop discipline: list props you **might** use across the run (deduction aids, containers, electronics). The generator may tie only **high-confidence** matches to a specific puzzle; you can still stage unused items for mood as long as they do not read as fake puzzles.",
   );
   if (inv.length > 0) {
-    optional.push(
-      `Inventory-led build: ${inv.length} distinct item(s) are driving theme appendices, puzzle tie-ins, and export placement notes—reset photos should show each prop in its documented home.`,
+    const anchoredNames = new Set(
+      puzzles.map((puzzle) => puzzle.physical_anchor_prop?.trim()).filter((name): name is string => Boolean(name)),
     );
-    for (const raw of inv.slice(0, 10)) {
-      const { placement, puzzleUses } = describeInventoryItem(raw, session.planningInput.environmentType);
-      optional.push(`Item “${raw}”: ${placement} Puzzle ideas: ${puzzleUses}`);
+    const anchoredItems = inv.filter((item) => anchoredNames.has(item));
+    if (anchoredItems.length > 0) {
+      optional.push(
+        `Inventory-led build: ${anchoredItems.length} listed prop(s) anchor live puzzle beats—photograph each in its documented home between groups.`,
+      );
+      for (const raw of anchoredItems) {
+        const { puzzleUses } = describeInventoryItem(raw, session.planningInput.environmentType);
+        optional.push(`**${raw}** — ${puzzleUses}`);
+      }
     }
   }
 
@@ -2272,6 +2328,55 @@ const resolveGeneratedCategoryCounts = (session: SessionState, remaining: number
   return computeDefaultCategoryCounts(remaining, sessionMinutes);
 };
 
+const stripBadInventoryAnchorsFromPuzzles = (puzzles: Puzzle[], issueFields: string[]): Puzzle[] => {
+  const badIds = new Set(
+    issueFields
+      .map((field) => /^puzzle\.([^.]+)\./.exec(field)?.[1])
+      .filter((id): id is string => Boolean(id)),
+  );
+  if (badIds.size === 0) return puzzles;
+  return puzzles.map((puzzle) => {
+    if (!badIds.has(puzzle.id)) return puzzle;
+    const howItWorks = puzzle.howItWorks
+      .replace(/Inventory tie-in[^.]*\.\s*/gi, "")
+      .replace(/Using the host's[^.]+\.\s*/gi, "")
+      .trim();
+    const themeFitReason = puzzle.themeFitReason?.replace(/Inventory tie-in[^.]*\./gi, "").trim();
+    return {
+      ...puzzle,
+      physical_anchor_prop: undefined,
+      howItWorks: howItWorks || puzzle.howItWorks,
+      themeFitReason: themeFitReason || puzzle.themeFitReason,
+    };
+  });
+};
+
+const finalizePuzzlesAndStoryPlan = (
+  session: SessionState,
+  puzzles: Puzzle[],
+): { puzzles: Puzzle[]; storyPlan: StoryPlan; lists: { required: string[]; optional: string[] } } => {
+  let nextPuzzles = puzzles;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    nextPuzzles = annotatePuzzlesWithInventoryAnchors(session, nextPuzzles);
+    const storyPlan = augmentStoryPlanForYouthAddOn(
+      createStoryPlan(session.selectedTheme, nextPuzzles, session),
+      session,
+    );
+    const lists = buildSuggestedAdditionLists(session, nextPuzzles);
+    const qa = auditStoryDesign(storyPlan, nextPuzzles, [...lists.required, ...lists.optional]);
+    if (qa.passed) return { puzzles: nextPuzzles, storyPlan, lists };
+    nextPuzzles = stripBadInventoryAnchorsFromPuzzles(
+      nextPuzzles,
+      qa.issues.filter((i) => i.code === "STORY_PROP_AFFORDANCE_MISMATCH").map((i) => i.field),
+    );
+  }
+  const storyPlan = augmentStoryPlanForYouthAddOn(
+    createStoryPlan(session.selectedTheme, nextPuzzles, session),
+    session,
+  );
+  return { puzzles: nextPuzzles, storyPlan, lists: buildSuggestedAdditionLists(session, nextPuzzles) };
+};
+
 const createStoryPlan = (theme: Theme | undefined, puzzles: Puzzle[], session: SessionState): StoryPlan => {
   // Stage hints control where user-provided puzzles appear in progression.
   const themeName = theme?.name ?? "Unknown Theme";
@@ -2288,15 +2393,11 @@ const createStoryPlan = (theme: Theme | undefined, puzzles: Puzzle[], session: S
   const inv = normalizePlanningInventory(session.planningInput.availableItems);
   const invSituation =
     inv.length > 0
-      ? ` Host-stated props to weave through the run: ${inv.slice(0, 10).join("; ")}${inv.length > 10 ? " (see export inventory section for full list)." : "."}`
-      : "";
-  const invProgression =
-    inv.length > 0
-      ? " Document a reset photo for each listed prop so staging matches every group."
+      ? ` Key props in play: ${inv.slice(0, 8).join(", ")}${inv.length > 8 ? ", and others noted in the puzzle set." : "."}`
       : "";
   const pathKind = getRecommendedFlowPathKind(session);
   const eventSnippet = (session.planningInput.eventType ?? "").trim()
-    ? ` Host framing: ${(session.planningInput.eventType ?? "").trim()}.`
+    ? ` The occasion: ${(session.planningInput.eventType ?? "").trim()}.`
     : "";
   const stageWhyMid =
     pathKind === "linear"
@@ -2326,10 +2427,16 @@ const createStoryPlan = (theme: Theme | undefined, puzzles: Puzzle[], session: S
   );
 
   return {
-    situation: `Players are cast inside a ${themeName} scenario and must decode layered clues before the environment reaches failure state.${eventSnippet}${invSituation}`,
-    premise: `${themeName}: ${missionObjectiveClipped}`,
+    situation: buildHostSituation(
+      themeName,
+      session.planningInput.environmentType,
+      missionObjectiveClipped,
+      eventSnippet,
+      invSituation,
+    ),
+    premise: buildBookCoverPremise(themeName, storyPlain || missionObjectiveClipped, missionObjectiveClipped),
     missionObjective: missionObjectiveClipped,
-    progressionRule: derived.progressionRule + (invProgression ? ` ${invProgression}` : ""),
+    progressionRule: derived.progressionRule,
     stages: derived.stages,
     puzzleLinks: derived.puzzleLinks,
     progressionGraph,
@@ -5094,16 +5201,13 @@ app.post("/api/puzzles/generate", async (req, res) => {
   );
   generatedForResponse = withThemeFitReasons(generatedForResponse, session.selectedTheme, session);
   generatedForResponse = withPuzzleQaForSession(session, generatedForResponse);
-  generatedForResponse = annotatePuzzlesWithInventoryAnchors(session, generatedForResponse);
+  const finalized = finalizePuzzlesAndStoryPlan(session, generatedForResponse);
+  generatedForResponse = finalized.puzzles;
   generatedForResponse.forEach((puzzle) => session.seenPuzzleIds.add(puzzle.id));
   session.currentPuzzles = generatedForResponse;
-  const lists = buildSuggestedAdditionLists(session, generatedForResponse);
-  session.suggestedAdditionsRequired = lists.required;
-  session.suggestedAdditions = lists.optional;
-  session.currentStoryPlan = augmentStoryPlanForYouthAddOn(
-    createStoryPlan(session.selectedTheme, generatedForResponse, session),
-    session,
-  );
+  session.suggestedAdditionsRequired = finalized.lists.required;
+  session.suggestedAdditions = finalized.lists.optional;
+  session.currentStoryPlan = finalized.storyPlan;
   const compatibilityPassed = generatedForResponse.every((puzzle) =>
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
   );
@@ -5224,14 +5328,11 @@ app.post("/api/puzzles/:puzzleId/replace", async (req, res) => {
   session.currentPuzzles = applyVenueBuildTypeToPuzzleCopy(session.currentPuzzles, session);
   session.currentPuzzles = withThemeFitReasons(session.currentPuzzles, session.selectedTheme, session);
   session.currentPuzzles = withPuzzleQaForSession(session, session.currentPuzzles);
-  session.currentPuzzles = annotatePuzzlesWithInventoryAnchors(session, session.currentPuzzles);
-  const replaceLists = buildSuggestedAdditionLists(session, session.currentPuzzles);
-  session.suggestedAdditionsRequired = replaceLists.required;
-  session.suggestedAdditions = replaceLists.optional;
-  session.currentStoryPlan = augmentStoryPlanForYouthAddOn(
-    createStoryPlan(session.selectedTheme, session.currentPuzzles, session),
-    session,
-  );
+  const replaceFinal = finalizePuzzlesAndStoryPlan(session, session.currentPuzzles);
+  session.currentPuzzles = replaceFinal.puzzles;
+  session.suggestedAdditionsRequired = replaceFinal.lists.required;
+  session.suggestedAdditions = replaceFinal.lists.optional;
+  session.currentStoryPlan = replaceFinal.storyPlan;
   const compatibilityPassed = session.currentPuzzles.every((puzzle) =>
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
   );
@@ -5284,14 +5385,11 @@ app.post("/api/puzzles/:puzzleId/reject", async (req, res) => {
   if (session.selectedTheme) {
     session.currentPuzzles = withThemeFitReasons(session.currentPuzzles, session.selectedTheme, session);
     session.currentPuzzles = withPuzzleQaForSession(session, session.currentPuzzles);
-    session.currentPuzzles = annotatePuzzlesWithInventoryAnchors(session, session.currentPuzzles);
-    const rejectLists = buildSuggestedAdditionLists(session, session.currentPuzzles);
-    session.suggestedAdditionsRequired = rejectLists.required;
-    session.suggestedAdditions = rejectLists.optional;
-    session.currentStoryPlan = augmentStoryPlanForYouthAddOn(
-      createStoryPlan(session.selectedTheme, session.currentPuzzles, session),
-      session,
-    );
+    const rejectFinal = finalizePuzzlesAndStoryPlan(session, session.currentPuzzles);
+    session.currentPuzzles = rejectFinal.puzzles;
+    session.suggestedAdditionsRequired = rejectFinal.lists.required;
+    session.suggestedAdditions = rejectFinal.lists.optional;
+    session.currentStoryPlan = rejectFinal.storyPlan;
   }
   const compatibilityPassed = session.currentPuzzles.every((puzzle) =>
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
@@ -5388,14 +5486,11 @@ app.post("/api/puzzles/fill-slot", async (req, res) => {
   );
   session.currentPuzzles = withThemeFitReasons(session.currentPuzzles, session.selectedTheme, session);
   session.currentPuzzles = withPuzzleQaForSession(session, session.currentPuzzles);
-  session.currentPuzzles = annotatePuzzlesWithInventoryAnchors(session, session.currentPuzzles);
-  const fillLists = buildSuggestedAdditionLists(session, session.currentPuzzles);
-  session.suggestedAdditionsRequired = fillLists.required;
-  session.suggestedAdditions = fillLists.optional;
-  session.currentStoryPlan = augmentStoryPlanForYouthAddOn(
-    createStoryPlan(session.selectedTheme, session.currentPuzzles, session),
-    session,
-  );
+  const fillFinal = finalizePuzzlesAndStoryPlan(session, session.currentPuzzles);
+  session.currentPuzzles = fillFinal.puzzles;
+  session.suggestedAdditionsRequired = fillFinal.lists.required;
+  session.suggestedAdditions = fillFinal.lists.optional;
+  session.currentStoryPlan = fillFinal.storyPlan;
   const compatibilityPassed = session.currentPuzzles.every((puzzle) =>
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
   );

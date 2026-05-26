@@ -18,6 +18,7 @@ const results = [
   run("code", "code-qa.mjs"),
   run("workflow", "workflow-qa.mjs"),
   run("story_editor", "story-editor-qa.mjs"),
+  run("story_design", "story-design-qa.mjs"),
   run("puzzle", "puzzle-qa.mjs"),
 ];
 

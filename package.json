@@ -6,6 +6,7 @@
     "qa:code": "node QA/automation/code-qa.mjs",
     "qa:workflow": "node QA/automation/workflow-qa.mjs",
     "qa:story": "node QA/automation/story-editor-qa.mjs",
+    "qa:story-design": "node QA/automation/story-design-qa.mjs",
     "qa:puzzle": "node QA/automation/puzzle-qa.mjs"
   }
 }

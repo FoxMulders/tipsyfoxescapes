@@ -2254,6 +2254,38 @@ function OutputReviewNarrativeField({ label, text }: { label: string; text: stri
   );
 }
 
+function OutputReviewProgressionGuide({
+  progressionRule,
+  puzzleLinks,
+}: {
+  progressionRule: string;
+  puzzleLinks?: StoryPlan["puzzleLinks"];
+}): ReactNode {
+  if (puzzleLinks && puzzleLinks.length > 0) {
+    return (
+      <div className="output-review-progression-guide output-review-glass-surface">
+        <p className="output-review-progression-lead">
+          Each puzzle pays off before the next lock opens — solve order and unlock outcomes:
+        </p>
+        <ol className="output-review-progression-list">
+          {puzzleLinks.map((link) => (
+            <li key={link.puzzleId} className="output-review-progression-item">
+              <strong>{link.puzzleTitle}</strong>
+              <span className="output-review-progression-role">{link.storyRole}</span>
+              <span className="output-review-progression-unlocks">{link.unlocks}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
+  return (
+    <div className="output-review-field-body">
+      <OutputReviewProse text={progressionRule} />
+    </div>
+  );
+}
+
 function ThemeDescriptionBlocks({ text }: { text: string }) {
   const normalized = text.replace(/\r\n/g, "\n").trim();
   if (!normalized) return null;
@@ -2531,6 +2563,7 @@ export default function App() {
   const themeCoachHydratedForSessionRef = useRef<string>("");
   const builderShellRef = useRef<HTMLElement | null>(null);
   const topNavRef = useRef<HTMLElement | null>(null);
+  const flowMapBarRef = useRef<HTMLDivElement | null>(null);
   const prevCustomThemeCoachPrereqsOkRef = useRef(false);
   const customThemeCoachMessagesRef = useRef<ThemeCoachUiMessage[]>([]);
   const hasSavedPlans = savedPlans.length > 0;
@@ -2575,7 +2608,7 @@ export default function App() {
     });
   }, []);
 
-  useTopNavHeight(topNavRef, builderShellRef, [appView, authUser?.id, authUser?.billingTier]);
+  useTopNavHeight(topNavRef, builderShellRef, flowMapBarRef, [appView, authUser?.id, authUser?.billingTier]);
 
   const propPresetLabels = useMemo(
     () => getSuggestedPropOptionsForPlanning(environmentType, eventType).map((o) => o.label),
@@ -4814,9 +4847,9 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap theme list when step opens; avoid duplicate fetches when themePath flips null→generated
   }, [wizardStep, sessionId, themes.length, themePath, hasFullCatalogAccess, authBootstrapReady]);
 
-  /** Free tier: manual Generate is gated like theme refresh; run one automatic pass when entering Build with a theme. */
+  /** Auto-generate a theme-fit puzzle set when entering Build with a selected theme. */
   useEffect(() => {
-    if (wizardStep !== "themes-puzzles" || !selectedThemeId || hasFullCatalogAccess || puzzles.length > 0) {
+    if (wizardStep !== "themes-puzzles" || !selectedThemeId || puzzles.length > 0) {
       return;
     }
     if (isAuthPlanningRestorePending()) return;
@@ -4840,7 +4873,7 @@ export default function App() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap when trial user lands on builder with empty puzzles (session may attach after mount)
-  }, [wizardStep, selectedThemeId, hasFullCatalogAccess, puzzles.length, sessionId]);
+  }, [wizardStep, selectedThemeId, puzzles.length, sessionId]);
 
   const generatePuzzles = async () => {
     // Generate puzzle set for selected theme.
@@ -6726,6 +6759,7 @@ export default function App() {
           <section className="card mission-panel flow-shell builder-workspace-shell">
             <div
               id="flow-shell-error-anchor"
+              ref={flowMapBarRef}
               className={`flow-shell-map-bar workspace-stepper${youthAddOnEnabled && juniorForkSegmentIndex !== null ? " flow-shell-map-bar--fork" : ""}`}
               aria-live="polite"
             >
@@ -7569,116 +7603,7 @@ export default function App() {
           {flowWizardStep === "output-review" ? (
             <section className="card mission-panel glass-panel output-review-panel" id="builder-output-anchor">
               <h2>Output: Review</h2>
-              {storyPlan ? (
-                <div className="output-review-body">
-                <div className="output-review-story output-review-glass-surface">
-                  <h3 className="output-review-section-title">Storyline and progression</h3>
-                  <div className="output-review-narrative-grid">
-                    <OutputReviewNarrativeField label="Situation" text={storyPlan.situation} />
-                    <OutputReviewNarrativeField label="Premise" text={storyPlan.premise} />
-                    <OutputReviewNarrativeField label="Mission objective" text={storyPlan.missionObjective} />
-                    <OutputReviewNarrativeField label="Progression rule" text={storyPlan.progressionRule} />
-                  </div>
-                </div>
-                  {storyPlan.stages && storyPlan.stages.length > 0 ? (
-                    <>
-                      <h3 className="output-review-section-title">Stage flow</h3>
-                      <ol className="output-review-stage-list output-review-glass-surface">
-                        {storyPlan.stages.map((st) => (
-                          <li key={st.stage} className="output-review-stage-card">
-                            <div className="output-review-stage-head">
-                              <span className="output-review-stage-badge">Stage {st.stage}</span>
-                              <strong className="output-review-stage-title">{st.title}</strong>
-                            </div>
-                            <dl className="output-review-stage-dl">
-                              <div>
-                                <dt>Story beat</dt>
-                                <dd>{st.storyBeat}</dd>
-                              </div>
-                              <div>
-                                <dt>Why this stage exists</dt>
-                                <dd>{st.whyThisStageExists}</dd>
-                              </div>
-                              <div>
-                                <dt>Objective</dt>
-                                <dd>
-                                  <OutputReviewProse text={st.objective} />
-                                </dd>
-                              </div>
-                              {st.whatPlayersMustDo?.length ? (
-                                <div>
-                                  <dt>What players must do</dt>
-                                  <dd>
-                                    <ul className="output-review-stage-ul">
-                                      {st.whatPlayersMustDo.map((line, idx) => (
-                                        <li key={idx}>{line}</li>
-                                      ))}
-                                    </ul>
-                                  </dd>
-                                </div>
-                              ) : null}
-                              {st.requiredPuzzleTitles?.length ? (
-                                <div>
-                                  <dt>Required puzzles</dt>
-                                  <dd>{st.requiredPuzzleTitles.join(", ")}</dd>
-                                </div>
-                              ) : null}
-                              {st.reveals ? (
-                                <div>
-                                  <dt>Reveal</dt>
-                                  <dd>
-                                    <OutputReviewProse text={st.reveals} />
-                                  </dd>
-                                </div>
-                              ) : null}
-                            </dl>
-                          </li>
-                        ))}
-                      </ol>
-                    </>
-                  ) : null}
-                  {storyPlan.puzzleLinks && storyPlan.puzzleLinks.length > 0 ? (
-                    <>
-                      <h3 className="output-review-section-title">Puzzle–story links</h3>
-                      <ul className="output-review-puzzle-links output-review-glass-surface">
-                        {storyPlan.puzzleLinks.map((link) => (
-                          <li key={link.puzzleId} className="output-review-puzzle-link-item">
-                            <strong>{link.puzzleTitle}</strong>
-                            <span className="output-review-puzzle-link-role">{link.storyRole}</span>
-                            <span className="output-review-puzzle-link-unlocks">{link.unlocks}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  ) : null}
-                  {storyPlan.stagingDiagram ? (
-                    <>
-                      <h3 className="output-review-section-title">Room layout sketch</h3>
-                      <OutputReviewStagingDiagram text={storyPlan.stagingDiagram} />
-                    </>
-                  ) : null}
-                  {targetInterface === "commercial_venue" && selectedTheme && puzzles.length > 0 ? (
-                    <EmptyRoomInstallChecklist environmentType={environmentType} themeName={selectedTheme.name} />
-                  ) : null}
-                  {puzzles.length > 0 ? (
-                    <div className="output-review-flow-block">
-                      <h3 className="output-review-section-title">Room flowchart</h3>
-                      <p className="muted room-flowchart-lead">
-                        Stages, puzzles, and progression from your story plan—download SVG, PNG, or Mermaid source for runbooks.
-                      </p>
-                      <Suspense fallback={<p className="muted">Loading flowchart…</p>}>
-                        <RoomFlowchartPanel
-                          storyPlan={storyPlan}
-                          puzzles={puzzles}
-                          themeName={selectedTheme?.name}
-                          fileBase="room-flow-review"
-                        />
-                      </Suspense>
-                      <NarrativeFlowGuide storyPlan={storyPlan} />
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
+              <div className="output-review-body">
               {puzzles.length > 0 || refusedPuzzleSlots.length > 0 ? (
                 <>
                   <h3 className="output-review-section-title">Puzzle set</h3>
@@ -7769,9 +7694,8 @@ export default function App() {
                 </>
               ) : (
                 <p className="muted">
-                  No puzzle output yet. Finish room details and theme selection, then in <strong>Build puzzle set</strong> add any
-                  premade puzzles you already own if needed and use <strong>Generate puzzles</strong> (or wait for the automatic set on the
-                  trial).
+                  No puzzle output yet. Finish room details and theme selection — a theme-fit set generates automatically when you open{" "}
+                  <strong>Build puzzle set</strong> or continue to this review step.
                 </p>
               )}
               {suggestedAdditionsRequired.length > 0 || suggestedAdditions.length > 0 ? (
@@ -7802,6 +7726,109 @@ export default function App() {
                   ) : null}
                 </div>
               ) : null}
+              {storyPlan ? (
+                <>
+                <div className="output-review-story output-review-glass-surface">
+                  <h3 className="output-review-section-title">Storyline and progression</h3>
+                  <div className="output-review-narrative-grid">
+                    <OutputReviewNarrativeField label="Situation" text={storyPlan.situation} />
+                    <OutputReviewNarrativeField label="Premise" text={storyPlan.premise} />
+                    <OutputReviewNarrativeField label="Mission objective" text={storyPlan.missionObjective} />
+                    <article className="output-review-field output-review-field--wide">
+                      <h4 className="output-review-field-label">Progression rule</h4>
+                      <OutputReviewProgressionGuide
+                        progressionRule={storyPlan.progressionRule}
+                        puzzleLinks={storyPlan.puzzleLinks}
+                      />
+                    </article>
+                  </div>
+                </div>
+                  {storyPlan.stages && storyPlan.stages.length > 0 ? (
+                    <>
+                      <h3 className="output-review-section-title">Stage flow</h3>
+                      <ol className="output-review-stage-list output-review-glass-surface">
+                        {storyPlan.stages.map((st) => (
+                          <li key={st.stage} className="output-review-stage-card">
+                            <div className="output-review-stage-head">
+                              <span className="output-review-stage-badge">Stage {st.stage}</span>
+                              <strong className="output-review-stage-title">{st.title}</strong>
+                            </div>
+                            <dl className="output-review-stage-dl">
+                              <div>
+                                <dt>Story beat</dt>
+                                <dd>{st.storyBeat}</dd>
+                              </div>
+                              <div>
+                                <dt>Why this stage exists</dt>
+                                <dd>{st.whyThisStageExists}</dd>
+                              </div>
+                              <div>
+                                <dt>Objective</dt>
+                                <dd>
+                                  <OutputReviewProse text={st.objective} />
+                                </dd>
+                              </div>
+                              {st.whatPlayersMustDo?.length ? (
+                                <div>
+                                  <dt>What players must do</dt>
+                                  <dd>
+                                    <ul className="output-review-stage-ul">
+                                      {st.whatPlayersMustDo.map((line, idx) => (
+                                        <li key={idx}>{line}</li>
+                                      ))}
+                                    </ul>
+                                  </dd>
+                                </div>
+                              ) : null}
+                              {st.requiredPuzzleTitles?.length ? (
+                                <div>
+                                  <dt>Required puzzles</dt>
+                                  <dd>{st.requiredPuzzleTitles.join(", ")}</dd>
+                                </div>
+                              ) : null}
+                              {st.reveals ? (
+                                <div>
+                                  <dt>Reveal</dt>
+                                  <dd>
+                                    <OutputReviewProse text={st.reveals} />
+                                  </dd>
+                                </div>
+                              ) : null}
+                            </dl>
+                          </li>
+                        ))}
+                      </ol>
+                    </>
+                  ) : null}
+                  {storyPlan.stagingDiagram ? (
+                    <>
+                      <h3 className="output-review-section-title">Room layout sketch</h3>
+                      <OutputReviewStagingDiagram text={storyPlan.stagingDiagram} />
+                    </>
+                  ) : null}
+                  {targetInterface === "commercial_venue" && selectedTheme && puzzles.length > 0 ? (
+                    <EmptyRoomInstallChecklist environmentType={environmentType} themeName={selectedTheme.name} />
+                  ) : null}
+                  {puzzles.length > 0 ? (
+                    <div className="output-review-flow-block">
+                      <h3 className="output-review-section-title">Room flowchart</h3>
+                      <p className="muted room-flowchart-lead">
+                        Click the chart to enlarge and pan. Download SVG, PNG, or Mermaid source for runbooks.
+                      </p>
+                      <Suspense fallback={<p className="muted">Loading flowchart…</p>}>
+                        <RoomFlowchartPanel
+                          storyPlan={storyPlan}
+                          puzzles={puzzles}
+                          themeName={selectedTheme?.name}
+                          fileBase="room-flow-review"
+                        />
+                      </Suspense>
+                      <NarrativeFlowGuide storyPlan={storyPlan} />
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+              </div>
               <div className="button-row">
                 {canGoWizardBack ? (
                   <button type="button" className="secondary-btn" onClick={goWizardBack}>

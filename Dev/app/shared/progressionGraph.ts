@@ -3,6 +3,8 @@
  * Labels are derived from the host's puzzles, props, and environment — never fixed example-room names.
  */
 
+import { formatHostProgressionRule } from "./qa/storyDesignRules.js";
+
 export type FlowPathKind = "linear" | "nonlinear" | "multilinear";
 
 export type ProgressionNodeKind = "start" | "puzzle" | "gateway" | "code" | "finale";
@@ -556,20 +558,23 @@ export const deriveStoryViewsFromGraph = (
   );
 
   const zoneList = graph.threads.map((t) => t.zoneLabel).join(", ");
-  const progressionParts = [
+  const pathContext = [
     progressionCoreLine(graph.pathKind, graph.parallelWidth),
     graph.threads.length > 1
-      ? `Parallel/open threads (${zoneList}) may advance independently so multiple crews stay busy without a single bottleneck loop.`
+      ? `Parallel threads (${zoneList}) may advance independently so multiple crews stay busy.`
       : "",
-    "Cross-stage keys force beats on one track to consume narrative or physical outputs from another track before late-game locks open.",
     graph.masterCodeLabel
-      ? `Multi-layer code gate: compile fragments from distinct zones into master sequence ${graph.masterCodeLabel} before the terminal unlock.`
-      : "Merge gates require every live track at that wave before the next beat opens.",
-    graph.parallelWidth > 1
-      ? "Asymmetric finale gateway: the exit sequence waits for terminal nodes from multiple branching paths—not one rigid linear checkpoint."
+      ? `Compile fragments from distinct zones into master sequence ${graph.masterCodeLabel} before the finale.`
       : "",
-  ].filter(Boolean);
-  const progressionRule = progressionParts.join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const progressionRule = [
+    pathContext,
+    formatHostProgressionRule(puzzleLinks, mission),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   return {
     stages,

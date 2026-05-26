@@ -64,7 +64,7 @@ Match the TypeScript types in `server.ts` and `App.tsx` when editing:
 - Prefer **small, focused changes**; do not refactor unrelated modules.
 - Keep **frontend and backend types** consistent when touching puzzle or theme payloads; update `shared/contracts.ts` only when you are intentionally aligning the shared contract.
 - **Validate** JSON bodies on the server before mutating session state; preserve session invariants (selected theme, current puzzles, skip sets) documented in `server.ts`.
-- **QA departments** (see `QA/README.md`): **MVP flow** (`mvp_test_plan.md`), **Story Editor** (`departments/story_editor_qa.md`), **Puzzle** (`departments/puzzle_qa.md` + automated gate in `Dev/app/backend/src/puzzleQa.ts`). Run Puzzle QA on every generate/replace; Story Editor QA on hooks and story plan.
+- **QA departments** (see `QA/README.md`): **MVP flow** (`mvp_test_plan.md`), **Story Editor** (`departments/story_editor_qa.md`), **Story Design** (`departments/story_design_qa.md`), **Puzzle** (`departments/puzzle_qa.md` + automated gate in `Dev/app/backend/src/puzzleQa.ts`). Run Puzzle QA and Story Design QA on every generate/replace; Story Editor QA on hooks and story plan.
 
 ## Local development
 
