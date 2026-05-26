@@ -82,11 +82,6 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             </p>
           </div>
           <div className="room-setup-command-bar__actions">
-            <PuzzleEstimateBadge
-              target={props.plannerMainPuzzleTarget}
-              juniorAddOnSlots={props.juniorAddOnPuzzleSlots}
-              pulseKey={props.estimatePulseKey}
-            />
             <button
               type="button"
               className="secondary-btn inspiration-drawer-trigger self-stretch"
@@ -187,7 +182,7 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
             </FieldHint>
           </div>
 
-          <div className="form-field-panel">
+          <div className="form-field-panel room-details-duration-row">
             <FieldHint label="Session duration (minutes)" required invalid={invalid("sessionDurationMinutes")}>
               <NumberCounter
                 value={props.sessionDurationMinutes}
@@ -202,6 +197,11 @@ export function RoomDetailsStep(props: RoomDetailsStepProps) {
                 aria-label="Session duration in minutes"
               />
             </FieldHint>
+            <PuzzleEstimateBadge
+              target={props.plannerMainPuzzleTarget}
+              juniorAddOnSlots={props.juniorAddOnPuzzleSlots}
+              pulseKey={props.estimatePulseKey}
+            />
           </div>
 
           {!isCommercial ? (

@@ -5985,9 +5985,20 @@ ul.auth-hero-para {
   gap: 0.85rem;
 }
 
+.room-details-duration-row {
+  display: grid;
+  gap: 0.85rem;
+  align-items: end;
+}
+
 @media (min-width: 520px) {
   .room-details-metrics-row {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .room-details-duration-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
   }
 }
 
@@ -6317,9 +6328,9 @@ ul.auth-hero-para {
 }
 
 @media (min-width: 480px) {
-  .room-setup-command-bar__actions .puzzle-estimate-badge {
-    align-items: flex-end;
-    text-align: right;
+  .room-details-duration-row .puzzle-estimate-badge {
+    align-self: end;
+    min-width: 10.5rem;
   }
 }
 
