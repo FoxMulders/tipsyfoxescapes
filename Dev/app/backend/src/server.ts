@@ -49,6 +49,11 @@ import { requireAuthUserId, respondAuthValidation } from "./authMiddleware.js";
 import { registerAdminRoutes } from "./adminRoutes.js";
 import { buildRoomFlowchartMermaid } from "../../shared/roomFlowchart.js";
 import {
+  normalizeCoachOptions,
+  parseCoachChoiceOptions,
+  validateThemeCoachTranscript,
+} from "../../shared/themeCoachOptions.js";
+import {
   buildProgressionGraph,
   deriveStoryViewsFromGraph,
   type ProgressionGraph,
@@ -223,7 +228,7 @@ type StoryPlan = {
   /** Markdown: table + short ASCII hint for host staging (main track). */
   stagingDiagram?: string;
 };
-type ThemeCoachStoredMessage = { id: string; role: "user" | "assistant"; content: string };
+type ThemeCoachStoredMessage = { id: string; role: "user" | "assistant"; content: string; options?: string[] };
 
 type VenueBuildType = "professional_empty" | "prebuilt_space";
 
@@ -4823,7 +4828,31 @@ app.put("/api/planning/session/:sessionId/theme-coach", async (req, res) => {
     const content = (row as { content?: unknown }).content;
     if (role !== "user" && role !== "assistant") continue;
     if (typeof content !== "string" || content.length > 8000) continue;
-    cleaned.push({ id, role, content });
+    const optionsRaw = (row as { options?: unknown }).options;
+    let options: string[] | undefined;
+    if (Array.isArray(optionsRaw)) {
+      const normalized = normalizeCoachOptions(
+        optionsRaw.filter((o): o is string => typeof o === "string").map((o) => o.trim()),
+      );
+      if (normalized.length > 0) options = normalized;
+    }
+    if (role === "assistant" && !options?.length) {
+      const parsed = parseCoachChoiceOptions(content);
+      if (parsed.options.length > 0) options = parsed.options;
+    }
+    cleaned.push({
+      id,
+      role,
+      content: role === "assistant" ? parseCoachChoiceOptions(content).content : content.trim(),
+      ...(options?.length ? { options } : {}),
+    });
+  }
+  const transcriptError = validateThemeCoachTranscript(cleaned);
+  if (transcriptError) {
+    res.status(400).json({
+      error: { code: "THEME_COACH_VALIDATION", message: transcriptError, details: [] },
+    });
+    return;
   }
   session.themeCoachChat = cleaned;
   res.json({ ok: true, messages: session.themeCoachChat });

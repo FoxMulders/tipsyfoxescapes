@@ -1,0 +1,106 @@
+export type ThemeCoachChoiceMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  /** Present on assistant turns — allowed user selections for the next reply. */
+  options?: string[];
+};
+
+const MAX_OPTIONS = 8;
+const MAX_OPTION_LEN = 120;
+
+/** Parse assistant reply; strip CHOICE_OPTIONS line or trailing bracket tags. */
+export const parseCoachChoiceOptions = (raw: string): { content: string; options: string[] } => {
+  const lines = raw.replace(/\r\n/g, "\n").split("\n");
+  let options: string[] = [];
+  const contentLines: string[] = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] ?? "";
+    const trimmed = line.trim();
+    const choiceMatch = trimmed.match(/^CHOICE_OPTIONS:\s*(.+)$/i);
+    if (choiceMatch) {
+      options = splitOptionTokens(choiceMatch[1] ?? "");
+      continue;
+    }
+    contentLines.push(line);
+  }
+
+  let content = contentLines.join("\n").trim();
+
+  if (options.length === 0) {
+    const bracketMatches = [...raw.matchAll(/\[([^\]\n]{1,80})\]/g)];
+    if (bracketMatches.length >= 2) {
+      options = bracketMatches.map((m) => m[1].trim()).filter(Boolean);
+    }
+  }
+
+  options = normalizeCoachOptions(options);
+
+  if (!content && raw.trim()) content = raw.trim();
+
+  return { content, options };
+};
+
+const splitOptionTokens = (blob: string): string[] =>
+  blob
+    .split(/\s*\|\s*|\s*,\s*(?=[A-Za-z0-9])/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+export const normalizeCoachOptions = (options: string[]): string[] => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const opt of options) {
+    const trimmed = opt.trim().slice(0, MAX_OPTION_LEN);
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+    if (out.length >= MAX_OPTIONS) break;
+  }
+  return out;
+};
+
+export const isAllowedCoachUserReply = (reply: string, allowed: string[]): boolean => {
+  const normalized = reply.trim();
+  if (!normalized) return false;
+  return allowed.some((opt) => opt.trim() === normalized);
+};
+
+/** Walk transcript; user turns must match prior assistant options when options exist. */
+export const validateThemeCoachTranscript = (messages: ThemeCoachChoiceMessage[]): string | null => {
+  let pendingOptions: string[] | null = null;
+
+  for (const msg of messages) {
+    if (msg.role === "assistant") {
+      const parsed = msg.options?.length ? normalizeCoachOptions(msg.options) : parseCoachChoiceOptions(msg.content).options;
+      pendingOptions = parsed.length > 0 ? parsed : null;
+      continue;
+    }
+    if (msg.role === "user") {
+      if (!pendingOptions || pendingOptions.length === 0) {
+        return "User replies must select a coach option; free text is not allowed.";
+      }
+      if (!isAllowedCoachUserReply(msg.content, pendingOptions)) {
+        return `User reply must be one of the coach options: ${pendingOptions.join(" | ")}`;
+      }
+      pendingOptions = null;
+    }
+  }
+  return null;
+};
+
+export const buildAssistantCoachMessage = (
+  raw: string,
+  id: string,
+): ThemeCoachChoiceMessage => {
+  const { content, options } = parseCoachChoiceOptions(raw);
+  return {
+    id,
+    role: "assistant",
+    content,
+    ...(options.length > 0 ? { options } : {}),
+  };
+};

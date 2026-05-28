@@ -115,8 +115,10 @@ import {
 } from "./browserAi.ts";
 import type { CustomThemeCoachContext, CustomThemeCoachMessage } from "./browserAiCoach.ts";
 import {
+  buildAssistantCoachMessage,
   getCoachCoverageStatus,
-  looksSensitiveForCoach,
+  getLatestPendingCoachOptions,
+  isAllowedCoachUserReply,
   newCoachMessageId,
   type ThemeCoachUiMessage,
 } from "@/components/themes/themeCoachUtils";
@@ -2488,7 +2490,6 @@ export default function App() {
   const [customThemeName, setCustomThemeName] = useState<string>("");
   const [customThemeDescription, setCustomThemeDescription] = useState<string>("");
   const [customThemeCoachMessages, setCustomThemeCoachMessages] = useState<ThemeCoachUiMessage[]>([]);
-  const [customThemeCoachDraft, setCustomThemeCoachDraft] = useState<string>("");
   const [customThemeCoachBusy, setCustomThemeCoachBusy] = useState<boolean>(false);
   const [customThemeCoachError, setCustomThemeCoachError] = useState<string>("");
   const [customThemeSaving, setCustomThemeSaving] = useState<boolean>(false);
@@ -3452,7 +3453,6 @@ export default function App() {
       setBillingNotice("");
       themeCoachHydratedForSessionRef.current = "";
       setCustomThemeCoachMessages([]);
-      setCustomThemeCoachDraft("");
       setCustomThemeCoachError("");
       setYouthAddOnEnabled(false);
       setYouthAddOnGatesAdultFlow(false);
@@ -4609,7 +4609,6 @@ export default function App() {
       }
       themeCoachHydratedForSessionRef.current = "";
       setCustomThemeCoachMessages([]);
-      setCustomThemeCoachDraft("");
       setCustomThemeCoachError("");
       setYouthAddOnEnabled(false);
       setYouthAddOnGatesAdultFlow(false);
@@ -5092,7 +5091,6 @@ export default function App() {
 
   const resetCustomThemeCoach = (): void => {
     setCustomThemeCoachMessages([]);
-    setCustomThemeCoachDraft("");
     setCustomThemeCoachError("");
   };
 
@@ -5114,25 +5112,22 @@ export default function App() {
         setCustomThemeCoachError("The coach did not return a reply. Try again or check browser AI settings.");
         return;
       }
-      setCustomThemeCoachMessages((prev) => [...prev, { id: newCoachMessageId(), role: "assistant", content: reply }]);
+      setCustomThemeCoachMessages((prev) => [...prev, buildAssistantCoachMessage(reply, newCoachMessageId())]);
     } finally {
       setCustomThemeCoachBusy(false);
     }
   };
 
-  const handleSendCustomThemeCoach = async (): Promise<void> => {
+  const handleSelectCoachOption = async (option: string): Promise<void> => {
     if (!customThemeCoachPrereqsOk) return;
-    const text = customThemeCoachDraft.trim();
-    if (!text || customThemeCoachBusy) return;
-    if (!(await ensureCoachBrowserAi())) {
-      setCustomThemeCoachError("Built-in AI is not available—cannot send to the coach.");
+    const allowed = getLatestPendingCoachOptions(customThemeCoachMessages);
+    if (!allowed.length || !isAllowedCoachUserReply(option, allowed)) {
+      setCustomThemeCoachError("That option is not allowed. Choose one of the coach buttons.");
       return;
     }
-    const sensitiveReason = looksSensitiveForCoach(text);
-    if (sensitiveReason) {
-      setCustomThemeCoachError(
-        `Blocked for safety: your message looks like ${sensitiveReason}. Remove secrets or personal credentials, then send again.`,
-      );
+    if (customThemeCoachBusy) return;
+    if (!(await ensureCoachBrowserAi())) {
+      setCustomThemeCoachError("Built-in AI is not available—cannot send to the coach.");
       return;
     }
     if (!customThemeCoachMessages.some((m) => m.role === "assistant")) {
@@ -5141,18 +5136,17 @@ export default function App() {
     }
     setCustomThemeCoachError("");
     const historyBefore = toCoachHistory(customThemeCoachMessages);
-    setCustomThemeCoachMessages((prev) => [...prev, { id: newCoachMessageId(), role: "user", content: text }]);
-    setCustomThemeCoachDraft("");
+    setCustomThemeCoachMessages((prev) => [...prev, { id: newCoachMessageId(), role: "user", content: option.trim() }]);
     setCustomThemeCoachBusy(true);
     try {
       const ctx = getCustomThemeCoachContext();
       const { customThemeCoachTurn } = await import("./browserAiCoach.ts");
-      const reply = await customThemeCoachTurn(ctx, historyBefore, text);
+      const reply = await customThemeCoachTurn(ctx, historyBefore, option.trim());
       if (!reply) {
         setCustomThemeCoachError("No reply from the coach. Try again.");
         return;
       }
-      setCustomThemeCoachMessages((prev) => [...prev, { id: newCoachMessageId(), role: "assistant", content: reply }]);
+      setCustomThemeCoachMessages((prev) => [...prev, buildAssistantCoachMessage(reply, newCoachMessageId())]);
     } finally {
       setCustomThemeCoachBusy(false);
     }
@@ -5269,7 +5263,7 @@ export default function App() {
           }
           setCustomThemeCoachMessages((prev) => {
             if (prev.length > 0) return prev;
-            return [...prev, { id: newCoachMessageId(), role: "assistant", content: reply }];
+            return [...prev, buildAssistantCoachMessage(reply, newCoachMessageId())];
           });
         } finally {
           if (!cancelled) setCustomThemeCoachBusy(false);
@@ -5289,7 +5283,12 @@ export default function App() {
         method: "PUT",
         headers: withAuthHeaders(),
         body: JSON.stringify({
-          messages: customThemeCoachMessages.map((m) => ({ id: m.id, role: m.role, content: m.content })),
+          messages: customThemeCoachMessages.map((m) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            ...(m.options?.length ? { options: m.options } : {}),
+          })),
         }),
       }).catch(() => {
         /* offline */
@@ -7032,8 +7031,6 @@ export default function App() {
                           <Suspense fallback={<p className="muted theme-coach-loading">Loading theme coach…</p>}>
                             <CustomThemeCoachPanel
                               messages={customThemeCoachMessages}
-                              draft={customThemeCoachDraft}
-                              onDraftChange={setCustomThemeCoachDraft}
                               busy={customThemeCoachBusy}
                               localError={customThemeCoachError}
                               aiAvailable={coachBrowserAiReady}
@@ -7041,7 +7038,7 @@ export default function App() {
                               coachPrereqsOk={customThemeCoachPrereqsOk}
                               coverage={coachCoverage}
                               onStart={() => void handleStartCustomThemeCoach()}
-                              onSend={() => void handleSendCustomThemeCoach()}
+                              onSelectOption={(option) => void handleSelectCoachOption(option)}
                               onSynthesize={() => void handleSynthesizeCustomThemeCoach()}
                               onClear={resetCustomThemeCoach}
                             />
@@ -7051,8 +7048,6 @@ export default function App() {
                         <Suspense fallback={<p className="muted theme-coach-loading">Loading theme coach…</p>}>
                           <CustomThemeCoachPanel
                             messages={customThemeCoachMessages}
-                            draft={customThemeCoachDraft}
-                            onDraftChange={setCustomThemeCoachDraft}
                             busy={customThemeCoachBusy}
                             localError={customThemeCoachError}
                             aiAvailable={coachBrowserAiReady}
@@ -7060,7 +7055,7 @@ export default function App() {
                             coachPrereqsOk={customThemeCoachPrereqsOk}
                             coverage={coachCoverage}
                             onStart={() => void handleStartCustomThemeCoach()}
-                            onSend={() => void handleSendCustomThemeCoach()}
+                            onSelectOption={(option) => void handleSelectCoachOption(option)}
                             onSynthesize={() => void handleSynthesizeCustomThemeCoach()}
                             onClear={resetCustomThemeCoach}
                           />

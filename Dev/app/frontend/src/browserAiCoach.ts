@@ -37,6 +37,9 @@ const COACH_SYSTEM = [
   "- When discussing puzzle direction, steer the host toward **original** beats (logic, physical, and Arduino/microcontroller) that fit their props and room—not reusing generic internet puzzle recipes; remind them microcontroller gags need **QA** before opening.",
   "- Theme naming: encourage a **distinct** working title that will not be confused with this session's earlier picks or famous published rooms; if their draft name is generic, suggest one sharper alternative in your question (do not lecture).",
   "- Security posture: never ask the user for passwords, API keys, tokens, private keys, account credentials, or personal identifiers.",
+  "- Every reply MUST end with a final line exactly like: CHOICE_OPTIONS: Option A | Option B | Option C",
+  "  Provide 3–6 concise, mutually exclusive answer buttons the host can click (no open-ended typing).",
+  "  Example: CHOICE_OPTIONS: Family-friendly | Teen / adult mix | Adults only | Corporate team-building",
 ].join(" ");
 
 const buildCoachUserPayload = (context: CustomThemeCoachContext, history: CustomThemeCoachMessage[], userMessage: string | null): string => {

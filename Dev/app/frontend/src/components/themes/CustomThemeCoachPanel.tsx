@@ -1,9 +1,8 @@
 import type { ThemeCoachUiMessage } from "./themeCoachUtils";
+import { getLatestPendingCoachOptions } from "./themeCoachUtils";
 
 export function CustomThemeCoachPanel({
   messages,
-  draft,
-  onDraftChange,
   busy,
   localError,
   aiAvailable,
@@ -11,13 +10,11 @@ export function CustomThemeCoachPanel({
   coachPrereqsOk,
   coverage,
   onStart,
-  onSend,
+  onSelectOption,
   onSynthesize,
   onClear,
 }: {
   messages: ThemeCoachUiMessage[];
-  draft: string;
-  onDraftChange: (value: string) => void;
   busy: boolean;
   localError: string;
   aiAvailable: boolean;
@@ -25,12 +22,14 @@ export function CustomThemeCoachPanel({
   coachPrereqsOk: boolean;
   coverage: { done: number; total: number; doneLabels: string[] };
   onStart: () => void;
-  onSend: () => void;
+  onSelectOption: (option: string) => void;
   onSynthesize: () => void;
   onClear: () => void;
 }) {
   const canApply = messages.some((m) => m.role === "user");
   const hasAssistantMessage = messages.some((m) => m.role === "assistant");
+  const pendingOptions = getLatestPendingCoachOptions(messages);
+  const showOptionPicker = pendingOptions.length > 0 && !busy;
   const startDisabled = busy || !aiAvailable || hasAssistantMessage || !coachPrereqsOk;
   const startTitle = !coachPrereqsOk
     ? "Complete room details and a theme name first."
@@ -41,13 +40,13 @@ export function CustomThemeCoachPanel({
         : busy
           ? "Please wait…"
           : undefined;
-  const composerLocked = busy || !coachPrereqsOk;
+
   return (
     <div className="theme-coach-card" role="region" aria-label="Theme coach chat">
       <h3 className="theme-coach-heading">Theme coach · built-in AI</h3>
       <p className="muted theme-coach-lead">
-        The coach asks short questions about tone, audience, and how your real room fits the story—so puzzle generation matches
-        what you want.
+        The coach asks short questions about tone, audience, and how your real room fits the story—pick an answer button for
+        each turn (no free typing).
       </p>
       {!coachPrereqsOk ? (
         <p className="theme-coach-locked-note" role="status">
@@ -57,8 +56,8 @@ export function CustomThemeCoachPanel({
         </p>
       ) : null}
       <p className="muted theme-coach-security-note">
-        Security mode is on: do not paste passwords, API keys, tokens, private keys, or personal data into this chat. Messages
-        that look like secrets are blocked before send.
+        Structured replies only: choose from the coach&apos;s option buttons. This blocks prompt injection and accidental
+        secret pastes—do not use browser devtools to inject custom text.
       </p>
       {!accountSyncAvailable ? (
         <p className="muted theme-coach-account-note">
@@ -80,16 +79,10 @@ export function CustomThemeCoachPanel({
             In <strong>Chrome</strong> on desktop (recent stable or newer), enable built-in Gemini Nano, then relaunch: open{" "}
             <code className="chrome-flag-chip">chrome://flags/#optimization-guide-on-device-model</code> → <strong>Enabled</strong>, and{" "}
             <code className="chrome-flag-chip">chrome://flags/#prompt-api-for-gemini-nano</code> or{" "}
-            <code className="chrome-flag-chip">chrome://flags/#prompt-api-for-gemini-nano-multimodal-input</code> → <strong>Enabled</strong>.{" "}
-            On <code>localhost</code>, confirm with DevTools: <code className="chrome-flag-chip">await LanguageModel.availability()</code>{" "}
-            (expect <strong>available</strong> or <strong>downloadable</strong>). Hardware and disk requirements apply—see the{" "}
-            <a href="https://developer.chrome.com/docs/ai/get-started" target="_blank" rel="noreferrer">
-              Chrome built-in AI get-started guide
-            </a>
-            .
+            <code className="chrome-flag-chip">chrome://flags/#prompt-api-for-gemini-nano-multimodal-input</code> → <strong>Enabled</strong>.
           </p>
           <p className="muted theme-coach-unavailable-foot">
-            <strong>Send</strong> and <strong>Apply answers</strong> stay off until the Prompt API is available here.
+            Option buttons stay off until the Prompt API is available here.
           </p>
         </div>
       ) : null}
@@ -102,7 +95,7 @@ export function CustomThemeCoachPanel({
         {messages.length === 0 ? (
           <p className="muted theme-coach-empty">
             {coachPrereqsOk
-              ? "When you start the coach, it will assess what is already clear from your room details and theme name, then ask focused questions here."
+              ? "When you start the coach, it will assess what is already clear from your room details and theme name, then offer clickable answers."
               : "The coach stays closed until room details and a theme name are ready—see the note above."}
           </p>
         ) : (
@@ -115,40 +108,32 @@ export function CustomThemeCoachPanel({
         )}
         {busy ? <p className="muted theme-coach-thinking">Thinking…</p> : null}
       </div>
-      <div className="theme-coach-composer">
-        <label className="theme-coach-composer-label">
-          Your reply
-          <textarea
-            className="theme-coach-textarea"
-            rows={2}
-            value={draft}
-            onChange={(event) => onDraftChange(event.target.value)}
-            placeholder={
-              coachPrereqsOk ? "Type your answer, then Send." : "Unlock the coach with room details + theme name first."
-            }
-            disabled={composerLocked}
-          />
-        </label>
-        <div className="theme-coach-actions">
-          <button type="button" className="secondary-btn" onClick={onStart} disabled={startDisabled} title={startTitle}>
-            Start conversation
-          </button>
-          <button
-            type="button"
-            className="primary-btn"
-            onClick={onSend}
-            disabled={
-              busy ||
-              !aiAvailable ||
-              !coachPrereqsOk ||
-              !draft.trim() ||
-              !messages.some((m) => m.role === "assistant")
-            }
-            title={!aiAvailable ? "Built-in browser AI is required to send messages to the coach." : undefined}
-          >
-            Send
-          </button>
+      {showOptionPicker ? (
+        <div className="theme-coach-options" role="group" aria-label="Choose your reply">
+          <p className="theme-coach-options__label">Choose your reply</p>
+          <div className="theme-coach-options__grid">
+            {pendingOptions.map((option) => (
+              <button
+                key={option}
+                type="button"
+                className="theme-coach-option-btn secondary-btn"
+                disabled={busy || !aiAvailable || !coachPrereqsOk}
+                onClick={() => onSelectOption(option)}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
         </div>
+      ) : hasAssistantMessage && !busy && pendingOptions.length === 0 ? (
+        <p className="muted theme-coach-options-missing" role="status">
+          The coach did not offer answer buttons. Use <strong>Clear chat</strong> and start again.
+        </p>
+      ) : null}
+      <div className="theme-coach-actions">
+        <button type="button" className="secondary-btn" onClick={onStart} disabled={startDisabled} title={startTitle}>
+          Start conversation
+        </button>
       </div>
       <div className="theme-coach-footer-actions">
         <button
