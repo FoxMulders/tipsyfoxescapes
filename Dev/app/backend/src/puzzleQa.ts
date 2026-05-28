@@ -82,6 +82,24 @@ const puzzleCorpus = (puzzle: PuzzleForQa): string =>
 const PLACEHOLDER_URL =
   /example\.com|localhost|127\.0\.0\.1|placeholder|lorem|ipsum|todo|fixme|undefined|null/i;
 
+/**
+ * Constraint 2 (production-ready media): copy that tells the builder to author content later,
+ * or that leaves a blank, is a hard failure — the card must be printable/fabricable as-is.
+ */
+const PLACEHOLDER_PROSE =
+  /\b(insert\s+(?:custom\s+)?(?:text|name|theme|value|clue|code)?\s*here|design (?:a|your|the)\b|fill in|to be (?:added|determined|decided)|tbd|coming soon|your (?:custom|own)\b[^.]*\bhere|lorem ipsum|placeholder|\bTODO\b|\bFIXME\b|add (?:your )?[a-z ]*here|\[[^\]]*\b(?:insert|your|custom|todo|tbd)\b[^\]]*\])/i;
+
+/** Ellipsis / blank-fill markers that signal unfinished content in printable copy. */
+const ELLIPSIS_OR_BLANK = /(\.\.\.|…|_{3,}|\{\{?\s*[a-zA-Z_][a-zA-Z0-9_]*\s*\}?\})/;
+
+/** Era buckets used for anti-skinning (Constraint 1): a mechanism must fit the theme's universe. */
+const SCIFI_THEME = /\b(sci-?fi|science fiction|space|spaceship|starship|space station|orbital|galactic|galaxy|martian|alien|android|robot|cyber|cyberpunk|quantum|nebula|warp|hyperspace|interstellar|spacecraft|космос)\b/i;
+const MEDIEVAL_THEME = /\b(medieval|castle|dungeon|knight|alchemist|alchemy|wizard|sorcer|dragon|kingdom|tavern|crypt|gothic|witch|druid|rune|catacomb|monastery|fae|fantasy realm)\b/i;
+/** Player-facing anachronisms for a futuristic universe. */
+const SCIFI_FORBIDDEN = /\b(telegraph|telegram key|parchment|quill|musket|wax seal|sealing wax|gramophone|pocket ?watch|abacus|hieroglyph)\b/i;
+/** Player-facing anachronisms for a pre-industrial / medieval universe. */
+const MEDIEVAL_FORBIDDEN = /\b(keypad|rfid|barcode|qr code|smartphone|laptop|usb|wi-?fi|bluetooth|laser grid|touchscreen|digital display|lcd screen)\b/i;
+
 const linkSharesPuzzleContext = (puzzle: PuzzleForQa, link: PuzzleReferenceLink): boolean => {
   const corpus = puzzleCorpus(puzzle);
   const title = (link.title ?? "").trim().toLowerCase();
@@ -158,6 +176,42 @@ const isBareYoutubeChannel = (urlRaw: string): boolean => {
   }
 };
 
+/** Root/homepage with no path (e.g. https://www.arduino.cc/, https://randomnerdtutorials.com/). */
+export const isRootOrHomepageUrl = (urlRaw: string): boolean => {
+  try {
+    const u = new URL(urlRaw.trim());
+    const path = u.pathname.replace(/\/+$/, "");
+    const hasQuery = [...u.searchParams.keys()].length > 0;
+    return path === "" && !hasQuery && !u.hash;
+  } catch {
+    return false;
+  }
+};
+
+/** Generic search/listing page (e.g. /search, ?q=, ?search_query=) — not a specific build asset. */
+export const isGenericSearchUrl = (urlRaw: string): boolean => {
+  try {
+    const u = new URL(urlRaw.trim());
+    if (/\/search\/?$/i.test(u.pathname)) return true;
+    for (const key of u.searchParams.keys()) {
+      if (/^(q|query|search|search_query|s|keyword|keywords)$/i.test(key)) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Electronic puzzles must deep-link to the exact project/tutorial/repo/video a builder can open
+ * and fabricate from — never a site homepage, bare channel, or search/listing page.
+ */
+export const isTooGenericForElectronicReference = (urlRaw: string): boolean =>
+  isRootOrHomepageUrl(urlRaw) ||
+  isGenericSearchUrl(urlRaw) ||
+  isBareYoutubeChannel(urlRaw) ||
+  isYoutubeSearchResults(urlRaw);
+
 const isAllowedReferenceUrl = (urlRaw: string): boolean => {
   const t = urlRaw.trim();
   if (!t || t === "#") return false;
@@ -178,9 +232,12 @@ export const filterReferenceLinksForPuzzle = (puzzle: PuzzleForQa): PuzzleRefere
   const links = puzzle.referenceLinks ?? [];
   const out: PuzzleReferenceLink[] = [];
   const seen = new Set<string>();
+  const electronic = puzzle.category === "electronic";
   for (const link of links) {
     const urlRaw = (link.url ?? "").trim();
     if (!isAllowedReferenceUrl(urlRaw)) continue;
+    // Electronic puzzles require specific deep links; drop homepages / channels / search pages.
+    if (electronic && isTooGenericForElectronicReference(urlRaw)) continue;
     if (isOfficialDocLink(urlRaw)) {
       const k = `${urlRaw}|${link.title}`;
       if (!seen.has(k)) {
@@ -256,6 +313,51 @@ const auditCopyFields = (puzzle: PuzzleForQa, ctx: PuzzleQaContext): PuzzleQaIss
     });
   }
 
+  // Constraint 2: no placeholders / author-it-later prose / blank fills in printable copy.
+  const printableFields: Array<{ field: string; text: string }> = [
+    { field: "title", text: puzzle.title ?? "" },
+    { field: "objective", text: puzzle.objective ?? "" },
+    { field: "howItWorks", text: puzzle.howItWorks ?? "" },
+    ...(puzzle.solveSteps ?? []).map((s, i) => ({ field: `solveSteps[${i}]`, text: s })),
+  ];
+  for (const { field, text } of printableFields) {
+    if (PLACEHOLDER_PROSE.test(text)) {
+      issues.push({
+        code: "COPY_PLACEHOLDER",
+        severity: "error",
+        field,
+        message: `Copy contains an author-it-later placeholder instead of finished, printable content: "${text.slice(0, 60)}".`,
+      });
+    } else if (ELLIPSIS_OR_BLANK.test(text)) {
+      issues.push({
+        code: "COPY_BLANK_OR_ELLIPSIS",
+        severity: "error",
+        field,
+        message: `Copy contains an ellipsis or blank/template token; output the exact final strings instead: "${text.slice(0, 60)}".`,
+      });
+    }
+  }
+
+  // Constraint 1: anti-skinning — the mechanism must belong to the theme's universe.
+  const mechanism = `${puzzle.title} ${puzzle.objective} ${puzzle.howItWorks} ${puzzle.themeFitReason ?? ""}`;
+  const themeContext = `${ctx.themeName} ${(puzzle.themeTags ?? []).join(" ")}`;
+  if (SCIFI_THEME.test(themeContext) && SCIFI_FORBIDDEN.test(mechanism)) {
+    issues.push({
+      code: "ANACHRONISTIC_MECHANIC",
+      severity: "warn",
+      field: "howItWorks",
+      message: `Mechanism uses an old-world prop that breaks the futuristic "${ctx.themeName}" universe — re-skin it as a diegetic sci-fi interaction.`,
+    });
+  }
+  if (MEDIEVAL_THEME.test(themeContext) && MEDIEVAL_FORBIDDEN.test(mechanism)) {
+    issues.push({
+      code: "ANACHRONISTIC_MECHANIC",
+      severity: "warn",
+      field: "howItWorks",
+      message: `Mechanism exposes a modern/digital device that breaks the period "${ctx.themeName}" universe — disguise it as an in-world prop.`,
+    });
+  }
+
   return issues;
 };
 
@@ -311,6 +413,36 @@ const auditElectronic = (puzzle: PuzzleForQa): PuzzleQaIssue[] => {
       field: "electronicDetails.arduinoCode",
       message: "Arduino sketch must include setup() and loop().",
     });
+  } else if (/\bloop\s*\([^)]*\)\s*\{\s*\}/.test(code)) {
+    // Constraint 3: loop() must actually do continuous work, not be an empty stub.
+    issues.push({
+      code: "ARDUINO_EMPTY_LOOP",
+      severity: "error",
+      field: "electronicDetails.arduinoCode",
+      message: "loop() is empty — provide the continuous runtime logic, not a stub.",
+    });
+  }
+
+  // Constraint 3: pin assignments must be declared (not magic numbers buried in calls).
+  if (code && !/(#define\s+\w+|const\s+(?:int|byte|uint8_t)\s+\w+|\bint\s+\w+Pin\b|pinMode\s*\()/i.test(code)) {
+    issues.push({
+      code: "ARDUINO_PIN_DECLARATIONS",
+      severity: "warn",
+      field: "electronicDetails.arduinoCode",
+      message: "Declare pin assignments (#define / const int / pinMode) so the firmware maps to the wiring.",
+    });
+  }
+
+  // Constraint 3: inputs need debounce / state-tracking to avoid spurious triggers.
+  const readsInput = /digitalRead\s*\(|analogRead\s*\(|\bINPUT(_PULLUP)?\b/.test(code);
+  const hasStateOrDebounce = /\bmillis\s*\(|debounce|lastState|lastPress|lastTap|prevState|\bstate\b|stableSince/i.test(code);
+  if (readsInput && !hasStateOrDebounce) {
+    issues.push({
+      code: "ARDUINO_NO_DEBOUNCE",
+      severity: "warn",
+      field: "electronicDetails.arduinoCode",
+      message: "Input-reading sketch should include debounce or state-tracking (millis()/lastState) for reliable triggers.",
+    });
   }
 
   const wiringPins = extractPins(wiring);
@@ -349,6 +481,35 @@ const auditElectronic = (puzzle: PuzzleForQa): PuzzleQaIssue[] => {
         message: "Diagram labels must name components from the parts list.",
       });
     }
+  }
+
+  // Constraint 4: named hardware (sensors/modules/actuators) must appear by name in the
+  // wiring notes or firmware — never reduced to a generic "sensor"/"pad".
+  const codeWiring = `${code} ${wiring}`.toLowerCase();
+  const namedComponents = parts.filter((part) =>
+    /\b(mpr121|mfrc522|pn532|hc-?sr04|ds18b20|ws2812|neopixel|sensor|module|relay|maglock|buzzer|servo|stepper|solenoid|reader|reed|hall|photoresistor|photodiode|laser|keypad|rfid|nfc)\b/i.test(
+      part,
+    ),
+  );
+  const STOP_PART_WORDS = new Set(["with", "and", "the", "for", "low", "high", "power", "optional", "equivalent", "module", "modules", "style", "passive", "active"]);
+  const unmappedComponents = namedComponents.filter((part) => {
+    const tokens = part
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length >= 4 && !STOP_PART_WORDS.has(t));
+    if (tokens.length === 0) return false;
+    return !tokens.some((t) => codeWiring.includes(t));
+  });
+  if (namedComponents.length > 0 && unmappedComponents.length > 0) {
+    issues.push({
+      code: "HARDWARE_NOT_MAPPED",
+      severity: "error",
+      field: "electronicDetails",
+      message: `Parts not referenced by exact name in wiring/firmware: ${unmappedComponents
+        .map((p) => p.split(/[(,]/)[0]!.trim())
+        .join(", ")}. Map each named component to the circuit and code.`,
+    });
   }
 
   return issues;
@@ -416,6 +577,32 @@ const auditReferences = (
       message:
         "No valid reference links remain—add a specific tutorial, official doc, or credited build guide for this exact puzzle.",
     });
+  }
+
+  // Constraint 3 (electronic deep links): reject homepages / channels / search pages and
+  // require at least one specific deep link to survive filtering so a builder can fabricate now.
+  if (puzzle.category === "electronic") {
+    for (const link of rawLinks) {
+      const url = (link.url ?? "").trim();
+      if (!url) continue;
+      if (isTooGenericForElectronicReference(url)) {
+        issues.push({
+          code: "ELECTRONIC_REFERENCE_GENERIC",
+          severity: "error",
+          field: "referenceLinks",
+          message: `Electronic puzzles need a specific deep link (exact project, tutorial, video, or code repo), not a homepage/channel/search page: ${link.title || url}`,
+        });
+      }
+    }
+    if (rawLinks.length > 0 && filteredCount === 0) {
+      issues.push({
+        code: "ELECTRONIC_REFERENCE_MISSING",
+        severity: "error",
+        field: "referenceLinks",
+        message:
+          "Electronic puzzle has no specific deep-link reference after filtering—add a build guide, tutorial video, or code repository for this exact circuit.",
+      });
+    }
   }
 
   return issues;

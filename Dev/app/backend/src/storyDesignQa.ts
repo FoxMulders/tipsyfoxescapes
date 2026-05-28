@@ -5,6 +5,7 @@
 
 import {
   auditInventoryHostCopy,
+  auditNarrativeProgression,
   auditPremiseImmersion,
   auditPropAffordanceForPuzzle,
   auditStoryDesignPlan,
@@ -22,6 +23,7 @@ export type StoryDesignQaReport = {
 export type StoryPlanForDesignQa = {
   premise?: string;
   progressionRule?: string;
+  missionObjective?: string;
   puzzleLinks?: Array<{
     puzzleId: string;
     puzzleTitle: string;
@@ -40,6 +42,9 @@ export const auditStoryDesign = (
     issues.push(...auditPremiseImmersion(plan.premise ?? ""));
     issues.push(
       ...auditStoryDesignPlan(plan.premise ?? "", plan.progressionRule ?? "", plan.puzzleLinks ?? []),
+    );
+    issues.push(
+      ...auditNarrativeProgression(puzzles, plan.puzzleLinks ?? [], plan.missionObjective ?? ""),
     );
   }
   for (const puzzle of puzzles) {

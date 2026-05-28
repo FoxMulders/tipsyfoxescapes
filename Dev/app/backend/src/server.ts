@@ -2644,32 +2644,86 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
         "Reed switches or hall sensors hidden behind marked points detect a hand magnet in sequence. An Arduino or maglock driver energizes the strike only when the correct polarity/order is satisfied—this is an electronic maglock module, not a furniture prop.",
       referenceLinks: [
         {
-          title: "Adafruit reed switch guide",
-          url: "https://learn.adafruit.com/search?q=reed%20switch",
+          title: "Adafruit reed switch overview and wiring",
+          url: "https://learn.adafruit.com/reed-switch/overview",
         }],
-      solveSteps: ["Locate marked sensor points", "Sweep magnet in order", "Confirm maglock release"],
+      solveSteps: ["Locate marked reed sensor points", "Sweep magnet across reed switches in order", "Confirm maglock relay release"],
       difficulty: "medium",
       electronicDetails: {
         parts: [
           "12V maglock strike or fail-safe maglock",
-          "Maglock driver relay module",
-          "3–5 reed switches or hall sensors",
+          "Maglock driver relay module (5V coil)",
+          "3 reed switches",
           "Hand magnet",
           "12V PSU (adequate amperage for strike)",
-          "Arduino Uno (optional sequencing logic)",
+          "Arduino Uno",
         ],
         wiringDiagram: [
-          "Sensor inputs -> Arduino digital pins (D2–D6) with pull-ups",
-          "Correct sequence -> relay IN -> maglock +12V supply",
-          "Common ground between PSU, relay, and controller",
+          "Reed switch 1 -> D2 with internal pull-up to GND",
+          "Reed switch 2 -> D3 with internal pull-up to GND",
+          "Reed switch 3 -> D4 with internal pull-up to GND",
+          "D7 -> relay module IN (relay switches maglock +12V)",
+          "Common ground between 12V PSU, relay module, and Arduino",
         ],
-        wiringDiagramSvg: "",
+        wiringDiagramSvg: `<svg xmlns="http://www.w3.org/2000/svg" width="860" height="320" viewBox="0 0 860 320">
+  <rect x="20" y="20" width="200" height="260" fill="#f4f6f8" stroke="#333"/>
+  <text x="120" y="46" text-anchor="middle" font-family="Arial" font-size="16">Arduino Uno</text>
+  <text x="40" y="92" font-family="Arial" font-size="13">D2</text>
+  <text x="40" y="122" font-family="Arial" font-size="13">D3</text>
+  <text x="40" y="152" font-family="Arial" font-size="13">D4</text>
+  <text x="40" y="182" font-family="Arial" font-size="13">D7</text>
+  <text x="40" y="212" font-family="Arial" font-size="13">GND</text>
+  <rect x="300" y="40" width="150" height="34" fill="#fff" stroke="#333"/><text x="375" y="62" text-anchor="middle" font-family="Arial" font-size="13">Reed switch 1</text>
+  <rect x="300" y="90" width="150" height="34" fill="#fff" stroke="#333"/><text x="375" y="112" text-anchor="middle" font-family="Arial" font-size="13">Reed switch 2</text>
+  <rect x="300" y="140" width="150" height="34" fill="#fff" stroke="#333"/><text x="375" y="162" text-anchor="middle" font-family="Arial" font-size="13">Reed switch 3</text>
+  <rect x="520" y="150" width="150" height="44" fill="#ffe0b2" stroke="#333"/><text x="595" y="177" text-anchor="middle" font-family="Arial" font-size="13">Relay module</text>
+  <rect x="700" y="150" width="130" height="44" fill="#c8e6c9" stroke="#333"/><text x="765" y="177" text-anchor="middle" font-family="Arial" font-size="13">12V Maglock</text>
+  <line x1="80" y1="88" x2="300" y2="57" stroke="#1976d2" stroke-width="2.5"/>
+  <line x1="80" y1="118" x2="300" y2="107" stroke="#1976d2" stroke-width="2.5"/>
+  <line x1="80" y1="148" x2="300" y2="157" stroke="#1976d2" stroke-width="2.5"/>
+  <line x1="80" y1="178" x2="520" y2="172" stroke="#e53935" stroke-width="2.5"/>
+  <line x1="670" y1="172" x2="700" y2="172" stroke="#424242" stroke-width="2.5"/>
+  <text x="300" y="250" font-family="Arial" font-size="12">Sequence: sweep magnet over reed switches 1 → 2 → 3 to fire relay</text>
+</svg>`,
         buildSteps: [
           "Bench-test maglock draw and heat before mounting.",
           "Verify fail-safe behavior on power loss.",
           "Mount strike on dedicated puzzle door—not egress hardware.",
         ],
-        arduinoCode: "// Sequence maglock release when sensors trigger in order\n",
+        arduinoCode: `// Sequenced reed-switch maglock release.
+// Sweep a magnet across reed switches in order 1 -> 2 -> 3 to energize the relay/maglock.
+const int reedPins[3] = {2, 3, 4};
+const int relayPin = 7;
+const int sequence[3] = {0, 1, 2};
+int step = 0;
+unsigned long lastTrigger = 0;
+const unsigned long debounceMs = 200;
+
+void setup() {
+  for (int i = 0; i < 3; i++) {
+    pinMode(reedPins[i], INPUT_PULLUP);
+  }
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW); // maglock held (fail-safe wiring dependent)
+}
+
+void loop() {
+  unsigned long now = millis();
+  for (int i = 0; i < 3; i++) {
+    // Reed switch closes to GND, so a magnet present reads LOW.
+    if (digitalRead(reedPins[i]) == LOW && now - lastTrigger > debounceMs) {
+      lastTrigger = now;
+      if (i == sequence[step]) {
+        step++;
+      } else {
+        step = 0;
+      }
+    }
+  }
+  if (step >= 3) {
+    digitalWrite(relayPin, HIGH); // release maglock via relay
+  }
+}`,
       },
     },
     {
@@ -2708,8 +2762,12 @@ const puzzlePoolByCategory: Record<Puzzle["category"], Puzzle[]> = {
       howItWorks:
         "Players complete a button-and-LED circuit driven by an Arduino. When they press the button sequence correctly, the sketch toggles LEDs and reveals the success signal.",
       referenceLinks: [
+        {
+          title: "Arduino Button built-in example (digital input + LED)",
+          url: "https://docs.arduino.cc/built-in-examples/digital/Button/",
+        },
       ],
-      solveSteps: ["Wire LEDs", "Upload sketch"],
+      solveSteps: ["Wire LEDs and button", "Upload sketch"],
       difficulty: "medium",
       electronicDetails: {
         parts: [
@@ -2899,10 +2957,14 @@ void loop() {
       title: "Capacitive Touch Sequence",
       objective: "Touch sensor pads in the correct order to reveal a clue.",
       howItWorks:
-        "Players discover an ordered hint and trigger capacitive pads accordingly. The Arduino validates sequence timing and activates an output when correct.",
+        "Players discover an ordered hint and trigger capacitive pads accordingly. The Arduino reads the MPR121 touch controller, validates sequence timing, and activates an output when correct.",
       referenceLinks: [
+        {
+          title: "Adafruit MPR121 capacitive touch sensor Arduino tutorial",
+          url: "https://learn.adafruit.com/adafruit-mpr121-12-key-capacitive-touch-sensor-breakout-tutorial/arduino",
+        },
       ],
-      solveSteps: ["Wire touch pads", "Upload sketch", "Enter discovered sequence"],
+      solveSteps: ["Wire MPR121 and touch pads", "Upload sketch", "Enter discovered sequence"],
       difficulty: "medium",
       electronicDetails: {
         parts: [
@@ -2922,13 +2984,42 @@ void loop() {
           "Wire MPR121 module and pads.",
           "Upload sequence-validation sketch.",
           "Test each pad, then validate full sequence."],
-        arduinoCode: `// Pseudo sketch outline for MPR121 sequence validation
-int seq[4] = {0,2,1,2};
+        arduinoCode: `// MPR121 capacitive touch sequence validation.
+#include <Wire.h>
+#include <Adafruit_MPR121.h>
+
+Adafruit_MPR121 mpr121 = Adafruit_MPR121();
+const int ledPin = 9;            // status LED via 220 ohm resistor
+const int sequence[4] = {0, 2, 1, 2};
 int pos = 0;
-void onPadTouch(int pad){
-  if(pad == seq[pos]) pos++;
-  else pos = 0;
-  if(pos == 4){ /* unlock output */ }
+uint16_t lastTouched = 0;
+
+void setup() {
+  pinMode(ledPin, OUTPUT);
+  Serial.begin(9600);
+  if (!mpr121.begin(0x5A)) {
+    // MPR121 not found at I2C address 0x5A; halt so the wiring can be checked.
+    while (1);
+  }
+}
+
+void loop() {
+  uint16_t currTouched = mpr121.touched();
+  for (uint8_t pad = 0; pad < 3; pad++) {
+    bool isTouch = (currTouched & _BV(pad)) && !(lastTouched & _BV(pad));
+    if (isTouch) { // rising-edge debounce via lastTouched bitmask
+      if (pad == sequence[pos]) {
+        pos++;
+      } else {
+        pos = 0;
+      }
+    }
+  }
+  lastTouched = currTouched;
+
+  if (pos >= 4) {
+    digitalWrite(ledPin, HIGH); // unlock output
+  }
 }`,
       },
     },
@@ -2939,10 +3030,14 @@ void onPadTouch(int pad){
       title: "RFID Access Chain",
       objective: "Scan RFID tags in the right order to unlock the next clue.",
       howItWorks:
-        "Players find tagged props and infer a sequence rule. The Arduino checks scan order and triggers unlock feedback when valid.",
+        "Players find tagged props and infer a sequence rule. The Arduino reads the MFRC522 RFID module, checks scan order, and triggers unlock feedback when valid.",
       referenceLinks: [
+        {
+          title: "miguelbalboa/rfid — MFRC522 Arduino library and examples",
+          url: "https://github.com/miguelbalboa/rfid",
+        },
       ],
-      solveSteps: ["Wire RFID reader", "Register tag IDs", "Scan in required order"],
+      solveSteps: ["Wire MFRC522 RFID reader over SPI", "Register tag IDs", "Scan tags in required order"],
       difficulty: "medium",
       electronicDetails: {
         parts: [
@@ -2955,9 +3050,61 @@ void onPadTouch(int pad){
         wiringDiagram: ["SPI pins to RFID module", "5V/GND power rails", "D9 output LED via 220 ohm resistor"],
         wiringDiagramSvg: `<svg xmlns="http://www.w3.org/2000/svg" width="760" height="260" viewBox="0 0 760 260"><rect x="20" y="20" width="180" height="220" fill="#f4f6f8" stroke="#333"/><text x="110" y="45" text-anchor="middle" font-family="Arial" font-size="15">Arduino</text><rect x="260" y="40" width="180" height="120" fill="#fff" stroke="#333"/><text x="350" y="68" text-anchor="middle" font-family="Arial" font-size="14">MFRC522 RFID</text><rect x="520" y="45" width="70" height="40" fill="#eee" stroke="#333"/><rect x="600" y="45" width="70" height="40" fill="#eee" stroke="#333"/><rect x="560" y="95" width="70" height="40" fill="#eee" stroke="#333"/><text x="600" y="155" text-anchor="middle" font-family="Arial" font-size="12">RFID tags</text><line x1="90" y1="90" x2="260" y2="80" stroke="#1976d2" stroke-width="2.5"/><line x1="90" y1="110" x2="260" y2="95" stroke="#1976d2" stroke-width="2.5"/><line x1="90" y1="130" x2="260" y2="110" stroke="#1976d2" stroke-width="2.5"/><line x1="90" y1="150" x2="260" y2="125" stroke="#1976d2" stroke-width="2.5"/></svg>`,
         buildSteps: ["Wire RFID reader over SPI.", "Upload sketch and register tags.", "Validate unlock sequence."],
-        arduinoCode: `// Pseudo RFID order check
-String needed[3]={"TAG1","TAG3","TAG2"}; int pos=0;
-void onTag(String id){ if(id==needed[pos]) pos++; else pos=0; if(pos==3){ /* unlock */ } }`,
+        arduinoCode: `// MFRC522 RFID scan-order validation.
+#include <SPI.h>
+#include <MFRC522.h>
+
+const int RST_PIN = 9;
+const int SS_PIN = 10;
+const int relayPin = 7;
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+
+const String needed[3] = {"DE AD 01", "DE AD 03", "DE AD 02"};
+int pos = 0;
+unsigned long lastScan = 0;
+const unsigned long debounceMs = 600;
+
+String tagToString() {
+  String id = "";
+  for (byte i = 0; i < mfrc522.uid.size; i++) {
+    if (i > 0) id += " ";
+    if (mfrc522.uid.uidByte[i] < 0x10) id += "0";
+    id += String(mfrc522.uid.uidByte[i], HEX);
+  }
+  id.toUpperCase();
+  return id;
+}
+
+void setup() {
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW);
+  Serial.begin(9600);
+  SPI.begin();
+  mfrc522.PCD_Init();
+}
+
+void loop() {
+  if (!mfrc522.PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) {
+    return;
+  }
+  unsigned long now = millis();
+  if (now - lastScan < debounceMs) {
+    mfrc522.PICC_HaltA();
+    return;
+  }
+  lastScan = now;
+
+  String id = tagToString();
+  if (id == needed[pos]) {
+    pos++;
+  } else {
+    pos = 0;
+  }
+  if (pos >= 3) {
+    digitalWrite(relayPin, HIGH); // unlock
+  }
+  mfrc522.PICC_HaltA();
+}`,
       },
     },
     {
@@ -2967,23 +3114,83 @@ void onTag(String id){ if(id==needed[pos]) pos++; else pos=0; if(pos==3){ /* unl
       title: "Laser Trip Alignment",
       objective: "Align mirrors/sensors to complete all beam paths.",
       howItWorks:
-        "Players redirect low-power laser lines into photo sensors. When all channels are aligned simultaneously, the controller triggers the success signal.",
+        "Players redirect low-power laser lines onto photoresistor targets. When all three photoresistor channels read bright simultaneously and stay aligned, the Arduino triggers the success signal.",
       referenceLinks: [
+        {
+          title: "Arduino AnalogReadSerial — reading photoresistor analog values",
+          url: "https://docs.arduino.cc/built-in-examples/basics/AnalogReadSerial/",
+        },
       ],
-      solveSteps: ["Mount emitter/sensors", "Align beams", "Hold all channels stable"],
+      solveSteps: ["Mount laser emitters and photoresistor targets", "Align beams onto each photoresistor", "Hold all channels bright and stable"],
       difficulty: "hard",
       electronicDetails: {
         parts: [
           "Arduino Uno (or compatible)",
-          "3x photoresistors or photodiodes",
-          "Low-power laser modules",
+          "3x photoresistor light sensors",
+          "3x low-power laser modules",
           "3x 10k resistors",
           "Breadboard and jumpers"],
-        wiringDiagram: ["Photo sensors to analog pins with divider resistors", "Laser modules to power rails", "D10 status output"],
-        wiringDiagramSvg: `<svg xmlns="http://www.w3.org/2000/svg" width="760" height="260" viewBox="0 0 760 260"><rect x="20" y="20" width="180" height="220" fill="#f4f6f8" stroke="#333"/><text x="110" y="45" text-anchor="middle" font-family="Arial" font-size="15">Arduino</text><circle cx="330" cy="80" r="10" fill="#ff5252"/><circle cx="330" cy="120" r="10" fill="#ff5252"/><circle cx="330" cy="160" r="10" fill="#ff5252"/><rect x="460" y="60" width="20" height="20" fill="#ddd" stroke="#333"/><rect x="460" y="100" width="20" height="20" fill="#ddd" stroke="#333"/><rect x="460" y="140" width="20" height="20" fill="#ddd" stroke="#333"/><line x1="340" y1="80" x2="460" y2="70" stroke="#f44336" stroke-width="2"/><line x1="340" y1="120" x2="460" y2="110" stroke="#f44336" stroke-width="2"/><line x1="340" y1="160" x2="460" y2="150" stroke="#f44336" stroke-width="2"/></svg>`,
-        buildSteps: ["Wire analog sensor channels.", "Mount lasers and sensor targets.", "Tune threshold values in sketch."],
-        arduinoCode: `// Pseudo alignment check
-if(a0>t && a1>t && a2>t){ /* unlock */ }`,
+        wiringDiagram: [
+          "Photoresistor 1 + 10k divider -> A0",
+          "Photoresistor 2 + 10k divider -> A1",
+          "Photoresistor 3 + 10k divider -> A2",
+          "Laser modules -> 5V power rail and GND",
+          "D10 -> status output (relay or LED)"],
+        wiringDiagramSvg: `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="280" viewBox="0 0 800 280">
+  <rect x="20" y="20" width="180" height="240" fill="#f4f6f8" stroke="#333"/>
+  <text x="110" y="45" text-anchor="middle" font-family="Arial" font-size="15">Arduino Uno</text>
+  <text x="38" y="92" font-family="Arial" font-size="13">A0</text>
+  <text x="38" y="122" font-family="Arial" font-size="13">A1</text>
+  <text x="38" y="152" font-family="Arial" font-size="13">A2</text>
+  <text x="38" y="182" font-family="Arial" font-size="13">D10</text>
+  <rect x="300" y="20" width="200" height="100" fill="#fff" stroke="#333"/><text x="400" y="45" text-anchor="middle" font-family="Arial" font-size="13">Breadboard</text>
+  <circle cx="340" cy="80" r="10" fill="#ff5252"/><circle cx="380" cy="80" r="10" fill="#ff5252"/><circle cx="420" cy="80" r="10" fill="#ff5252"/>
+  <text x="400" y="112" text-anchor="middle" font-family="Arial" font-size="12">Laser modules</text>
+  <rect x="560" y="60" width="120" height="34" fill="#fff8e1" stroke="#333"/><text x="620" y="82" text-anchor="middle" font-family="Arial" font-size="12">Photoresistor 1</text>
+  <rect x="560" y="104" width="120" height="34" fill="#fff8e1" stroke="#333"/><text x="620" y="126" text-anchor="middle" font-family="Arial" font-size="12">Photoresistor 2</text>
+  <rect x="560" y="148" width="120" height="34" fill="#fff8e1" stroke="#333"/><text x="620" y="170" text-anchor="middle" font-family="Arial" font-size="12">Photoresistor 3</text>
+  <line x1="80" y1="88" x2="560" y2="77" stroke="#1976d2" stroke-width="2"/>
+  <line x1="80" y1="118" x2="560" y2="121" stroke="#1976d2" stroke-width="2"/>
+  <line x1="80" y1="148" x2="560" y2="165" stroke="#1976d2" stroke-width="2"/>
+  <line x1="350" y1="80" x2="560" y2="77" stroke="#f44336" stroke-width="1.5"/>
+  <text x="300" y="220" font-family="Arial" font-size="12">Each laser must land on its photoresistor target to read bright.</text>
+</svg>`,
+        buildSteps: ["Wire each photoresistor as a divider into A0–A2.", "Mount lasers and photoresistor targets.", "Tune the brightness threshold in the sketch."],
+        arduinoCode: `// Laser alignment check across 3 photoresistor channels.
+const int sensorPins[3] = {A0, A1, A2};
+const int statusPin = 10;
+const int threshold = 600;          // analog reading when laser hits photoresistor
+const unsigned long holdMs = 750;   // beams must stay aligned this long
+unsigned long alignedSince = 0;
+bool wasAligned = false;
+
+void setup() {
+  pinMode(statusPin, OUTPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  bool allBright = true;
+  for (int i = 0; i < 3; i++) {
+    if (analogRead(sensorPins[i]) < threshold) {
+      allBright = false;
+    }
+  }
+
+  unsigned long now = millis();
+  if (allBright) {
+    if (!wasAligned) {
+      alignedSince = now;
+      wasAligned = true;
+    }
+    if (now - alignedSince >= holdMs) {
+      digitalWrite(statusPin, HIGH); // unlock once stable
+    }
+  } else {
+    wasAligned = false;
+    digitalWrite(statusPin, LOW);
+  }
+}`,
       },
     },
     {
@@ -2995,6 +3202,10 @@ if(a0>t && a1>t && a2>t){ /* unlock */ }`,
       howItWorks:
         "Players use a telegraph-style key connected to an Arduino input. Entering the right pulse rhythm simulates a period-correct telegraph code and triggers the unlock signal.",
       referenceLinks: [
+        {
+          title: "Arduino Debounce built-in example (clean key/switch input)",
+          url: "https://docs.arduino.cc/built-in-examples/digital/Debounce/",
+        },
       ],
       solveSteps: ["Connect telegraph key switch", "Input pulse sequence", "Read unlocked clue"],
       difficulty: "medium",
@@ -5255,6 +5466,37 @@ app.post("/api/puzzles/generate", async (req, res) => {
   );
   generatedForResponse = withThemeFitReasons(generatedForResponse, session.selectedTheme, session);
   generatedForResponse = withPuzzleQaForSession(session, generatedForResponse);
+  // Internal QA regeneration loop: re-pick any main-track pool puzzle that fails the gate
+  // (anti-skinning, production-ready copy, electronic/Arduino + deep-link rules) from scratch.
+  for (let pass = 0; pass < 4; pass += 1) {
+    const failingIdx = generatedForResponse.findIndex(
+      (p) =>
+        p.puzzleQa?.passed === false &&
+        (p.audienceTrack ?? "main") !== "youth_addon" &&
+        !String(p.id).startsWith("pz_existing_"),
+    );
+    if (failingIdx === -1) break;
+    const failing = generatedForResponse[failingIdx]!;
+    let replaced = false;
+    for (let attempt = 0; attempt < 16; attempt += 1) {
+      const candidate = pickPuzzle(failing.category);
+      if (!candidate || generatedForResponse.some((p) => p.id === candidate.id)) continue;
+      const [withReason] = withThemeFitReasons(
+        [{ ...candidate, audienceTrack: "main" }],
+        session.selectedTheme,
+        session,
+      );
+      const [gated] = withPuzzleQaForSession(session, [withReason!]);
+      if (gated && gated.puzzleQa?.passed !== false) {
+        generationSeenIds.add(candidate.id);
+        generatedForResponse[failingIdx] = gated;
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) break;
+    generatedForResponse = withPuzzleQaForSession(session, generatedForResponse);
+  }
   const finalized = finalizePuzzlesAndStoryPlan(session, generatedForResponse);
   generatedForResponse = finalized.puzzles;
   generatedForResponse.forEach((puzzle) => session.seenPuzzleIds.add(puzzle.id));

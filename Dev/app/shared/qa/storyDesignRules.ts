@@ -26,6 +26,7 @@ export type PuzzlePropForQa = {
   category?: string;
   physical_anchor_prop?: string;
   themeFitReason?: string;
+  audienceTrack?: "main" | "youth_addon";
 };
 
 const META_IMMERSION_BREAK =
@@ -205,5 +206,65 @@ export const auditStoryDesignPlan = (
       requiredChange: "Format progression as numbered puzzle steps with unlock outcomes.",
     });
   }
+  return issues;
+};
+
+/**
+ * 5th QA constraint — narrative coherence & progression.
+ * The set must read as one storyline that escalates to the mission objective: every main-track
+ * puzzle maps to a progression beat (no orphans), and each puzzle ties its mechanism to the story.
+ */
+export const auditNarrativeProgression = (
+  puzzles: PuzzlePropForQa[],
+  puzzleLinks: PuzzleLinkForProgression[],
+  missionObjective: string,
+): StoryDesignQaIssue[] => {
+  const issues: StoryDesignQaIssue[] = [];
+  const main = puzzles.filter((p) => (p.audienceTrack ?? "main") !== "youth_addon");
+  if (main.length === 0) return issues;
+
+  if (puzzleLinks.length === 0) {
+    issues.push({
+      code: "STORY_PROGRESSION_NO_LINKS",
+      severity: "error",
+      field: "storyPlan.puzzleLinks",
+      message: "Puzzle set has no progression links — it reads as a random bag of mechanics with no path to the end goal.",
+      requiredChange: "Map every puzzle to an ordered stage that escalates toward the mission objective.",
+    });
+  }
+
+  const linkedIds = new Set(puzzleLinks.map((l) => l.puzzleId));
+  for (const puzzle of main) {
+    if (puzzleLinks.length > 0 && !linkedIds.has(puzzle.id)) {
+      issues.push({
+        code: "STORY_ORPHAN_PUZZLE",
+        severity: "error",
+        field: `puzzle.${puzzle.id}`,
+        message: `"${puzzle.title}" is an orphan — it is not linked to any story stage or progression beat.`,
+        requiredChange: "Give the puzzle a stage role and unlock, or replace it with one that advances the storyline.",
+      });
+    }
+    const fit = (puzzle.themeFitReason ?? "").trim();
+    if (fit.length < 24) {
+      issues.push({
+        code: "STORY_PUZZLE_FIT_THIN",
+        severity: "warn",
+        field: `puzzle.${puzzle.id}.themeFitReason`,
+        message: `"${puzzle.title}" lacks a themeFitReason that ties its mechanism to the storyline.`,
+        requiredChange: "Add one sentence on how this mechanism fits the theme's story and advances the plot.",
+      });
+    }
+  }
+
+  if (!missionObjective.trim()) {
+    issues.push({
+      code: "STORY_NO_OBJECTIVE",
+      severity: "warn",
+      field: "storyPlan.missionObjective",
+      message: "No mission objective for the progression to escalate toward.",
+      requiredChange: "State the room's end goal so stages can build toward it.",
+    });
+  }
+
   return issues;
 };
