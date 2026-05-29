@@ -1,6 +1,6 @@
 {
   "name": "escape-room-builder-frontend",
-  "version": "1.0.145",
+  "version": "1.0.147",
   "private": true,
   "type": "module",
   "engines": {
@@ -15,6 +15,7 @@
     "dev": "vite",
     "favicons": "node scripts/generate-favicons.mjs",
     "build": "tsc -b && vite build",
+    "test:unit": "vitest run",
     "preview": "vite preview",
     "upload": "powershell -ExecutionPolicy Bypass -File ./scripts/upload-dist.ps1"
   },
@@ -45,6 +46,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "sharp": "^0.34.5",
     "typescript": "^5.6.2",
-    "vite": "^8.0.12"
+    "vite": "^8.0.12",
+    "vitest": "^3.2.4"
   }
 }

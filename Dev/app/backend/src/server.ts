@@ -12,6 +12,7 @@ import { billingPlanById, quotePlanCheckout, resolveBillingPlanId, type BillingP
 import { countActiveVenueLiveSessions, getActiveLiveConnectionStats, registerLiveRoutes } from "./liveGame.js";
 import { fleetActivationError, liveOpsFrozenError } from "./enterpriseGate.js";
 import type { TargetInterface } from "../../shared/contracts.js";
+import { formatRoomLayoutMarkdown, validateRoomLayout, type RoomLayoutDocument } from "../../shared/roomLayout.js";
 import { targetInterfaceToOperatingMode, type OperatingMode } from "../../shared/liveContracts.js";
 import { registerBillingRoutes, registerSquareWebhook, type BillingRouteDeps } from "./billing/routes.js";
 import {
@@ -262,6 +263,8 @@ type SessionState = {
     venueBuildType: VenueBuildType;
     /** Explicit home vs venue live-ops path (Step 1). */
     targetInterface: TargetInterface;
+    /** Optional floor plan from Room Details layout designer. */
+    roomLayout?: RoomLayoutDocument;
   };
   /** Custom-theme coach transcript; only exposed via authed session APIs for the session owner. */
   themeCoachChat: ThemeCoachStoredMessage[];
@@ -4956,6 +4959,21 @@ app.patch("/api/planning/session/:sessionId/planning-input", (req, res) => {
     return;
   }
   const bodyRaw = req.body as Record<string, unknown>;
+  let nextRoomLayout: RoomLayoutDocument | undefined = session.planningInput.roomLayout;
+  if ("roomLayout" in bodyRaw) {
+    if (bodyRaw.roomLayout == null) {
+      nextRoomLayout = undefined;
+    } else {
+      const parsedLayout = validateRoomLayout(bodyRaw.roomLayout);
+      if (!parsedLayout) {
+        res.status(400).json({
+          error: { code: "ROOM_LAYOUT_INVALID", message: "roomLayout failed validation.", details: [] },
+        });
+        return;
+      }
+      nextRoomLayout = parsedLayout;
+    }
+  }
   session.planningInput = {
     playersConcurrent: Number(playersConcurrent),
     participantsTotal: Number(participantsTotal),
@@ -5006,6 +5024,7 @@ app.patch("/api/planning/session/:sessionId/planning-input", (req, res) => {
       "targetInterface" in bodyRaw
         ? parseTargetInterface(bodyRaw.targetInterface, session.planningInput.targetInterface)
         : session.planningInput.targetInterface,
+    roomLayout: nextRoomLayout,
   };
   session.operatingMode = deriveSessionOperatingMode(session, req);
   res.json({ ok: true, operatingMode: session.operatingMode });
@@ -5975,6 +5994,9 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
     ...(session.currentStoryPlan?.stagingDiagram
       ? session.currentStoryPlan.stagingDiagram.split("\n")
       : ["- _Generate puzzles to produce a numbered staging map._"]),
+    "",
+    "## Floor plan staging (layout designer)",
+    ...formatRoomLayoutMarkdown(session.planningInput.roomLayout),
     "",
     "<!-- pdf-page-break -->",
     "",

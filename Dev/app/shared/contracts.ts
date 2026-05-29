@@ -1,3 +1,5 @@
+import type { RoomLayoutDocument } from "./roomLayout.js";
+
 export type Difficulty = "easy" | "medium" | "hard";
 export type PuzzleCategory = "logic" | "physical" | "electronic";
 
@@ -32,6 +34,8 @@ export interface PlanningInput {
   propFabrication3dEnabled?: boolean;
   /** Subset of mechanical vs decorative print intent when 3D printing is enabled. */
   propFabricationKinds?: ("mechanical" | "decorative")[];
+  /** Optional interactive floor-plan from Room Details layout designer. */
+  roomLayout?: RoomLayoutDocument;
 }
 
 export interface Theme {
