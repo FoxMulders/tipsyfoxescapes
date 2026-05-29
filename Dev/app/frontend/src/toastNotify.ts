@@ -8,6 +8,7 @@ export const TOAST_ID = {
   blueprintSkeleton: "blueprint-skeleton-plotted",
   browserThemes: "browser-themes-generated",
   browserPuzzles: "browser-puzzles-generated",
+  coachBriefApplied: "coach-brief-applied",
 } as const;
 
 const SIGN_IN_FOR_PUZZLES = "sign in to generate puzzles";

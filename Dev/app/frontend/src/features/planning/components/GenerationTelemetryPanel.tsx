@@ -10,7 +10,7 @@ export function GenerationEngineBadge({ engine, loading }: GenerationEngineBadge
   if (loading) {
     return (
       <span className="generation-engine-badge generation-engine-badge--loading" role="status">
-        Council deliberating…
+        Generating…
       </span>
     );
   }
@@ -37,22 +37,17 @@ type CouncilTelemetryPanelProps = {
   browserAiReady?: boolean;
 };
 
-export function CouncilTelemetryPanel({ loading, telemetry, compact, serverOpenAiConfigured, browserAiReady }: CouncilTelemetryPanelProps) {
+export function CouncilTelemetryPanel({ loading, telemetry, compact }: CouncilTelemetryPanelProps) {
   if (loading) {
     return (
       <section className="council-telemetry council-telemetry--loading" aria-live="polite" aria-busy="true">
         <header className="council-telemetry__head">
-          <h4 className="council-telemetry__title">Council of Ten</h4>
+          <h4 className="council-telemetry__title">Generation engine</h4>
           <GenerationEngineBadge engine="static_catalog" loading={true} />
         </header>
         <p className="council-telemetry__lead muted text-sm">
-          Compiling room skeleton, diegetic puzzles, and preview firmware — then ten expert personas score the design.
+          Building your puzzle set and room layout preview…
         </p>
-        <ul className="council-telemetry__persona-skeleton" aria-hidden="true">
-          {Array.from({ length: 10 }, (_, i) => (
-            <li key={i} className="council-telemetry__persona-skeleton-row" />
-          ))}
-        </ul>
       </section>
     );
   }
@@ -64,42 +59,21 @@ export function CouncilTelemetryPanel({ loading, telemetry, compact, serverOpenA
           <h4 className="council-telemetry__title">Generation engine</h4>
           <GenerationEngineBadge engine="static_catalog" />
         </header>
-        {serverOpenAiConfigured === false ? (
-          browserAiReady ? (
-            <p className="council-telemetry__hint text-sm">
-              Server AI is offline, but <strong>Chrome on-device generation</strong> can draft original themes and puzzles when
-              you continue to theme selection and build the puzzle set.
-            </p>
-          ) : (
-            <p className="council-telemetry__warn text-sm" role="alert">
-              <strong>OPENAI_API_KEY is missing on the server</strong> and on-device AI is unavailable in this browser. Use Chrome
-              with the Language Model API enabled, or add the server key in Vercel and redeploy.
-            </p>
-          )
-        ) : (
-          <>
-            <p className="muted text-sm">
-              Master Generator and Council of Ten run when you open <strong>Build puzzle set</strong> (step 3) with a theme
-              selected.
-            </p>
-            <ol className="council-telemetry__steps muted text-xs">
-              <li>Finish room details → Continue to theme selection</li>
-              <li>Pick a theme → open Build puzzle set</li>
-              <li>Wait ~30s — blueprint zones and council scores update</li>
-            </ol>
-          </>
-        )}
+        <p className="muted text-sm">
+          Themes and puzzles generate when you continue through the wizard — pick a theme, then open{" "}
+          <strong>Build puzzle set</strong>.
+        </p>
+        <ol className="council-telemetry__steps muted text-xs">
+          <li>Finish room details → Continue to theme selection</li>
+          <li>Pick or author a theme → Build puzzle set</li>
+          <li>Blueprint zones update as the set loads</li>
+        </ol>
       </section>
     );
   }
 
   const council = telemetry.councilReport;
   const browserGenerated = telemetry.engine === "browser_generated";
-  const missingKey =
-    !browserGenerated &&
-    (telemetry.diagnostics?.openAiConfigured === false ||
-      telemetry.diagnostics?.staticReason === "missing_openai_key" ||
-      serverOpenAiConfigured === false);
   return (
     <section className="council-telemetry" aria-live="polite">
       <header className="council-telemetry__head">
@@ -108,19 +82,12 @@ export function CouncilTelemetryPanel({ loading, telemetry, compact, serverOpenA
       </header>
       {browserGenerated ? (
         <p className="council-telemetry__hint text-sm">
-          {telemetry.diagnostics?.opsHint ??
-            "Drafted in Chrome via on-device Language Model, validated on the server. Council of Ten is skipped on this path."}
-        </p>
-      ) : missingKey ? (
-        <p className="council-telemetry__warn text-sm" role="alert">
-          <strong>OPENAI_API_KEY is not configured on the server.</strong>{" "}
-          {telemetry.diagnostics?.opsHint ??
-            "Add the key in Vercel production env vars and redeploy, then refresh themes and regenerate puzzles."}
+          Original themes and puzzles drafted on this device, then validated for your room plan.
         </p>
       ) : telemetry.masterAttempted && telemetry.engine !== "ai_generated" ? (
-        <p className="council-telemetry__warn text-sm" role="note">
-          Master Generator was attempted but this set came from the static catalog — check OpenAI key, catalog tier, or council
-          revision loops.
+        <p className="council-telemetry__hint text-sm" role="note">
+          Using curated starter puzzles aligned to your theme — use <strong>Refresh Ideas</strong> or replace individual slots
+          for more variety.
         </p>
       ) : null}
       {council ? (
@@ -164,10 +131,10 @@ export function CouncilTelemetryPanel({ loading, telemetry, compact, serverOpenA
       ) : (
         <p className="muted text-sm">
           {telemetry.engine === "ai_generated"
-            ? "AI puzzles generated without council metadata (legacy path)."
-            : missingKey
-              ? "Static catalog only — Council did not run because OpenAI is not configured."
-              : "Static catalog path — no council evaluation."}
+            ? "AI-generated puzzle set for your theme."
+            : telemetry.engine === "browser_generated"
+              ? "On-device draft validated for your room."
+              : "Curated puzzle set matched to your theme and capacity."}
         </p>
       )}
       <p className="council-telemetry__ts muted text-xs">

@@ -4,6 +4,7 @@ import {
   isAllowedCoachUserReply,
   normalizeCoachOptions,
   parseCoachChoiceOptions,
+  parseCoachComplete,
   type ThemeCoachChoiceMessage,
 } from "../../../../shared/themeCoachOptions.ts";
 
@@ -15,12 +16,13 @@ export function newCoachMessageId(): string {
     : `coach-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export { buildAssistantCoachMessage, isAllowedCoachUserReply, normalizeCoachOptions, parseCoachChoiceOptions, enforceSingleCoachQuestion };
+export { buildAssistantCoachMessage, isAllowedCoachUserReply, normalizeCoachOptions, parseCoachChoiceOptions, parseCoachComplete, enforceSingleCoachQuestion };
 
 export const getLatestPendingCoachOptions = (messages: ThemeCoachUiMessage[]): string[] => {
   if (messages.length === 0) return [];
   const last = messages[messages.length - 1];
   if (!last || last.role !== "assistant") return [];
+  if (last.coachComplete) return [];
   if (last.options?.length) return normalizeCoachOptions(last.options);
   return parseCoachChoiceOptions(last.content).options;
 };
@@ -42,3 +44,16 @@ export const getCoachCoverageStatus = (messages: ThemeCoachUiMessage[]): { done:
   const doneLabels = COACH_COVERAGE_CHECKS.filter((check) => check.re.test(userText)).map((check) => check.label);
   return { done: doneLabels.length, total: COACH_COVERAGE_CHECKS.length, doneLabels };
 };
+
+/** Coach or heuristics say the interview can end and the brief can be drafted. */
+export const isCoachReadyToSynthesize = (messages: ThemeCoachUiMessage[]): boolean => {
+  const userCount = messages.filter((m) => m.role === "user").length;
+  if (userCount === 0) return false;
+  if (messages.some((m) => m.role === "assistant" && m.coachComplete)) return true;
+  if (userCount < 3) return false;
+  const { done } = getCoachCoverageStatus(messages);
+  return done >= 4;
+};
+
+export const coachInterviewComplete = (messages: ThemeCoachUiMessage[]): boolean =>
+  messages.some((m) => m.role === "assistant" && m.coachComplete);

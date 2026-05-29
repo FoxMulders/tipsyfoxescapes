@@ -41,6 +41,9 @@ const COACH_SYSTEM = [
   "- Every reply MUST end with a final line exactly like: CHOICE_OPTIONS: Option A | Option B | Option C",
   "  Provide 3–6 concise, mutually exclusive answer buttons that answer ONLY that one question (no open-ended typing).",
   "  Example question: “Who is the primary audience?” → CHOICE_OPTIONS: Family-friendly | Teen / adult mix | Adults only | Corporate team-building",
+  "- When you judge you have enough for a strong puzzle-ready brief (typically 4+ of: audience, tone, boundaries, centerpiece, tech level, ops constraints),",
+  "  do NOT ask another question. End with exactly one line: COACH_COMPLETE: short summary of what you understood.",
+  "  Do NOT include CHOICE_OPTIONS on that final message.",
 ].join(" ");
 
 const buildCoachUserPayload = (context: CustomThemeCoachContext, history: CustomThemeCoachMessage[], userMessage: string | null): string => {

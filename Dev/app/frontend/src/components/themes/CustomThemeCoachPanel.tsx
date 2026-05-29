@@ -1,5 +1,5 @@
 import type { ThemeCoachUiMessage } from "./themeCoachUtils";
-import { getLatestPendingCoachOptions } from "./themeCoachUtils";
+import { coachInterviewComplete, getLatestPendingCoachOptions } from "./themeCoachUtils";
 
 export function CustomThemeCoachPanel({
   messages,
@@ -28,8 +28,9 @@ export function CustomThemeCoachPanel({
 }) {
   const canApply = messages.some((m) => m.role === "user");
   const hasAssistantMessage = messages.some((m) => m.role === "assistant");
+  const interviewComplete = coachInterviewComplete(messages);
   const pendingOptions = getLatestPendingCoachOptions(messages);
-  const showOptionPicker = pendingOptions.length > 0 && !busy;
+  const showOptionPicker = pendingOptions.length > 0 && !busy && !interviewComplete;
   const startDisabled = busy || !aiAvailable || hasAssistantMessage || !coachPrereqsOk;
   const startTitle = !coachPrereqsOk
     ? "Complete room details and a theme name first."
@@ -125,9 +126,13 @@ export function CustomThemeCoachPanel({
             ))}
           </div>
         </div>
+      ) : interviewComplete && !busy ? (
+        <p className="theme-coach-complete muted" role="status">
+          Interview complete — your theme description field above was updated from your answers. Edit it if you like, then continue.
+        </p>
       ) : hasAssistantMessage && !busy && pendingOptions.length === 0 ? (
         <p className="muted theme-coach-options-missing" role="status">
-          The coach did not offer answer buttons. Use <strong>Clear chat</strong> and start again.
+          Applying your answers to the description… or use <strong>Apply answers to description</strong> if needed.
         </p>
       ) : null}
       <div className="theme-coach-actions">

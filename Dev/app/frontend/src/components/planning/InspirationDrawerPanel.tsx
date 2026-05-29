@@ -185,8 +185,7 @@ export function InspirationDrawerPanel({
           </button>
           {aiEnabled === false ? (
             <p className="inspiration-ai-config-warn" role="status">
-              <span aria-hidden="true">⚠</span> AI generation unavailable — <code>OPENAI_API_KEY</code> is not configured in
-              your environment. Sample concepts will be shown instead.
+              Live AI concepts are not available in this session — showing curated sample ideas matched to your room instead.
             </p>
           ) : null}
           {inspirationAiError ? <p className="error-banner inspiration-ai-error">{inspirationAiError}</p> : null}

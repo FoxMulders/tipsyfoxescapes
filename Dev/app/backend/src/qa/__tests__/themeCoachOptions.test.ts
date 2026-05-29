@@ -4,6 +4,7 @@ import {
   enforceSingleCoachQuestion,
   isAllowedCoachUserReply,
   parseCoachChoiceOptions,
+  parseCoachComplete,
   validateThemeCoachTranscript,
 } from "../../../../shared/themeCoachOptions.js";
 
@@ -37,6 +38,20 @@ describe("themeCoachOptions", () => {
     );
     expect(msg.content).toBe("Who is the audience?");
     expect(msg.options).toEqual(["Kids", "Adults"]);
+  });
+
+  it("parses COACH_COMPLETE and omits choice options", () => {
+    const parsed = parseCoachComplete(
+      "Great — I have enough for a strong brief.\nCOACH_COMPLETE: Family-friendly spy lab with light tech.",
+    );
+    expect(parsed.complete).toBe(true);
+    expect(parsed.content).toContain("Family-friendly spy lab");
+    const msg = buildAssistantCoachMessage(
+      "Great — I have enough.\nCOACH_COMPLETE: Family-friendly spy lab with light tech.",
+      "a2",
+    );
+    expect(msg.coachComplete).toBe(true);
+    expect(msg.options).toBeUndefined();
   });
 
   it("rejects free-text user messages on sync", () => {

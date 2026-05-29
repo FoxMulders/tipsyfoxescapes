@@ -136,6 +136,7 @@ import {
   getCoachCoverageStatus,
   getLatestPendingCoachOptions,
   isAllowedCoachUserReply,
+  isCoachReadyToSynthesize,
   newCoachMessageId,
   type ThemeCoachUiMessage,
 } from "@/components/themes/themeCoachUtils";
@@ -5220,6 +5221,49 @@ export default function App() {
     return ready;
   }, []);
 
+  const applyCoachBriefFromMessages = useCallback(
+    async (messages: ThemeCoachUiMessage[], options?: { manageBusy?: boolean }): Promise<boolean> => {
+      if (!customThemeCoachPrereqsOk) {
+        setCustomThemeCoachError("Complete room details and a theme name before applying.");
+        return false;
+      }
+      if (!messages.some((m) => m.role === "user")) {
+        setCustomThemeCoachError("Send at least one answer to the coach before applying.");
+        return false;
+      }
+      if (!(await ensureCoachBrowserAi())) {
+        setCustomThemeCoachError("Built-in AI is not available—cannot apply answers.");
+        return false;
+      }
+      const manageBusy = options?.manageBusy !== false;
+      setCustomThemeCoachError("");
+      if (manageBusy) setCustomThemeCoachBusy(true);
+      try {
+        const ctx = getCustomThemeCoachContext();
+        const { customThemeCoachSynthesize } = await import("./browserAiCoach.ts");
+        const desc = await customThemeCoachSynthesize(ctx, toCoachHistory(messages));
+        if (!desc) {
+          setCustomThemeCoachError("Could not build a description from the chat. Try again or edit manually.");
+          return false;
+        }
+        setCustomThemeDescription(desc);
+        toastMessageOnce("Theme description updated from your coach answers.", TOAST_ID.coachBriefApplied);
+        return true;
+      } finally {
+        if (manageBusy) setCustomThemeCoachBusy(false);
+      }
+    },
+    [customThemeCoachPrereqsOk, ensureCoachBrowserAi],
+  );
+
+  const maybeAutoApplyCoachBrief = useCallback(
+    async (messages: ThemeCoachUiMessage[]): Promise<void> => {
+      if (!isCoachReadyToSynthesize(messages)) return;
+      await applyCoachBriefFromMessages(messages, { manageBusy: false });
+    },
+    [applyCoachBriefFromMessages],
+  );
+
   const resetCustomThemeCoach = (): void => {
     setCustomThemeCoachMessages([]);
     setCustomThemeCoachError("");
@@ -5243,7 +5287,10 @@ export default function App() {
         setCustomThemeCoachError("The coach did not return a reply. Try again or check browser AI settings.");
         return;
       }
-      setCustomThemeCoachMessages((prev) => [...prev, buildAssistantCoachMessage(reply, newCoachMessageId())]);
+      const assistantMsg = buildAssistantCoachMessage(reply, newCoachMessageId());
+      const nextMessages = [...customThemeCoachMessages, assistantMsg];
+      setCustomThemeCoachMessages(nextMessages);
+      await maybeAutoApplyCoachBrief(nextMessages);
     } finally {
       setCustomThemeCoachBusy(false);
     }
@@ -5266,50 +5313,33 @@ export default function App() {
       return;
     }
     setCustomThemeCoachError("");
-    const historyBefore = toCoachHistory(customThemeCoachMessages);
-    setCustomThemeCoachMessages((prev) => [...prev, { id: newCoachMessageId(), role: "user", content: option.trim() }]);
+    const userMsg: ThemeCoachUiMessage = { id: newCoachMessageId(), role: "user", content: option.trim() };
+    const messagesWithUser = [...customThemeCoachMessages, userMsg];
+    setCustomThemeCoachMessages(messagesWithUser);
     setCustomThemeCoachBusy(true);
     try {
+      if (isCoachReadyToSynthesize(messagesWithUser)) {
+        await applyCoachBriefFromMessages(messagesWithUser, { manageBusy: false });
+        return;
+      }
       const ctx = getCustomThemeCoachContext();
       const { customThemeCoachTurn } = await import("./browserAiCoach.ts");
-      const reply = await customThemeCoachTurn(ctx, historyBefore, option.trim());
+      const reply = await customThemeCoachTurn(ctx, toCoachHistory(customThemeCoachMessages), option.trim());
       if (!reply) {
         setCustomThemeCoachError("No reply from the coach. Try again.");
         return;
       }
-      setCustomThemeCoachMessages((prev) => [...prev, buildAssistantCoachMessage(reply, newCoachMessageId())]);
+      const assistantMsg = buildAssistantCoachMessage(reply, newCoachMessageId());
+      const nextMessages = [...messagesWithUser, assistantMsg];
+      setCustomThemeCoachMessages(nextMessages);
+      await maybeAutoApplyCoachBrief(nextMessages);
     } finally {
       setCustomThemeCoachBusy(false);
     }
   };
 
   const handleSynthesizeCustomThemeCoach = async (): Promise<void> => {
-    if (!customThemeCoachPrereqsOk) {
-      setCustomThemeCoachError("Complete room details and a theme name before applying.");
-      return;
-    }
-    if (!customThemeCoachMessages.some((m) => m.role === "user")) {
-      setCustomThemeCoachError("Send at least one answer to the coach before applying.");
-      return;
-    }
-    if (!(await ensureCoachBrowserAi())) {
-      setCustomThemeCoachError("Built-in AI is not available—cannot apply answers.");
-      return;
-    }
-    setCustomThemeCoachError("");
-    setCustomThemeCoachBusy(true);
-    try {
-      const ctx = getCustomThemeCoachContext();
-      const { customThemeCoachSynthesize } = await import("./browserAiCoach.ts");
-      const desc = await customThemeCoachSynthesize(ctx, toCoachHistory(customThemeCoachMessages));
-      if (!desc) {
-        setCustomThemeCoachError("Could not build a description from the chat. Try again or edit manually.");
-        return;
-      }
-      setCustomThemeDescription(desc);
-    } finally {
-      setCustomThemeCoachBusy(false);
-    }
+    await applyCoachBriefFromMessages(customThemeCoachMessages);
   };
 
   useEffect(() => {
@@ -5392,10 +5422,14 @@ export default function App() {
             setCustomThemeCoachError("The coach did not return a reply. Try “Start conversation” or check browser AI settings.");
             return;
           }
+          const assistantMsg = buildAssistantCoachMessage(reply, newCoachMessageId());
           setCustomThemeCoachMessages((prev) => {
             if (prev.length > 0) return prev;
-            return [...prev, buildAssistantCoachMessage(reply, newCoachMessageId())];
+            return [...prev, assistantMsg];
           });
+          if (customThemeCoachMessagesRef.current.length === 0) {
+            await maybeAutoApplyCoachBrief([assistantMsg]);
+          }
         } finally {
           if (!cancelled) setCustomThemeCoachBusy(false);
         }
@@ -5405,7 +5439,7 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [wizardStep, themePath, customThemeCoachPrereqsOk, sessionId, ensureCoachBrowserAi]);
+  }, [wizardStep, themePath, customThemeCoachPrereqsOk, sessionId, ensureCoachBrowserAi, maybeAutoApplyCoachBrief]);
 
   useEffect(() => {
     if (!authToken || !sessionId || themePath !== "custom") return;
@@ -5419,6 +5453,7 @@ export default function App() {
             role: m.role,
             content: m.content,
             ...(m.options?.length ? { options: m.options } : {}),
+            ...(m.coachComplete ? { coachComplete: true } : {}),
           })),
         }),
       }).catch(() => {
@@ -7268,28 +7303,10 @@ export default function App() {
                           <div className="theme-generating-spinner" aria-hidden="true">
                             <span /><span /><span />
                           </div>
-                          <p className="theme-generating-headline">
-                            {serverOpenAiConfigured === false && !browserAiReady
-                              ? "Loading theme catalog…"
-                              : "Generating original themes…"}
-                          </p>
+                          <p className="theme-generating-headline">Generating theme ideas…</p>
                           <p className="theme-generating-sub muted">
-                            {serverOpenAiConfigured === false && !browserAiReady ? (
-                              <>
-                                <strong>OPENAI_API_KEY</strong> is not set on the server and on-device AI is unavailable — showing
-                                the static theme pool.
-                              </>
-                            ) : serverOpenAiConfigured === false ? (
-                              <>
-                                Drafting unique themes in Chrome&apos;s on-device Language Model — this can take up to{" "}
-                                <strong>60 seconds</strong>.
-                              </>
-                            ) : (
-                              <>
-                                The AI is crafting 3 unique escape-room concepts tailored to your setup. This usually takes{" "}
-                                <strong>10–20 seconds</strong> — hang tight.
-                              </>
-                            )}
+                            Crafting escape-room concepts tailored to your room setup — this usually takes{" "}
+                            <strong>10–60 seconds</strong>.
                           </p>
                           <div className="theme-generating-bar" aria-hidden="true">
                             <div className="theme-generating-bar__fill" />

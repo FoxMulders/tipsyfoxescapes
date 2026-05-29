@@ -4,6 +4,8 @@ export type ThemeCoachChoiceMessage = {
   content: string;
   /** Present on assistant turns — allowed user selections for the next reply. */
   options?: string[];
+  /** Coach has enough context; no further questions. */
+  coachComplete?: boolean;
 };
 
 const MAX_OPTIONS = 8;
@@ -75,6 +77,10 @@ export const validateThemeCoachTranscript = (messages: ThemeCoachChoiceMessage[]
 
   for (const msg of messages) {
     if (msg.role === "assistant") {
+      if (msg.coachComplete) {
+        pendingOptions = null;
+        continue;
+      }
       const parsed = msg.options?.length ? normalizeCoachOptions(msg.options) : parseCoachChoiceOptions(msg.content).options;
       pendingOptions = parsed.length > 0 ? parsed : null;
       continue;
@@ -116,10 +122,42 @@ export const enforceSingleCoachQuestion = (content: string): string => {
   return outLines.join("\n").trim();
 };
 
+/** Parse COACH_COMPLETE line — interview done, no more CHOICE_OPTIONS. */
+export const parseCoachComplete = (raw: string): { content: string; complete: boolean } => {
+  const lines = raw.replace(/\r\n/g, "\n").split("\n");
+  let complete = false;
+  const contentLines: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const completeMatch = trimmed.match(/^COACH_COMPLETE:\s*(.*)$/i);
+    if (completeMatch) {
+      complete = true;
+      const tail = (completeMatch[1] ?? "").trim();
+      if (tail) contentLines.push(tail);
+      continue;
+    }
+    if (/^CHOICE_OPTIONS:/i.test(trimmed)) continue;
+    contentLines.push(line);
+  }
+  const content = contentLines.join("\n").trim();
+  return { content, complete };
+};
+
 export const buildAssistantCoachMessage = (
   raw: string,
   id: string,
 ): ThemeCoachChoiceMessage => {
+  const { content: completeBody, complete } = parseCoachComplete(raw);
+  if (complete) {
+    return {
+      id,
+      role: "assistant",
+      content:
+        completeBody ||
+        "I have enough to draft a strong theme brief from your answers — applying it to the description field now.",
+      coachComplete: true,
+    };
+  }
   const { content, options } = parseCoachChoiceOptions(raw);
   const singleQuestionContent = enforceSingleCoachQuestion(content);
   return {
