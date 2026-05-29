@@ -2232,6 +2232,37 @@ button:hover {
   justify-content: flex-end;
 }
 
+.theme-ideas-actions--generate {
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid rgba(141, 177, 245, 0.14);
+}
+
+.theme-ideas-generate-lead {
+  margin: 0;
+  flex: 1 1 12rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.theme-generate-new-btn {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .theme-ideas-actions--generate {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .theme-generate-new-btn {
+    width: 100%;
+  }
+}
+
 .inline-space {
   margin: 0.22rem 0;
 }

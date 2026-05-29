@@ -3542,6 +3542,11 @@ export default function App() {
   };
 
   const hasFullCatalogAccess = Boolean(authUser?.hasFullCatalog);
+  const canGenerateNewThemes =
+    hasFullCatalogAccess ||
+    serverOpenAiConfigured === true ||
+    browserAiReady ||
+    coachBrowserAiReady;
   const canNavigateToOutputReview = Boolean(selectedThemeId.trim());
 
   const planCompletionPercent = useMemo(
@@ -6290,6 +6295,25 @@ export default function App() {
                 : null;
 
   const showBackInFlowHeader = !(flowWizardStep === "themes" && themePath !== "custom");
+  const themeRefreshButton = (
+    <button
+      type="button"
+      className="secondary-btn theme-generate-new-btn"
+      disabled={!canGenerateNewThemes || themeIdeasLoading}
+      title={
+        canGenerateNewThemes
+          ? "Draft a fresh set of theme concepts from your room details"
+          : hasFullCatalogAccess
+            ? undefined
+            : "Use Chrome on-device AI or upgrade to a room pack for rotating theme ideas"
+      }
+      aria-busy={themeIdeasLoading}
+      onClick={() => void loadThemes(themes.length > 0 ? "/api/themes/refresh" : "/api/themes/generate")}
+    >
+      {themeIdeasLoading ? "Generating…" : themes.length > 0 ? "Generate new themes" : "Generate themes"}
+    </button>
+  );
+
   const themeHeaderActions =
     flowWizardStep === "themes" && themePath !== "custom" ? (
       <div className="theme-header-actions" role="group" aria-label="Theme navigation">
@@ -6298,16 +6322,7 @@ export default function App() {
             ← Back
           </button>
         ) : null}
-        <button
-          type="button"
-          className="secondary-btn"
-          disabled={!hasFullCatalogAccess || themeIdeasLoading}
-          title={hasFullCatalogAccess ? undefined : "Features unlocked with subscription"}
-          aria-busy={themeIdeasLoading}
-          onClick={() => void loadThemes("/api/themes/refresh")}
-        >
-          {themeIdeasLoading ? "Refreshing…" : "Refresh Ideas"}
-        </button>
+        {themeRefreshButton}
       </div>
     ) : null;
 
@@ -7293,6 +7308,14 @@ export default function App() {
                 {themePath !== "custom" ? (
                   <>
                     <div className="subcard compact-block theme-selection-card">
+                      {themes.length > 0 && !themeIdeasLoading ? (
+                        <div className="theme-ideas-actions theme-ideas-actions--generate">
+                          <p className="muted theme-ideas-generate-lead">
+                            Want different concepts? Generate a fresh set — your room details stay the same.
+                          </p>
+                          {themeRefreshButton}
+                        </div>
+                      ) : null}
                       {themeSessionExpiredNotice ? (
                         <div className="theme-session-expired-card" role="alert">
                           {themeSessionExpiredNotice}
@@ -7314,7 +7337,10 @@ export default function App() {
                         </div>
                       ) : null}
                       {themes.length === 0 && !themeIdeasLoading && !themeSessionExpiredNotice ? (
-                        <p className="muted">Generating theme ideas for your room…</p>
+                        <div className="theme-ideas-actions theme-ideas-actions--generate">
+                          <p className="muted">Theme ideas did not load yet.</p>
+                          {themeRefreshButton}
+                        </div>
                       ) : null}
                       {themes.length > 0 ? (
                         <ul className={`theme-ideas-list ${validationFlags.selectedThemeId ? "invalid-list" : ""}`}>

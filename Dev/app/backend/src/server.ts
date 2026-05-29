@@ -5382,16 +5382,6 @@ app.post("/api/themes/browser-import", async (req, res) => {
     res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
     return;
   }
-  if (!hasFullCatalogAccessUser(billingUser)) {
-    res.status(403).json({
-      error: {
-        code: "SUBSCRIPTION_REQUIRED",
-        message: "On-device theme import requires a paid room pack or admin access.",
-        details: [],
-      },
-    });
-    return;
-  }
   const drafts = normalizeBrowserThemeDrafts(rawThemes);
   if (!drafts || drafts.length < 1) {
     res.status(400).json({
