@@ -5,6 +5,7 @@ export const TOAST_ID = {
   appError: "app-error",
   planningRecovery: "planning-session-recovery",
   signInForPuzzles: "sign-in-generate-puzzles",
+  blueprintSkeleton: "blueprint-skeleton-plotted",
 } as const;
 
 const SIGN_IN_FOR_PUZZLES = "sign in to generate puzzles";

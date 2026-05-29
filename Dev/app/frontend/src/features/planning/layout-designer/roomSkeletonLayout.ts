@@ -122,3 +122,34 @@ export function applyRoomSkeletonToLayout(
     elements: [...preserved, ...skeletonElements],
   };
 }
+
+/** Fallback spatial layout when Master Generator skeleton is unavailable (static catalog / no API key). */
+export function buildHeuristicRoomSkeleton(themeName: string, commercialVenue: boolean): RoomSkeleton {
+  const zones = [
+    {
+      zone_id: "entry",
+      name: "Entry briefing",
+      primary_player_action: "Receive the mission and orient players to the space.",
+    },
+    {
+      zone_id: "search",
+      name: "Search & discovery",
+      primary_player_action: "Find hidden clues in props and set dressing.",
+    },
+    {
+      zone_id: "core",
+      name: "Core challenge",
+      primary_player_action: "Solve the main logic or physical beat as a team.",
+    },
+    {
+      zone_id: "finale",
+      name: "Finale release",
+      primary_player_action: "Complete the escape or unlock the final door.",
+    },
+  ];
+  return {
+    flow_pattern: commercialVenue ? "multilinear" : "linear_4zone",
+    zones,
+    flow_summary: `Estimated ${commercialVenue ? "multilinear" : "linear"} flow for “${themeName.trim() || "your theme"}”. AI skeleton zones replace this when OpenAI is configured.`,
+  };
+}

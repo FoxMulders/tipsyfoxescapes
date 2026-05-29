@@ -87,7 +87,7 @@ import { CouncilTelemetryPanel } from "@/features/planning/components/Generation
 import type { GenerationTelemetry } from "@/features/planning/domain/generationTelemetry";
 import { PlanningProvider, type PlanningContextValue } from "@/features/planning/context/PlanningProvider";
 import { PlanningBridge } from "@/features/planning/context/PlanningBridge";
-import { applyRoomSkeletonToLayout } from "@/features/planning/layout-designer/roomSkeletonLayout";
+import { applyRoomSkeletonToLayout, buildHeuristicRoomSkeleton, layoutHasOnlyPresetShell } from "@/features/planning/layout-designer/roomSkeletonLayout";
 import type { RoomSkeleton } from "../../shared/roomSkeleton";
 import { estimatePuzzleNodes } from "@/features/planning/domain/estimatePuzzleNodes";
 import { EVENT_CONTEXT_PRESETS, ENVIRONMENT_CUSTOM_OPTION, ENVIRONMENT_PRESETS, getSuggestedPropOptionsForPlanning, isCommercialVenueEventContext, PROP_LABEL_BLOCKLIST } from "@/features/planning/domain/propPresets";
@@ -165,6 +165,9 @@ const HomePostExportModal = lazy(() =>
 );
 const CreativeEnginesWorkspace = lazy(() =>
   import("@/features/creative-engines/CreativeEnginesWorkspace.tsx").then((m) => ({ default: m.CreativeEnginesWorkspace })),
+);
+const BlueprintWorkspace = lazy(() =>
+  import("@/features/planning/components/BlueprintWorkspace").then((m) => ({ default: m.BlueprintWorkspace })),
 );
 
 const BRAND_NAME = "Tipsy Fox Escapes";
@@ -2115,6 +2118,7 @@ export default function App() {
   const [themeIdeasLoading, setThemeIdeasLoading] = useState(false);
   const [puzzlesGenerating, setPuzzlesGenerating] = useState(false);
   const [generationTelemetry, setGenerationTelemetry] = useState<GenerationTelemetry | null>(null);
+  const [lastRoomSkeleton, setLastRoomSkeleton] = useState<RoomSkeleton | null>(null);
   const [themeSessionExpiredNotice, setThemeSessionExpiredNotice] = useState("");
   const [selectedThemeId, setSelectedThemeId] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -4376,21 +4380,32 @@ export default function App() {
       setSuggestedAdditionsRequired(baseSuggestedRequired);
       setSuggestedAdditions(aiEnhancement?.suggestedAdditions?.length ? aiEnhancement.suggestedAdditions : baseSuggestedAdditions);
       setSuggestedSafetyProtocols(baseSafetyProtocols);
-      if (data.generationEngine) {
-        setGenerationTelemetry({
-          engine: data.generationEngine,
-          masterAttempted: Boolean(data.masterGeneratorAttempted),
-          generatedAt: new Date().toISOString(),
-          councilReport: data.councilReport,
-        });
-      }
-      if (data.roomSkeleton?.zones?.length && planningRef.current) {
-        const nextLayout = applyRoomSkeletonToLayout(planningRef.current.state.roomLayout, data.roomSkeleton);
-        planningRef.current.dispatch({ type: "SET_ROOM_LAYOUT", layout: nextLayout });
-        planningRef.current.dispatch({
-          type: "LAYOUT_ANNOUNCE",
-          message: `AI plotted ${data.roomSkeleton.zones.length} zones on the blueprint.`,
-        });
+      setGenerationTelemetry({
+        engine: data.generationEngine ?? "static_catalog",
+        masterAttempted: Boolean(data.masterGeneratorAttempted),
+        generatedAt: new Date().toISOString(),
+        councilReport: data.councilReport,
+      });
+      if (planningRef.current) {
+        const commercialVenue = planningRef.current.state.targetInterface === "commercial_venue";
+        const themeName = selectedTheme?.name ?? "your theme";
+        let skeletonToPlot: RoomSkeleton | undefined = data.roomSkeleton?.zones?.length ? data.roomSkeleton : undefined;
+        if (!skeletonToPlot && layoutHasOnlyPresetShell(planningRef.current.state.roomLayout)) {
+          skeletonToPlot = buildHeuristicRoomSkeleton(themeName, commercialVenue);
+        }
+        if (skeletonToPlot?.zones?.length) {
+          setLastRoomSkeleton(skeletonToPlot);
+          const nextLayout = applyRoomSkeletonToLayout(planningRef.current.state.roomLayout, skeletonToPlot);
+          planningRef.current.dispatch({ type: "SET_ROOM_LAYOUT", layout: nextLayout });
+          planningRef.current.dispatch({
+            type: "LAYOUT_ANNOUNCE",
+            message: `Plotted ${skeletonToPlot.zones.length} zones on the blueprint (${data.roomSkeleton ? "AI skeleton" : "estimated layout"}).`,
+          });
+          toastMessageOnce(
+            `Blueprint updated — ${skeletonToPlot.zones.length} zones plotted.`,
+            TOAST_ID.blueprintSkeleton,
+          );
+        }
       }
       return true;
     } catch (err) {
@@ -7439,6 +7454,20 @@ export default function App() {
                     </div>
                   ) : null}
                 </div>
+              </div>
+              <div className="puzzle-builder-layout__blueprint">
+                {lastRoomSkeleton?.flow_summary ? (
+                  <p className="blueprint-flow-summary muted text-sm" role="note">
+                    <strong>Spatial flow:</strong> {lastRoomSkeleton.flow_summary}
+                  </p>
+                ) : (
+                  <p className="blueprint-flow-summary muted text-sm" role="note">
+                    Generate puzzles to plot AI zones on this blueprint, or place nodes manually.
+                  </p>
+                )}
+                <Suspense fallback={<p className="muted p-4 text-sm">Loading blueprint…</p>}>
+                  <BlueprintWorkspace />
+                </Suspense>
               </div>
               <aside className="puzzle-builder-layout__telemetry glass-panel" aria-label="Generation telemetry">
                 <CouncilTelemetryPanel loading={puzzlesGenerating} telemetry={generationTelemetry} />

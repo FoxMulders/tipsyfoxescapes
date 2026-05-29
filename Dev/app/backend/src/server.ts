@@ -93,7 +93,7 @@ import {
   type LifecycleStatus,
 } from "./userLifecycle.js";
 import { allPuzzlesPassedPuzzleQa, applyPuzzleQaGate, type PuzzleQaReport } from "./puzzleQa.js";
-import { runMasterGenerator } from "./services/ai/masterGenerator.js";
+import { compileRoomSkeletonOnly, runMasterGenerator } from "./services/ai/masterGenerator.js";
 import { applyTargetInterfaceCategoryCounts } from "./generationPolicy.js";
 import type { RoomSkeleton } from "./services/ai/schemas/roomSkeleton.js";
 import type { CouncilAggregate } from "./services/ai/councilOfTen.js";
@@ -5464,34 +5464,35 @@ app.post("/api/puzzles/generate", async (req, res) => {
     sessionMinutes,
   );
 
-  // Attempt AI puzzle generation for full-catalog users when OpenAI is configured.
   const puzzleApiKey = String(process.env.OPENAI_API_KEY ?? "").trim();
-  const aiPuzzlesEnabled = Boolean(billingUser && hasFullCatalogAccessUser(billingUser)) && puzzleApiKey.startsWith("sk-");
+  const openAiConfigured = puzzleApiKey.startsWith("sk-");
+  const aiPuzzlesEnabled = Boolean(billingUser && hasFullCatalogAccessUser(billingUser)) && openAiConfigured;
 
   let aiGeneratedPuzzles: Puzzle[] = [];
   let masterRoomSkeleton: RoomSkeleton | undefined;
   let masterCouncilReport: SessionState["councilReport"];
   const masterAttempted = aiPuzzlesEnabled && logicCount + physicalCount + electronicCount > 0;
+  const masterInputBase = {
+    apiKey: puzzleApiKey,
+    theme: {
+      name: session.selectedTheme!.name,
+      tldr: session.selectedTheme!.tldr,
+    },
+    planning: {
+      environmentType: session.planningInput.environmentType,
+      availableItems: session.planningInput.availableItems,
+      playersConcurrent: session.planningInput.playersConcurrent,
+      sessionDurationMinutes: session.planningInput.sessionDurationMinutes,
+      eventType: session.planningInput.eventType,
+    },
+    categoryCounts: { logic: logicCount, physical: physicalCount, electronic: electronicCount },
+    targetDifficulty,
+    targetInterface: session.planningInput.targetInterface,
+    allocateId: () => `pz_ai_${nextAiPuzzleId++}`,
+  };
   if (masterAttempted) {
     try {
-      const master = await runMasterGenerator({
-        apiKey: puzzleApiKey,
-        theme: {
-          name: session.selectedTheme!.name,
-          tldr: session.selectedTheme!.tldr,
-        },
-        planning: {
-          environmentType: session.planningInput.environmentType,
-          availableItems: session.planningInput.availableItems,
-          playersConcurrent: session.planningInput.playersConcurrent,
-          sessionDurationMinutes: session.planningInput.sessionDurationMinutes,
-          eventType: session.planningInput.eventType,
-        },
-        categoryCounts: { logic: logicCount, physical: physicalCount, electronic: electronicCount },
-        targetDifficulty,
-        targetInterface: session.planningInput.targetInterface,
-        allocateId: () => `pz_ai_${nextAiPuzzleId++}`,
-      });
+      const master = await runMasterGenerator(masterInputBase);
       aiGeneratedPuzzles = master.puzzles;
       masterRoomSkeleton = master.roomSkeleton;
       masterCouncilReport = master.council
@@ -5512,6 +5513,13 @@ app.post("/api/puzzles/generate", async (req, res) => {
         : undefined;
     } catch (err) {
       console.error("[puzzles/generate] Master Generator failed — falling back to static pool:", err instanceof Error ? err.message : String(err));
+    }
+  } else if (openAiConfigured && billingUser && logicCount + physicalCount + electronicCount > 0) {
+    // Trial / preview: compile spatial skeleton only so blueprint + flow still update without full AI puzzle set.
+    try {
+      masterRoomSkeleton = await compileRoomSkeletonOnly(masterInputBase);
+    } catch (err) {
+      console.warn("[puzzles/generate] Room skeleton compile skipped:", err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -5657,7 +5665,7 @@ app.post("/api/puzzles/generate", async (req, res) => {
     puzzleAccess: fullAccess ? "full" : "preview",
     generationEngine,
     masterGeneratorAttempted: masterAttempted,
-    roomSkeleton: fullAccess ? session.roomSkeleton : undefined,
+    roomSkeleton: session.roomSkeleton,
     councilReport: session.councilReport,
     user: billingUser ? toPublicUser(billingUser) : undefined,
   });

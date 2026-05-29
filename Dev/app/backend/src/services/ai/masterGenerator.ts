@@ -63,6 +63,10 @@ const compileRoomSkeleton = async (
   });
 };
 
+/** Step 0 only — spatial skeleton without puzzle compile or council (trial / preview visibility). */
+export const compileRoomSkeletonOnly = async (input: MasterGeneratorInput): Promise<RoomSkeleton> =>
+  compileRoomSkeleton(input.apiKey, input);
+
 export const runMasterGenerator = async (input: MasterGeneratorInput): Promise<MasterGeneratorResult> => {
   const adjustedCounts = applyTargetInterfaceCategoryCounts(input.categoryCounts, input.targetInterface);
   let revisionNotes = "";

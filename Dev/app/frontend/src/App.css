@@ -7727,10 +7727,34 @@ ul.auth-hero-para {
 /* ── Master Generator telemetry ── */
 .puzzle-builder-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr) 360px;
   gap: var(--cad-grid-gap, 8px);
   align-items: start;
   min-width: 0;
+}
+
+.puzzle-builder-layout__blueprint {
+  position: sticky;
+  top: calc(var(--app-top-nav-height, 0px) + 0.5rem);
+  max-height: calc(100vh - var(--app-top-nav-height, 0px) - 2rem);
+  overflow: auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.puzzle-builder-layout__blueprint .blueprint-workspace {
+  flex: 1 1 auto;
+  min-height: 320px;
+}
+
+.blueprint-flow-summary {
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--cad-panel-radius, 8px);
+  border: var(--cad-panel-border, 1px solid hsl(187 70% 42% / 0.22));
+  background: hsl(187 70% 42% / 0.06);
 }
 
 .puzzle-builder-layout__main {
@@ -7942,6 +7966,18 @@ ul.auth-hero-para {
   overflow: auto;
   border-radius: 6px;
   background: hsl(0 0% 0% / 0.04);
+}
+
+@media (max-width: 1400px) {
+  .puzzle-builder-layout {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+
+  .puzzle-builder-layout__blueprint {
+    grid-column: 1 / -1;
+    position: static;
+    max-height: none;
+  }
 }
 
 @media (max-width: 1100px) {

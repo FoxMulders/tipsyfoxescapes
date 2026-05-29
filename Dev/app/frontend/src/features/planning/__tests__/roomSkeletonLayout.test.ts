@@ -3,6 +3,7 @@ import { DEFAULT_ROOM_LAYOUT } from "../../../../../shared/roomLayout";
 import type { RoomSkeleton } from "../../../../../shared/roomSkeleton";
 import {
   applyRoomSkeletonToLayout,
+  buildHeuristicRoomSkeleton,
   layoutHasOnlyPresetShell,
   roomSkeletonZonesToElements,
   skeletonElementId,
@@ -69,5 +70,12 @@ describe("roomSkeletonLayout", () => {
     const next = applyRoomSkeletonToLayout(edited, regenSkeleton);
     expect(next.elements.some((e) => e.id === "ly_custom")).toBe(true);
     expect(next.elements.filter((e) => e.id.startsWith("skel_"))).toHaveLength(3);
+  });
+
+  it("builds a four-zone heuristic skeleton for static catalog fallback", () => {
+    const heuristic = buildHeuristicRoomSkeleton("Haunted Library", false);
+    expect(heuristic.zones).toHaveLength(4);
+    expect(heuristic.flow_pattern).toBe("linear_4zone");
+    expect(heuristic.flow_summary).toContain("Haunted Library");
   });
 });
