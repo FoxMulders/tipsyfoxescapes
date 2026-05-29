@@ -43,71 +43,79 @@ export function CustomThemeCoachPanel({
           : undefined;
 
   return (
-    <div className="theme-coach-card" role="region" aria-label="Theme coach chat">
-      <h3 className="theme-coach-heading">Theme coach · built-in AI</h3>
-      <p className="muted theme-coach-lead">
-        The coach asks one short question per turn about tone, audience, and how your real room fits the story—pick the button
-        that answers that question (no free typing).
-      </p>
-      {!coachPrereqsOk ? (
-        <p className="theme-coach-locked-note" role="status">
-          Complete <strong>Room details</strong> on the previous step (environment, timing, and headcounts),
-          then enter a <strong>theme name</strong> above. The coach unlocks once both are in place so it can use your real room
-          context.
+    <div className="theme-coach-panel" role="region" aria-label="Theme coach chat">
+      <div className="theme-coach-card">
+        <h3 className="theme-coach-heading">Theme coach · built-in AI</h3>
+        <p className="muted theme-coach-lead">
+          The coach asks one short question per turn about tone, audience, and how your real room fits the story—pick the button
+          that answers that question (no free typing).
         </p>
-      ) : null}
-      <p className="muted theme-coach-security-note">
-        Structured replies only: choose from the coach&apos;s option buttons. This blocks prompt injection and accidental
-        secret pastes—do not use browser devtools to inject custom text.
-      </p>
-      {!accountSyncAvailable ? (
-        <p className="muted theme-coach-account-note">
-          Sign in to store this conversation on your account for this planning session. Other accounts cannot read it; without
-          sign-in, chat stays only in this browser until you leave the page.
+        {!coachPrereqsOk ? (
+          <p className="theme-coach-locked-note" role="status">
+            Complete <strong>Room details</strong> on the previous step (environment, timing, and headcounts),
+            then enter a <strong>theme name</strong> above. The coach unlocks once both are in place so it can use your real room
+            context.
+          </p>
+        ) : null}
+        <p className="muted theme-coach-security-note">
+          Structured replies only: choose from the coach&apos;s option buttons. This blocks prompt injection and accidental
+          secret pastes—do not use browser devtools to inject custom text.
         </p>
-      ) : (
-        <p className="muted theme-coach-account-note">
-          Chat is saved to your signed-in account for this planning session only.
-        </p>
-      )}
-      {!aiAvailable ? (
-        <div className="theme-coach-unavailable" role="note">
-          <p className="muted theme-coach-unavailable-lead">
-            On-device coach AI is not detected in this browser session. You can still write the theme description in the{" "}
-            <strong>field above</strong> and continue without the coach.
-          </p>
-          <p className="muted theme-coach-unavailable-flags">
-            In <strong>Chrome</strong> on desktop (recent stable or newer), enable built-in Gemini Nano, then relaunch: open{" "}
-            <code className="chrome-flag-chip">chrome://flags/#optimization-guide-on-device-model</code> → <strong>Enabled</strong>, and{" "}
-            <code className="chrome-flag-chip">chrome://flags/#prompt-api-for-gemini-nano</code> or{" "}
-            <code className="chrome-flag-chip">chrome://flags/#prompt-api-for-gemini-nano-multimodal-input</code> → <strong>Enabled</strong>.
-          </p>
-          <p className="muted theme-coach-unavailable-foot">
-            Option buttons stay off until the Prompt API is available here.
-          </p>
-        </div>
-      ) : null}
-      <p className="muted theme-coach-coverage">
-        Interview coverage: {coverage.done}/{coverage.total} core topics captured
-        {coverage.doneLabels.length > 0 ? ` (${coverage.doneLabels.join(", ")})` : ""}.
-      </p>
-      {localError ? <p className="error-banner theme-coach-error">{localError}</p> : null}
-      <div className="theme-coach-messages" tabIndex={0} aria-live="polite">
-        {messages.length === 0 ? (
-          <p className="muted theme-coach-empty">
-            {coachPrereqsOk
-              ? "When you start the coach, it will assess what is already clear from your room details and theme name, then offer clickable answers."
-              : "The coach stays closed until room details and a theme name are ready—see the note above."}
+        {!accountSyncAvailable ? (
+          <p className="muted theme-coach-account-note">
+            Sign in to store this conversation on your account for this planning session. Other accounts cannot read it; without
+            sign-in, chat stays only in this browser until you leave the page.
           </p>
         ) : (
-          messages.map((msg) => (
-            <div key={msg.id} className={`theme-coach-bubble theme-coach-bubble--${msg.role}`}>
-              <span className="theme-coach-bubble-label">{msg.role === "assistant" ? "Coach" : "You"}</span>
-              <div className="theme-coach-bubble-text">{msg.content}</div>
-            </div>
-          ))
+          <p className="muted theme-coach-account-note">
+            Chat is saved to your signed-in account for this planning session only.
+          </p>
         )}
-        {busy ? <p className="muted theme-coach-thinking">Thinking…</p> : null}
+        {!aiAvailable ? (
+          <div className="theme-coach-unavailable" role="note">
+            <p className="muted theme-coach-unavailable-lead">
+              On-device coach AI is not detected in this browser session. You can still write the theme description in the{" "}
+              <strong>field above</strong> and continue without the coach.
+            </p>
+            <p className="muted theme-coach-unavailable-flags">
+              In <strong>Chrome</strong> on desktop (recent stable or newer), enable built-in Gemini Nano, then relaunch: open{" "}
+              <code className="chrome-flag-chip">chrome://flags/#optimization-guide-on-device-model</code> → <strong>Enabled</strong>, and{" "}
+              <code className="chrome-flag-chip">chrome://flags/#prompt-api-for-gemini-nano</code> or{" "}
+              <code className="chrome-flag-chip">chrome://flags/#prompt-api-for-gemini-nano-multimodal-input</code> →{" "}
+              <strong>Enabled</strong>.
+            </p>
+            <p className="muted theme-coach-unavailable-foot">
+              Option buttons stay off until the Prompt API is available here.
+            </p>
+          </div>
+        ) : null}
+        <p className="muted theme-coach-coverage">
+          Interview coverage: {coverage.done}/{coverage.total} core topics captured
+          {coverage.doneLabels.length > 0 ? ` (${coverage.doneLabels.join(", ")})` : ""}.
+        </p>
+        {localError ? <p className="error-banner theme-coach-error">{localError}</p> : null}
+        <div className="theme-coach-messages" tabIndex={0} aria-live="polite">
+          {messages.length === 0 ? (
+            <p className="muted theme-coach-empty">
+              {coachPrereqsOk
+                ? "When you start the coach, it will assess what is already clear from your room details and theme name, then offer clickable answers."
+                : "The coach stays closed until room details and a theme name are ready—see the note above."}
+            </p>
+          ) : (
+            messages.map((msg) => (
+              <div key={msg.id} className={`theme-coach-bubble theme-coach-bubble--${msg.role}`}>
+                <span className="theme-coach-bubble-label">{msg.role === "assistant" ? "Coach" : "You"}</span>
+                <div className="theme-coach-bubble-text">{msg.content}</div>
+              </div>
+            ))
+          )}
+          {busy ? <p className="muted theme-coach-thinking">Thinking…</p> : null}
+        </div>
+        <div className="theme-coach-actions">
+          <button type="button" className="secondary-btn" onClick={onStart} disabled={startDisabled} title={startTitle}>
+            Start conversation
+          </button>
+        </div>
       </div>
       {showOptionPicker ? (
         <div className="theme-coach-options" role="group" aria-label="Choose your reply">
@@ -135,11 +143,6 @@ export function CustomThemeCoachPanel({
           Applying your answers to the description… or use <strong>Apply answers to description</strong> if needed.
         </p>
       ) : null}
-      <div className="theme-coach-actions">
-        <button type="button" className="secondary-btn" onClick={onStart} disabled={startDisabled} title={startTitle}>
-          Start conversation
-        </button>
-      </div>
       <div className="theme-coach-footer-actions">
         <button
           type="button"
