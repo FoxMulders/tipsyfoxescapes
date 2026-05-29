@@ -5,6 +5,7 @@
  */
 
 import { auditThemeFitNarrative } from "../../shared/qa/storyEditorRules.js";
+import { auditArduinoPreviewFirmware } from "./firmwarePreviewValidation.js";
 
 export type PuzzleReferenceLink = {
   title: string;
@@ -442,6 +443,15 @@ const auditElectronic = (puzzle: PuzzleForQa): PuzzleQaIssue[] => {
       severity: "warn",
       field: "electronicDetails.arduinoCode",
       message: "Input-reading sketch should include debounce or state-tracking (millis()/lastState) for reliable triggers.",
+    });
+  }
+
+  for (const fw of auditArduinoPreviewFirmware(code, parts)) {
+    issues.push({
+      code: fw.code,
+      severity: "error",
+      field: "electronicDetails.arduinoCode",
+      message: fw.message,
     });
   }
 

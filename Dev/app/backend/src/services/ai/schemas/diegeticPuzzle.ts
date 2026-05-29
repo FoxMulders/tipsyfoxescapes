@@ -20,12 +20,24 @@ export const DiegeticPuzzleSchema = z.object({
   banned_word_check: z.boolean(),
 });
 
+export const HardwarePinoutMapSchema = z
+  .record(z.string(), z.union([z.number().int().min(0).max(53), z.string().min(1)]))
+  .refine((map) => Object.keys(map).length >= 1, { message: "At least one pin mapping required." });
+
 export const ElectronicDetailsSchema = z.object({
   parts: z.array(z.string()).min(2),
   wiringDiagram: z.array(z.string()).min(2),
   wiringDiagramSvg: z.string(),
   buildSteps: z.array(z.string()).min(2),
-  arduinoCode: z.string().min(40),
+  hardware_pinout_map: HardwarePinoutMapSchema.describe(
+    "Map each hardware role to an Arduino Uno/Mega pin before writing setup(), e.g. {\"maglock_relay\": 7, \"reed_switch_1\": 2}.",
+  ),
+  arduinoCode: z
+    .string()
+    .min(40)
+    .describe(
+      "Preview firmware using ONLY Arduino core libraries (no Adafruit/ESP/WiFi headers unless that exact module is in parts). Use INPUT_PULLUP for switches, millis() in loop(), no blocking delay() except ≤50 ms debounce.",
+    ),
 });
 
 /** Step 2 — host-facing presentation derived from the validated physical layer. */

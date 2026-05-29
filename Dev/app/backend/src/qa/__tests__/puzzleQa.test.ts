@@ -50,7 +50,7 @@ describe("Puzzle QA (migrated)", () => {
         '<svg xmlns="http://www.w3.org/2000/svg"><text>Arduino</text><text>push button</text><text>green LED</text></svg>',
       buildSteps: ["Wire it", "Upload sketch"],
       arduinoCode:
-        "const int buttonPin = 2;\nconst int ledPin = 9;\nunsigned long lastPress = 0;\nvoid setup(){pinMode(buttonPin, INPUT);pinMode(ledPin, OUTPUT);}\nvoid loop(){ if(digitalRead(buttonPin)==HIGH && millis()-lastPress>200){lastPress=millis();digitalWrite(ledPin,HIGH);} }",
+        "const int buttonPin = 2;\nconst int ledPin = 9;\nunsigned long lastPress = 0;\nvoid setup(){pinMode(buttonPin, INPUT_PULLUP);pinMode(ledPin, OUTPUT);}\nvoid loop(){ if(digitalRead(buttonPin)==LOW && millis()-lastPress>200){lastPress=millis();digitalWrite(ledPin,HIGH);} }",
     },
   };
 
@@ -96,6 +96,40 @@ describe("Puzzle QA (migrated)", () => {
       { themeName: "Derelict Station", strict: true },
     );
     expect(report.issues.some((i) => i.code === "HARDWARE_NOT_MAPPED")).toBe(true);
+    expect(report.passed).toBe(false);
+  });
+
+  it("fails preview firmware with blocking delay()", () => {
+    const report = auditPuzzleQa(
+      {
+        ...validElectronic,
+        id: "qa_elec_delay",
+        electronicDetails: {
+          ...validElectronic.electronicDetails,
+          arduinoCode:
+            "const int ledPin = 9;\nvoid setup(){ pinMode(ledPin, OUTPUT); }\nvoid loop(){ digitalWrite(ledPin, HIGH); delay(500); digitalWrite(ledPin, LOW); delay(500); }",
+        },
+      },
+      { themeName: "Derelict Station", strict: true },
+    );
+    expect(report.issues.some((i) => i.code === "ARDUINO_BLOCKING_DELAY")).toBe(true);
+    expect(report.passed).toBe(false);
+  });
+
+  it("fails preview firmware with unapproved third-party includes", () => {
+    const report = auditPuzzleQa(
+      {
+        ...validElectronic,
+        id: "qa_elec_include",
+        electronicDetails: {
+          ...validElectronic.electronicDetails,
+          arduinoCode:
+            '#include <Adafruit_NeoPixel.h>\nconst int buttonPin = 2;\nunsigned long lastPress = 0;\nvoid setup(){ pinMode(buttonPin, INPUT_PULLUP); }\nvoid loop(){ if(digitalRead(buttonPin)==LOW && millis()-lastPress>200){ lastPress=millis(); } }',
+        },
+      },
+      { themeName: "Derelict Station", strict: true },
+    );
+    expect(report.issues.some((i) => i.code === "ARDUINO_UNAPPROVED_INCLUDE")).toBe(true);
     expect(report.passed).toBe(false);
   });
 

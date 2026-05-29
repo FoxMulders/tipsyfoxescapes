@@ -102,7 +102,9 @@ describe("PuzzlePresentationSchema", () => {
         wiringDiagram: ["D2 -> button -> GND", "D8 -> relay IN"],
         wiringDiagramSvg: "",
         buildSteps: ["Mount relay", "Upload sketch"],
-        arduinoCode: "void setup(){ pinMode(2, INPUT); pinMode(8, OUTPUT); }\nvoid loop(){ if(digitalRead(2)==HIGH){ digitalWrite(8,HIGH);} }",
+        hardware_pinout_map: { push_button: 2, relay_in: 8 },
+        arduinoCode:
+          "const int buttonPin = 2;\nconst int relayPin = 8;\nunsigned long lastPress = 0;\nvoid setup(){ pinMode(buttonPin, INPUT_PULLUP); pinMode(relayPin, OUTPUT); }\nvoid loop(){ if(digitalRead(buttonPin)==LOW && millis()-lastPress>200){ lastPress=millis(); digitalWrite(relayPin, HIGH);} }",
       },
     });
     expect(parsed.category).toBe("electronic");

@@ -4,8 +4,10 @@
  */
 
 import { auditPuzzleQa, type PuzzleForQa } from "../../puzzleQa.js";
+import { auditArduinoPreviewFirmware, formatPinoutMapComment } from "../../firmwarePreviewValidation.js";
 import { PUZZLE_GENERATION_INVENTORY_POLICY } from "../../puzzleManufacturingSchema.js";
 import { assembleDiegeticPuzzle, validateDiegeticFields } from "./diegeticValidation.js";
+import { STEP2_FIRMWARE_SYSTEM } from "./firmwarePreviewPrompt.js";
 import { callOpenAiStructured } from "./openaiStructured.js";
 import {
   DiegeticLayerSchema,
@@ -125,7 +127,9 @@ const mapToPuzzle = (
           wiringDiagram: presentation.electronicDetails.wiringDiagram,
           wiringDiagramSvg: presentation.electronicDetails.wiringDiagramSvg,
           buildSteps: presentation.electronicDetails.buildSteps,
-          arduinoCode: presentation.electronicDetails.arduinoCode,
+          arduinoCode:
+            formatPinoutMapComment(presentation.electronicDetails.hardware_pinout_map) +
+            presentation.electronicDetails.arduinoCode,
         }
       : undefined,
 });
@@ -183,7 +187,7 @@ const compilePuzzlePresentation = async (
     "Do NOT use: represents, symbolizes, simulates, cipher chart, padlock.",
     "Set banned_word_check=true only when all strings avoid those tropes.",
     category === "electronic"
-      ? "Include electronicDetails with parts, wiringDiagram, buildSteps, and working arduinoCode."
+      ? "Include electronicDetails with hardware_pinout_map (role -> Uno pin), parts, wiringDiagram, buildSteps, and preview arduinoCode per firmware rules."
       : "Set electronicDetails to null.",
     feedback ? `\nREVISION NOTES:\n${feedback}` : "",
   ]
@@ -192,7 +196,7 @@ const compilePuzzlePresentation = async (
 
   return callOpenAiStructured({
     apiKey,
-    system: COMPILER_SYSTEM,
+    system: `${COMPILER_SYSTEM}\n\n${STEP2_FIRMWARE_SYSTEM}`,
     user: userPrompt,
     schema: PuzzlePresentationSchema,
     schemaName: "puzzle_presentation",
@@ -228,6 +232,16 @@ const validateCompiledPuzzle = (
   );
   if (!presentationCheck.ok) {
     return { ok: false, message: presentationCheck.message };
+  }
+
+  if (presentation.category === "electronic" && presentation.electronicDetails) {
+    const firmwareIssues = auditArduinoPreviewFirmware(
+      presentation.electronicDetails.arduinoCode,
+      presentation.electronicDetails.parts,
+    );
+    if (firmwareIssues.length > 0) {
+      return { ok: false, message: firmwareIssues.map((i) => i.message).join(" ") };
+    }
   }
 
   return { ok: true };
