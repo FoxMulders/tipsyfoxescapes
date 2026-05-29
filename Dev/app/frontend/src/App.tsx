@@ -127,6 +127,9 @@ import {
   probeBrowserLanguageModel,
   refineThemeFitReasonInBrowser,
 } from "./browserAi.ts";
+import { generateThemesInBrowser } from "./browserAiThemes.ts";
+import { generatePuzzlesInBrowser } from "./browserAiPuzzles.ts";
+import { estimateBrowserCategoryCounts } from "./browserGenerationPlanning.ts";
 import type { CustomThemeCoachContext, CustomThemeCoachMessage } from "./browserAiCoach.ts";
 import {
   buildAssistantCoachMessage,
@@ -2121,6 +2124,7 @@ export default function App() {
   const [generationTelemetry, setGenerationTelemetry] = useState<GenerationTelemetry | null>(null);
   const [lastRoomSkeleton, setLastRoomSkeleton] = useState<RoomSkeleton | null>(null);
   const [serverOpenAiConfigured, setServerOpenAiConfigured] = useState<boolean | null>(null);
+  const [browserAiReady, setBrowserAiReady] = useState<boolean>(() => isBrowserAiAvailable());
   const [themesAiGenerated, setThemesAiGenerated] = useState<boolean | null>(null);
   const [themeSessionExpiredNotice, setThemeSessionExpiredNotice] = useState("");
   const [selectedThemeId, setSelectedThemeId] = useState<string>("");
@@ -2344,6 +2348,7 @@ export default function App() {
         if (typeof d.openAiConfigured === "boolean") setServerOpenAiConfigured(d.openAiConfigured);
       })
       .catch(() => {});
+    void probeBrowserLanguageModel().then(setBrowserAiReady);
   }, []);
 
   useTopNavHeight(topNavRef, builderShellRef, flowMapBarRef, [appView, authUser?.id, authUser?.billingTier]);
@@ -4221,6 +4226,66 @@ export default function App() {
       handleThemeGenerationAuthExpired();
       return undefined;
     }
+
+    const importBrowserThemes = async (): Promise<Theme[] | undefined> => {
+      const ready = await probeBrowserLanguageModel();
+      if (!ready) return undefined;
+      const drafts = await generateThemesInBrowser({
+        playersConcurrent: String(playersConcurrent),
+        participantsTotal: String(participantsTotal),
+        sessionDurationMinutes: String(sessionDurationMinutes),
+        environmentType: environmentType.trim(),
+        availableItems: availableItems.trim(),
+        roomDifficulty,
+        eventType: eventType.trim() || undefined,
+        themeMustMatchEnvironment,
+        targetInterface,
+        excludeNames:
+          endpoint === "/api/themes/refresh" ? currentThemes.map((theme) => theme.name).filter(Boolean) : undefined,
+      });
+      if (!drafts?.length) return undefined;
+      const browserResponse = await apiFetch("/api/themes/browser-import", {
+        method: "POST",
+        headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
+        body: JSON.stringify({ sessionId: activeSessionId, themes: drafts }),
+      });
+      const browserData = (await browserResponse.json()) as {
+        themes?: Theme[];
+        aiGenerated?: boolean;
+        openAiConfigured?: boolean;
+        error?: { message?: string; code?: string };
+      };
+      if (!browserResponse.ok || !browserData.themes) {
+        if (handleBillingGate(browserData.error?.code, browserData.error?.message)) return undefined;
+        return undefined;
+      }
+      const nextThemes = browserData.themes;
+      if (typeof browserData.openAiConfigured === "boolean") {
+        setServerOpenAiConfigured(browserData.openAiConfigured);
+      }
+      setThemesAiGenerated(true);
+      flushSync(() => {
+        setThemes(nextThemes);
+        setSelectedThemeId((prev) => {
+          if (prev && nextThemes.some((theme) => theme.id === prev)) return prev;
+          return "";
+        });
+        setThemeSessionExpiredNotice("");
+        setThemeIdeasLoading(false);
+      });
+      toastMessageOnce("Original themes drafted on-device in Chrome.", TOAST_ID.browserThemes);
+      return nextThemes;
+    };
+
+    if (serverOpenAiConfigured !== true) {
+      try {
+        const browserThemes = await importBrowserThemes();
+        if (browserThemes) return browserThemes;
+      } catch {
+        // fall through to server catalog
+      }
+    }
+
     const response = await apiFetch(endpoint, {
       method: "POST",
       headers: hasAuthToken() ? undefined : anonJsonHeaders(),
@@ -4258,6 +4323,14 @@ export default function App() {
     const nextThemes = data.themes;
     if (typeof data.openAiConfigured === "boolean") {
       setServerOpenAiConfigured(data.openAiConfigured);
+    }
+    if (!data.aiGenerated && data.openAiConfigured === false) {
+      try {
+        const browserThemes = await importBrowserThemes();
+        if (browserThemes) return browserThemes;
+      } catch {
+        // keep static catalog themes
+      }
     }
     setThemesAiGenerated(Boolean(data.aiGenerated));
     flushSync(() => {
@@ -4332,8 +4405,68 @@ export default function App() {
         setError(puzzleErrMsg);
         return false;
       }
-      if (data.user) {
-        const refreshed = normalizeAuthUser(data.user);
+
+      let puzzlePayload = data;
+      if (
+        (data.generationEngine === "static_catalog" || data.generationEngine === "static_fallback") &&
+        data.openAiConfigured === false
+      ) {
+        const activeThemeForBrowser = themeForEnhance ?? themes.find((theme) => theme.id === themeId);
+        try {
+          const ready = await probeBrowserLanguageModel();
+          if (ready && activeThemeForBrowser) {
+            const customMix =
+              useCustomMix &&
+              Number.isFinite(Number.parseInt(customMixLogic.trim(), 10)) &&
+              Number.isFinite(Number.parseInt(customMixPhysical.trim(), 10)) &&
+              Number.isFinite(Number.parseInt(customMixElectronic.trim(), 10))
+                ? {
+                    logic: Math.trunc(Number.parseInt(customMixLogic.trim(), 10)),
+                    physical: Math.trunc(Number.parseInt(customMixPhysical.trim(), 10)),
+                    electronic: Math.trunc(Number.parseInt(customMixElectronic.trim(), 10)),
+                  }
+                : null;
+            const counts = estimateBrowserCategoryCounts({
+              mainPuzzleTarget: plannerMainPuzzleTarget,
+              existingPuzzleCount: existingPuzzles.length,
+              sessionDurationMinutes: Number(sessionDurationMinutes) || 45,
+              targetInterface,
+              customMix,
+            });
+            if (counts.logic + counts.physical + counts.electronic > 0) {
+              const drafts = await generatePuzzlesInBrowser({
+                themeName: activeThemeForBrowser.name,
+                themeTldr: activeThemeForBrowser.tldr ?? activeThemeForBrowser.name,
+                themeDescription: activeThemeForBrowser.description,
+                environmentType: environmentType.trim(),
+                availableItems: availableItems.trim(),
+                roomDifficulty,
+                logicCount: counts.logic,
+                physicalCount: counts.physical,
+                electronicCount: counts.electronic,
+                targetInterface,
+              });
+              if (drafts?.length) {
+                const impResp = await apiFetch("/api/puzzles/browser-import", {
+                  method: "POST",
+                  headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
+                  body: JSON.stringify({ sessionId: activeSessionId, themeId, puzzles: drafts }),
+                });
+                const impData = (await impResp.json()) as typeof data;
+                if (impResp.ok && impData.puzzles) {
+                  puzzlePayload = impData;
+                  toastMessageOnce("Original puzzle set drafted on-device in Chrome.", TOAST_ID.browserPuzzles);
+                }
+              }
+            }
+          }
+        } catch {
+          // keep static catalog payload
+        }
+      }
+
+      if (puzzlePayload.user) {
+        const refreshed = normalizeAuthUser(puzzlePayload.user);
         if (refreshed) {
           setAuthUser(refreshed);
           try {
@@ -4343,11 +4476,15 @@ export default function App() {
           }
         }
       }
-      const basePuzzles = data.puzzles;
-      const previewOnly = data.puzzleAccess === "preview";
-      const baseSuggestedAdditions = previewOnly ? [] : (data.suggestedAdditions ?? []);
-      const baseSuggestedRequired = previewOnly ? [] : (data.suggestedAdditionsRequired ?? []);
-      const baseSafetyProtocols = previewOnly ? [] : (data.suggestedSafetyProtocols ?? []);
+      if (!puzzlePayload.puzzles) {
+        setError("Failed to generate puzzles.");
+        return false;
+      }
+      const basePuzzles = puzzlePayload.puzzles;
+      const previewOnly = puzzlePayload.puzzleAccess === "preview";
+      const baseSuggestedAdditions = previewOnly ? [] : (puzzlePayload.suggestedAdditions ?? []);
+      const baseSuggestedRequired = previewOnly ? [] : (puzzlePayload.suggestedAdditionsRequired ?? []);
+      const baseSafetyProtocols = previewOnly ? [] : (puzzlePayload.suggestedSafetyProtocols ?? []);
       const activeTheme = themeForEnhance ?? themes.find((theme) => theme.id === themeId);
       let aiEnhancement: Awaited<ReturnType<typeof enhancePlanInBrowser>> = null;
       if (!previewOnly) {
@@ -4379,10 +4516,10 @@ export default function App() {
         : basePuzzles;
 
       const enhancedStoryPlan =
-        aiEnhancement?.stages && data.storyPlan
+        aiEnhancement?.stages && puzzlePayload.storyPlan
           ? {
-              ...data.storyPlan,
-              stages: data.storyPlan.stages.map((stage) => {
+              ...puzzlePayload.storyPlan,
+              stages: puzzlePayload.storyPlan.stages.map((stage) => {
                 const match = aiEnhancement.stages?.find((candidate) => candidate.stage === stage.stage);
                 return match
                   ? {
@@ -4392,29 +4529,31 @@ export default function App() {
                   : stage;
               }),
             }
-          : data.storyPlan ?? null;
+          : puzzlePayload.storyPlan ?? null;
 
       setPuzzles(enhancedPuzzles);
       setRefusedPuzzleSlots([]);
-      setCompatibilityPassed(Boolean(data.compatibilityPassed));
+      setCompatibilityPassed(Boolean(puzzlePayload.compatibilityPassed));
       setStoryPlan(enhancedStoryPlan);
       setSuggestedAdditionsRequired(baseSuggestedRequired);
       setSuggestedAdditions(aiEnhancement?.suggestedAdditions?.length ? aiEnhancement.suggestedAdditions : baseSuggestedAdditions);
       setSuggestedSafetyProtocols(baseSafetyProtocols);
       setGenerationTelemetry({
-        engine: data.generationEngine ?? "static_catalog",
-        masterAttempted: Boolean(data.masterGeneratorAttempted),
+        engine: puzzlePayload.generationEngine ?? "static_catalog",
+        masterAttempted: Boolean(puzzlePayload.masterGeneratorAttempted),
         generatedAt: new Date().toISOString(),
-        councilReport: data.councilReport,
-        diagnostics: data.generationDiagnostics,
+        councilReport: puzzlePayload.councilReport,
+        diagnostics: puzzlePayload.generationDiagnostics,
       });
-      if (typeof data.openAiConfigured === "boolean") {
-        setServerOpenAiConfigured(data.openAiConfigured);
+      if (typeof puzzlePayload.openAiConfigured === "boolean") {
+        setServerOpenAiConfigured(puzzlePayload.openAiConfigured);
       }
       if (planningRef.current) {
         const commercialVenue = planningRef.current.state.targetInterface === "commercial_venue";
         const themeName = selectedTheme?.name ?? "your theme";
-        let skeletonToPlot: RoomSkeleton | undefined = data.roomSkeleton?.zones?.length ? data.roomSkeleton : undefined;
+        let skeletonToPlot: RoomSkeleton | undefined = puzzlePayload.roomSkeleton?.zones?.length
+          ? puzzlePayload.roomSkeleton
+          : undefined;
         if (!skeletonToPlot && layoutHasOnlyPresetShell(planningRef.current.state.roomLayout)) {
           skeletonToPlot = buildHeuristicRoomSkeleton(themeName, commercialVenue);
         }
@@ -4424,7 +4563,7 @@ export default function App() {
           planningRef.current.dispatch({ type: "SET_ROOM_LAYOUT", layout: nextLayout });
           planningRef.current.dispatch({
             type: "LAYOUT_ANNOUNCE",
-            message: `Plotted ${skeletonToPlot.zones.length} zones on the blueprint (${data.roomSkeleton ? "AI skeleton" : "estimated layout"}).`,
+            message: `Plotted ${skeletonToPlot.zones.length} zones on the blueprint (${puzzlePayload.roomSkeleton ? "AI skeleton" : "estimated layout"}).`,
           });
           toastMessageOnce(
             `Blueprint updated — ${skeletonToPlot.zones.length} zones plotted.`,
@@ -6818,6 +6957,7 @@ export default function App() {
                 puzzlesGenerating={puzzlesGenerating}
                 spatialFlowSummary={lastRoomSkeleton?.flow_summary ?? null}
                 serverOpenAiConfigured={serverOpenAiConfigured}
+                browserAiReady={browserAiReady}
                 authName={authUser.name}
                 authEmail={authUser.email}
                 billingTierLabel={formatBillingTierLabel(authUser.billingTier)}
@@ -6836,7 +6976,7 @@ export default function App() {
             ) : null}
             {flowWizardStep === "themes" ? (
               <div className="flow-content flow-content--themes-step">
-                <OpenAiOpsBanner configured={serverOpenAiConfigured} />
+                <OpenAiOpsBanner configured={serverOpenAiConfigured} browserAiReady={browserAiReady} />
                 <div className="theme-view-toggle-row theme-view-toggle-row--themes-step">
                   <span className="theme-view-toggle-legend" id="theme-view-toggle-label">
                     Theme view
@@ -7060,13 +7200,20 @@ export default function App() {
                             <span /><span /><span />
                           </div>
                           <p className="theme-generating-headline">
-                            {serverOpenAiConfigured === false ? "Loading theme catalog…" : "Generating original themes…"}
+                            {serverOpenAiConfigured === false && !browserAiReady
+                              ? "Loading theme catalog…"
+                              : "Generating original themes…"}
                           </p>
                           <p className="theme-generating-sub muted">
-                            {serverOpenAiConfigured === false ? (
+                            {serverOpenAiConfigured === false && !browserAiReady ? (
                               <>
-                                <strong>OPENAI_API_KEY</strong> is not set on the server — showing the static theme pool instead of
-                                fresh AI concepts.
+                                <strong>OPENAI_API_KEY</strong> is not set on the server and on-device AI is unavailable — showing
+                                the static theme pool.
+                              </>
+                            ) : serverOpenAiConfigured === false ? (
+                              <>
+                                Drafting unique themes in Chrome&apos;s on-device Language Model — this can take up to{" "}
+                                <strong>60 seconds</strong>.
                               </>
                             ) : (
                               <>
@@ -7152,7 +7299,7 @@ export default function App() {
             ) : null}
             {flowWizardStep === "themes-puzzles" ? (
               <div className="puzzle-builder-layout">
-                <OpenAiOpsBanner configured={serverOpenAiConfigured} className="puzzle-builder-layout__banner" />
+                <OpenAiOpsBanner configured={serverOpenAiConfigured} browserAiReady={browserAiReady} className="puzzle-builder-layout__banner" />
                 <div className="puzzle-builder-layout__main flow-content">
                 {!hasFullCatalogAccess ? (
                   <p className="muted puzzle-builder-freegen-note puzzle-builder-freegen-note--top">
@@ -7570,6 +7717,7 @@ export default function App() {
                   loading={puzzlesGenerating}
                   telemetry={generationTelemetry}
                   serverOpenAiConfigured={serverOpenAiConfigured}
+                  browserAiReady={browserAiReady}
                 />
               </aside>
             </div>

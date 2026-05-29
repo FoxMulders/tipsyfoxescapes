@@ -112,6 +112,12 @@ import { loadPlanningSessions, persistPlanningSessions } from "./runtimePersiste
 import { handleFacebookWebhookVerify } from "./oauthServerless.js";
 import { handleGitHubWebhook } from "./githubWebhook.js";
 import { isOpenAiConfigured, OPENAI_MISSING_OPS_HINT } from "./openAiConfig.js";
+import {
+  browserDraftsToPuzzles,
+  normalizeBrowserPuzzleDrafts,
+  normalizeBrowserThemeDrafts,
+  sliceBrowserPuzzlesForCounts,
+} from "./browserGenerationImport.js";
 
 type PuzzleReferenceLink = {
   title: string;
@@ -310,7 +316,7 @@ type SessionState = {
     }>;
   };
   /** Last puzzle generation source for client telemetry. */
-  lastGenerationEngine?: "ai_generated" | "static_fallback" | "static_catalog";
+  lastGenerationEngine?: "ai_generated" | "static_fallback" | "static_catalog" | "browser_generated";
   lastMasterGeneratorAttempted?: boolean;
   /** Home host vs retail venue live-ops mode (derived from plan tier when unset). */
   operatingMode?: OperatingMode;
@@ -5363,6 +5369,61 @@ app.post("/api/themes/custom", async (req, res) => {
   res.status(201).json({ theme: customWithRecommended });
 });
 
+app.post("/api/themes/browser-import", async (req, res) => {
+  const { sessionId, themes: rawThemes } = req.body ?? {};
+  const session = resolvePlanningSession(sessionId);
+  if (!session) {
+    respondInvalidPlanningSession(res, sessionId);
+    return;
+  }
+  const billingUser = await claimSessionForAuthAsync(String(sessionId), req);
+  const denied = generationAccessError(billingUser);
+  if (denied) {
+    res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
+    return;
+  }
+  if (!hasFullCatalogAccessUser(billingUser)) {
+    res.status(403).json({
+      error: {
+        code: "SUBSCRIPTION_REQUIRED",
+        message: "On-device theme import requires a paid room pack or admin access.",
+        details: [],
+      },
+    });
+    return;
+  }
+  const drafts = normalizeBrowserThemeDrafts(rawThemes);
+  if (!drafts || drafts.length < 1) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Provide at least one browser-generated theme with name, tldr, and description.",
+        details: [],
+      },
+    });
+    return;
+  }
+  const imported: Theme[] = drafts.map((draft) => ({
+    id: `th_browser_${nextThemeId++}`,
+    name: draft.name,
+    tldr: draft.tldr,
+    description: draft.description,
+  }));
+  const enriched = injectItemsIntoThemes(enrichThemesWithRecommended(imported, session), session);
+  session.generatedThemes = enriched;
+  enriched.forEach((theme) => {
+    session.seenThemeIds.add(theme.id);
+    const tk = normalizeThemeTitleKey(theme.name);
+    if (tk) session.seenThemeTitlesLower.add(tk);
+  });
+  res.json({
+    themes: enriched,
+    aiGenerated: true,
+    browserGenerated: true,
+    openAiConfigured: isOpenAiConfigured(),
+  });
+});
+
 app.post("/api/planning/session/:sessionId/existing-puzzles", (req, res) => {
   const sessionId = req.params.sessionId;
   const session = resolvePlanningSession(sessionId);
@@ -5689,6 +5750,138 @@ app.post("/api/puzzles/generate", async (req, res) => {
     },
     roomSkeleton: session.roomSkeleton,
     councilReport: session.councilReport,
+    user: billingUser ? toPublicUser(billingUser) : undefined,
+  });
+});
+
+app.post("/api/puzzles/browser-import", async (req, res) => {
+  const { sessionId, themeId, puzzles: rawPuzzles } = req.body ?? {};
+  const session = resolvePlanningSession(sessionId);
+  if (!session) {
+    respondInvalidPlanningSession(res, sessionId);
+    return;
+  }
+  const billingUser = await claimSessionForAuthAsync(String(sessionId), req);
+  const denied = generationAccessError(billingUser);
+  if (denied) {
+    res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
+    return;
+  }
+  if (!hasFullCatalogAccessUser(billingUser)) {
+    res.status(403).json({
+      error: {
+        code: "SUBSCRIPTION_REQUIRED",
+        message: "On-device puzzle import requires a paid room pack or admin access.",
+        details: [],
+      },
+    });
+    return;
+  }
+  if (!themeId) {
+    res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "themeId is required.", details: [] } });
+    return;
+  }
+  const selectedTheme =
+    themePool.find((theme) => theme.id === themeId) ??
+    session.generatedThemes.find((theme) => theme.id === themeId) ??
+    session.customThemes.find((theme) => theme.id === themeId);
+  if (!selectedTheme) {
+    res.status(404).json({ error: { code: "THEME_NOT_FOUND", message: "Theme not found for this session.", details: [] } });
+    return;
+  }
+  session.selectedTheme = selectedTheme;
+  const drafts = normalizeBrowserPuzzleDrafts(rawPuzzles);
+  if (!drafts) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Provide browser-generated puzzles with category, title, objective, howItWorks, and themeFitReason.",
+        details: [],
+      },
+    });
+    return;
+  }
+  const sessionMinutes = session.planningInput.sessionDurationMinutes;
+  const totalPuzzleCount = resolveMainTrackPuzzleCount(session);
+  const existingPuzzleTemplates = session.currentPuzzles.filter((p) => String(p.id).startsWith("pz_existing_"));
+  const remainingPuzzleCount = Math.max(totalPuzzleCount - existingPuzzleTemplates.length, 0);
+  const categoryCounts = resolveGeneratedCategoryCounts(session, remainingPuzzleCount, sessionMinutes);
+  const sliced = sliceBrowserPuzzlesForCounts(drafts, categoryCounts);
+  if (!sliced) {
+    res.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: `Browser puzzles must include ${categoryCounts.logic} logic, ${categoryCounts.physical} physical, and ${categoryCounts.electronic} electronic entries.`,
+        details: [],
+      },
+    });
+    return;
+  }
+  const context = getThemeContext(session.selectedTheme);
+  const themeTags = context.requiredTag ? ["generic", "browser-ai", context.requiredTag] : ["generic", "browser-ai"];
+  const importedMain = browserDraftsToPuzzles(sliced, {
+    themeTags,
+    refPuzzlePieces,
+    refRoomEscapeArtist,
+    allocateId: () => `pz_browser_${nextAiPuzzleId++}`,
+    commercialVenue: session.planningInput.targetInterface === "commercial_venue",
+  }) as Puzzle[];
+  const youthPreserved = session.currentPuzzles.filter((p) => p.audienceTrack === "youth_addon");
+  const generated: Puzzle[] = [...existingPuzzleTemplates, ...importedMain, ...youthPreserved];
+  const uniqueGenerated = Array.from(new Map(generated.map((puzzle) => [puzzle.id, puzzle])).values());
+  const venueAdjusted = applyVenueBuildTypeToPuzzleCopy(uniqueGenerated, session);
+  let generatedForResponse = withThemeFitReasons(venueAdjusted, session.selectedTheme, session);
+  generatedForResponse = withPuzzleQaForSession(session, generatedForResponse);
+  generatedForResponse = breakDuplicateSavedRoomPuzzleSet(
+    session.selectedTheme.id,
+    generatedForResponse,
+    session.selectedTheme,
+  );
+  generatedForResponse = withThemeFitReasons(generatedForResponse, session.selectedTheme, session);
+  generatedForResponse = withPuzzleQaForSession(session, generatedForResponse);
+  const finalized = finalizePuzzlesAndStoryPlan(session, generatedForResponse);
+  generatedForResponse = finalized.puzzles;
+  generatedForResponse.forEach((puzzle) => session.seenPuzzleIds.add(puzzle.id));
+  session.currentPuzzles = generatedForResponse;
+  session.lastGenerationEngine = "browser_generated";
+  session.lastMasterGeneratorAttempted = false;
+  session.councilReport = undefined;
+  session.suggestedAdditionsRequired = finalized.lists.required;
+  session.suggestedAdditions = finalized.lists.optional;
+  session.suggestedSafetyProtocols = finalized.lists.safety;
+  session.currentStoryPlan = finalized.storyPlan;
+  const compatibilityPassed = generatedForResponse.every((puzzle) =>
+    isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
+  );
+  const fullAccess = sessionHasFullPuzzleAccess(session.roomManifest);
+  const clientPuzzles = puzzlesForClientResponse(generatedForResponse, fullAccess, billingUser);
+  const clientStory = redactStoryPlanForClient(
+    session.currentStoryPlan as unknown as Record<string, unknown>,
+    fullAccess,
+  );
+  res.json({
+    puzzles: clientPuzzles,
+    compatibilityPassed,
+    puzzleQaPassed: allPuzzlesPassedPuzzleQa(generatedForResponse),
+    storyPlan: clientStory,
+    suggestedAdditions: fullAccess ? session.suggestedAdditions : [],
+    suggestedAdditionsRequired: fullAccess ? session.suggestedAdditionsRequired : [],
+    suggestedSafetyProtocols: fullAccess ? session.suggestedSafetyProtocols : [],
+    roomManifest: session.roomManifest,
+    puzzleAccess: fullAccess ? "full" : "preview",
+    generationEngine: "browser_generated" as const,
+    masterGeneratorAttempted: false,
+    openAiConfigured: isOpenAiConfigured(),
+    browserGenerated: true,
+    generationDiagnostics: {
+      openAiConfigured: isOpenAiConfigured(),
+      fullCatalogAccess: hasFullCatalogAccessUser(billingUser),
+      masterAttempted: false,
+      councilEligible: false,
+      staticReason: "browser_on_device",
+      opsHint: "Puzzles drafted in Chrome via on-device Language Model, then validated on the server.",
+    },
+    roomSkeleton: session.roomSkeleton,
     user: billingUser ? toPublicUser(billingUser) : undefined,
   });
 });

@@ -17,9 +17,11 @@ export function GenerationEngineBadge({ engine, loading }: GenerationEngineBadge
   const variant =
     engine === "ai_generated"
       ? "ai"
-      : engine === "static_fallback"
-        ? "fallback"
-        : "catalog";
+      : engine === "browser_generated"
+        ? "browser"
+        : engine === "static_fallback"
+          ? "fallback"
+          : "catalog";
   return (
     <span className={`generation-engine-badge generation-engine-badge--${variant}`} role="status">
       {generationEngineLabel(engine)}
@@ -32,9 +34,10 @@ type CouncilTelemetryPanelProps = {
   telemetry: GenerationTelemetry | null;
   compact?: boolean;
   serverOpenAiConfigured?: boolean | null;
+  browserAiReady?: boolean;
 };
 
-export function CouncilTelemetryPanel({ loading, telemetry, compact, serverOpenAiConfigured }: CouncilTelemetryPanelProps) {
+export function CouncilTelemetryPanel({ loading, telemetry, compact, serverOpenAiConfigured, browserAiReady }: CouncilTelemetryPanelProps) {
   if (loading) {
     return (
       <section className="council-telemetry council-telemetry--loading" aria-live="polite" aria-busy="true">
@@ -62,11 +65,17 @@ export function CouncilTelemetryPanel({ loading, telemetry, compact, serverOpenA
           <GenerationEngineBadge engine="static_catalog" />
         </header>
         {serverOpenAiConfigured === false ? (
-          <p className="council-telemetry__warn text-sm" role="alert">
-            <strong>OPENAI_API_KEY is missing on the server.</strong> Master Generator and Council cannot run — you will only see
-            static catalog puzzles (Pattern Archive, Riddle Ledger, etc.) until the key is added in Vercel and the app is
-            redeployed.
-          </p>
+          browserAiReady ? (
+            <p className="council-telemetry__hint text-sm">
+              Server AI is offline, but <strong>Chrome on-device generation</strong> can draft original themes and puzzles when
+              you continue to theme selection and build the puzzle set.
+            </p>
+          ) : (
+            <p className="council-telemetry__warn text-sm" role="alert">
+              <strong>OPENAI_API_KEY is missing on the server</strong> and on-device AI is unavailable in this browser. Use Chrome
+              with the Language Model API enabled, or add the server key in Vercel and redeploy.
+            </p>
+          )
         ) : (
           <>
             <p className="muted text-sm">
@@ -85,17 +94,24 @@ export function CouncilTelemetryPanel({ loading, telemetry, compact, serverOpenA
   }
 
   const council = telemetry.councilReport;
+  const browserGenerated = telemetry.engine === "browser_generated";
   const missingKey =
-    telemetry.diagnostics?.openAiConfigured === false ||
-    telemetry.diagnostics?.staticReason === "missing_openai_key" ||
-    serverOpenAiConfigured === false;
+    !browserGenerated &&
+    (telemetry.diagnostics?.openAiConfigured === false ||
+      telemetry.diagnostics?.staticReason === "missing_openai_key" ||
+      serverOpenAiConfigured === false);
   return (
     <section className="council-telemetry" aria-live="polite">
       <header className="council-telemetry__head">
         <h4 className="council-telemetry__title">Generation engine</h4>
         <GenerationEngineBadge engine={telemetry.engine} />
       </header>
-      {missingKey ? (
+      {browserGenerated ? (
+        <p className="council-telemetry__hint text-sm">
+          {telemetry.diagnostics?.opsHint ??
+            "Drafted in Chrome via on-device Language Model, validated on the server. Council of Ten is skipped on this path."}
+        </p>
+      ) : missingKey ? (
         <p className="council-telemetry__warn text-sm" role="alert">
           <strong>OPENAI_API_KEY is not configured on the server.</strong>{" "}
           {telemetry.diagnostics?.opsHint ??

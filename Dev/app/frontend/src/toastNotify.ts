@@ -6,6 +6,8 @@ export const TOAST_ID = {
   planningRecovery: "planning-session-recovery",
   signInForPuzzles: "sign-in-generate-puzzles",
   blueprintSkeleton: "blueprint-skeleton-plotted",
+  browserThemes: "browser-themes-generated",
+  browserPuzzles: "browser-puzzles-generated",
 } as const;
 
 const SIGN_IN_FOR_PUZZLES = "sign in to generate puzzles";

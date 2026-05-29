@@ -8,7 +8,7 @@ type StickyDashboardProps = SidebarAdminProps & BuilderAccountStripProps & {
   serverOpenAiConfigured?: boolean | null;
 };
 
-export function StickyDashboard({ className, generationTelemetry, puzzlesGenerating, serverOpenAiConfigured, ...props }: StickyDashboardProps) {
+export function StickyDashboard({ className, generationTelemetry, puzzlesGenerating, serverOpenAiConfigured, browserAiReady, ...props }: StickyDashboardProps) {
   return (
     <aside className={`sticky-dashboard glass-panel ${className ?? ""}`} aria-label="Plan snapshot and account">
       <SidebarAdmin
@@ -17,6 +17,7 @@ export function StickyDashboard({ className, generationTelemetry, puzzlesGenerat
         generationTelemetry={generationTelemetry}
         puzzlesGenerating={puzzlesGenerating}
         serverOpenAiConfigured={serverOpenAiConfigured}
+        browserAiReady={browserAiReady}
       />
       <BuilderAccountStrip
         authName={props.authName}

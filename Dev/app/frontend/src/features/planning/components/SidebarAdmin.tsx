@@ -39,13 +39,14 @@ export type SidebarAdminProps = Omit<
   generationTelemetry?: GenerationTelemetry | null;
   puzzlesGenerating?: boolean;
   serverOpenAiConfigured?: boolean | null;
+  browserAiReady?: boolean;
 };
 
 export function SidebarAdmin(props: SidebarAdminProps) {
   const { state, dispatch, propPresetLabels, commercialVenueContext, placedPuzzleNodeCount, plannerMainPuzzleTarget, clearValidation } =
     usePlanning();
 
-  const { className, generationTelemetry, puzzlesGenerating, serverOpenAiConfigured, ...sidebarProps } = props;
+  const { className, generationTelemetry, puzzlesGenerating, serverOpenAiConfigured, browserAiReady, ...sidebarProps } = props;
 
   return (
     <div className={`sidebar-admin planning-snapshot-rail ${className ?? ""}`} aria-label="Plan and account overview">
@@ -53,6 +54,7 @@ export function SidebarAdmin(props: SidebarAdminProps) {
         loading={puzzlesGenerating}
         telemetry={generationTelemetry ?? null}
         serverOpenAiConfigured={serverOpenAiConfigured}
+        browserAiReady={browserAiReady}
       />
       <header className="sticky-dashboard__snapshot-head">
         <h3 className="planning-snapshot-rail-title">Plan snapshot</h3>

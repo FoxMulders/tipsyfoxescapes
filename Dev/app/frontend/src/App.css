@@ -7827,6 +7827,12 @@ ul.auth-hero-para {
   border-color: hsl(187 70% 42% / 0.45);
 }
 
+.generation-engine-badge--browser {
+  color: #1e3a8a;
+  background: linear-gradient(135deg, #bfdbfe, #c4b5fd);
+  border-color: hsl(234 60% 55% / 0.45);
+}
+
 .generation-engine-badge--fallback {
   color: #451a03;
   background: #fde68a;
@@ -7908,6 +7914,17 @@ ul.auth-hero-para {
 
 .openai-ops-banner code {
   font-size: 0.75rem;
+}
+
+.openai-ops-banner--browser {
+  border-color: hsl(234 60% 55% / 0.45);
+  background: hsl(234 80% 96%);
+  color: #1e3a8a;
+}
+
+.council-telemetry__hint {
+  color: hsl(234 45% 35%);
+  margin: 0;
 }
 
 .council-telemetry__warn {

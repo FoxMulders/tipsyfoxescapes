@@ -20,6 +20,7 @@ type RoomDetailsWorkspaceProps = {
   puzzlesGenerating?: boolean;
   spatialFlowSummary?: string | null;
   serverOpenAiConfigured?: boolean | null;
+  browserAiReady?: boolean;
 } & BuilderAccountStripProps;
 
 export function RoomDetailsWorkspace({
@@ -34,6 +35,7 @@ export function RoomDetailsWorkspace({
   puzzlesGenerating,
   spatialFlowSummary,
   serverOpenAiConfigured,
+  browserAiReady,
   authName,
   authEmail,
   billingTierLabel,
@@ -71,6 +73,7 @@ export function RoomDetailsWorkspace({
           generationTelemetry={generationTelemetry}
           puzzlesGenerating={puzzlesGenerating}
           serverOpenAiConfigured={serverOpenAiConfigured}
+          browserAiReady={browserAiReady}
           eventSuggestions={eventSuggestions}
           itemHistory={itemHistory}
           authName={authName}

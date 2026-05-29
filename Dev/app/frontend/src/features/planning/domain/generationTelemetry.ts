@@ -1,5 +1,5 @@
 /** Client-facing generation telemetry from POST /api/puzzles/generate */
-export type GenerationEngine = "ai_generated" | "static_fallback" | "static_catalog";
+export type GenerationEngine = "ai_generated" | "static_fallback" | "static_catalog" | "browser_generated";
 
 export type CouncilVerdictClient = {
   personaId: string;
@@ -39,6 +39,8 @@ export const generationEngineLabel = (engine: GenerationEngine): string => {
   switch (engine) {
     case "ai_generated":
       return "AI Generated";
+    case "browser_generated":
+      return "Browser AI";
     case "static_fallback":
       return "Static Fallback";
     default:
