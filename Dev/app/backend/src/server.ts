@@ -93,6 +93,7 @@ import {
   type LifecycleStatus,
 } from "./userLifecycle.js";
 import { allPuzzlesPassedPuzzleQa, applyPuzzleQaGate, type PuzzleQaReport } from "./puzzleQa.js";
+import { callOpenAiPuzzles as runDiegeticPuzzleCompiler } from "./services/ai/puzzles.js";
 import {
   enrichPuzzlesWithManufacturingSchema,
   PUZZLE_GENERATION_INVENTORY_POLICY,
@@ -5425,13 +5426,23 @@ app.post("/api/puzzles/generate", async (req, res) => {
   let aiGeneratedPuzzles: Puzzle[] = [];
   if (aiPuzzlesEnabled && (logicCount + physicalCount + electronicCount) > 0) {
     try {
-      aiGeneratedPuzzles = await callOpenAiPuzzles(
-        puzzleApiKey,
-        session,
-        session.selectedTheme!,
-        { logic: logicCount, physical: physicalCount, electronic: electronicCount },
+      aiGeneratedPuzzles = await runDiegeticPuzzleCompiler({
+        apiKey: puzzleApiKey,
+        theme: {
+          name: session.selectedTheme!.name,
+          tldr: session.selectedTheme!.tldr,
+        },
+        planning: {
+          environmentType: session.planningInput.environmentType,
+          availableItems: session.planningInput.availableItems,
+          playersConcurrent: session.planningInput.playersConcurrent,
+          sessionDurationMinutes: session.planningInput.sessionDurationMinutes,
+          eventType: session.planningInput.eventType,
+        },
+        categoryCounts: { logic: logicCount, physical: physicalCount, electronic: electronicCount },
         targetDifficulty,
-      );
+        allocateId: () => `pz_ai_${nextAiPuzzleId++}`,
+      });
     } catch (err) {
       console.error("[puzzles/generate] OpenAI failed — falling back to static pool:", err instanceof Error ? err.message : String(err));
     }
@@ -6732,154 +6743,7 @@ const callOpenAiThemes = async (
 
 // ─── End AI Theme Generation ──────────────────────────────────────────────────
 
-// ─── AI Puzzle Generation ─────────────────────────────────────────────────────
-
-type AiPuzzleRaw = Record<string, unknown>;
-
-const callOpenAiPuzzles = async (
-  apiKey: string,
-  session: SessionState,
-  theme: Theme,
-  categoryCounts: { logic: number; physical: number; electronic: number },
-  targetDifficulty: "easy" | "medium" | "hard",
-): Promise<Puzzle[]> => {
-  const p = session.planningInput;
-  const items = p.availableItems.length > 0 ? p.availableItems.join(", ") : "common household items";
-  const totalCount = categoryCounts.logic + categoryCounts.physical + categoryCounts.electronic;
-  if (totalCount === 0) return [];
-
-  const puzzleList = [
-    ...Array.from({ length: categoryCounts.logic }, (_, i) => `Puzzle ${i + 1}: category "logic"`),
-    ...Array.from({ length: categoryCounts.physical }, (_, i) => `Puzzle ${categoryCounts.logic + i + 1}: category "physical"`),
-    ...Array.from({ length: categoryCounts.electronic }, (_, i) => `Puzzle ${categoryCounts.logic + categoryCounts.physical + i + 1}: category "electronic"`),
-  ].join("\n");
-
-  const systemPrompt = `You are a master escape-room builder. Generate complete, builder-ready puzzle blueprints.
-RULES:
-- Every solveStep must contain EXACT player-facing text, numbers, or symbols — no placeholders like "solve the riddle" or "enter the code". Write the ACTUAL riddle wording, the ACTUAL cipher, the ACTUAL combination.
-- howItWorks must describe precise physical interaction: what the player touches, moves, reads, and how the mechanism responds.
-- narrative_justification must tie the puzzle directly to the room's story — WHY this puzzle exists in the fiction.
-- bill_of_materials must list real, purchasable props (with quantities).
-- For electronic puzzles include full electronicDetails with working Arduino sketch (not pseudocode).
-- Return ONLY valid JSON — no markdown fences, no prose outside the JSON.`;
-
-  const userPrompt = [
-    `Theme: "${theme.name}"`,
-    `Theme premise: ${theme.tldr}`,
-    `Environment: ${p.environmentType || "home living room"}`,
-    `Props available: ${items}`,
-    `Players: ${p.playersConcurrent} concurrent`,
-    `Session length: ${p.sessionDurationMinutes} min`,
-    `Difficulty: ${targetDifficulty}`,
-    p.eventType ? `Event context: ${p.eventType}` : "",
-    ``,
-    `Generate exactly ${totalCount} puzzle(s) in this order:`,
-    puzzleList,
-    ``,
-    `Return this exact JSON shape (no extras):`,
-    `{`,
-    `  "puzzles": [`,
-    `    {`,
-    `      "category": "logic"|"physical"|"electronic",`,
-    `      "title": "Specific thematic title (not generic)",`,
-    `      "objective": "One sentence: what the player must accomplish.",`,
-    `      "howItWorks": "3-5 sentences describing the EXACT physical interaction and mechanism.",`,
-    `      "solveSteps": [`,
-    `        "Step 1 — include EXACT text players read, e.g. 'The card reads: I have cities but no houses; I have mountains but no trees. Answer: MAP → digit 6'",`,
-    `        "Step 2 — include EXACT mechanic, e.g. 'Cross-reference MAP on the sector board: M=col3, A=col1, P=col4 → sequence 3-1-4'",`,
-    `        "Step 3 — include EXACT outcome: 'Enter 3-1-4 on the 3-digit directional padlock (L-R-L) to open the box.'"`,
-    `      ],`,
-    `      "narrative_justification": "2-3 sentences: WHY this puzzle exists in the story and how solving it advances the fiction.",`,
-    `      "bill_of_materials": ["3-digit directional padlock", "printed cipher card (A4)", "sector reference board (laminated A3)"],`,
-    `      "themeTags": ["tag matching theme genre", "second tag"],`,
-    `      "electronicDetails": null`,
-    `    }`,
-    `  ]`,
-    `}`,
-    ``,
-    `For electronic puzzles replace "electronicDetails": null with:`,
-    `{`,
-    `  "parts": ["Arduino Uno", "breadboard", "3× LEDs", ...],`,
-    `  "wiringDiagram": ["D8 → 220Ω → Red LED anode, cathode → GND", ...],`,
-    `  "wiringDiagramSvg": "",`,
-    `  "buildSteps": ["Step 1: ...", "Step 2: ..."],`,
-    `  "arduinoCode": "// Full working sketch\\nvoid setup() { ... }\\nvoid loop() { ... }"`,
-    `}`,
-    ``,
-    `IMPORTANT: The final solveStep for every puzzle must state the exact combination, answer, or action that constitutes success (e.g. '4-digit code: 3847', 'directional sequence: L-R-R-L', 'word: ECLIPSE').`,
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      max_tokens: 5000,
-      temperature: 0.8,
-    }),
-    signal: AbortSignal.timeout(55_000),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`OpenAI puzzles ${response.status}: ${body.slice(0, 300)}`);
-  }
-
-  const data = (await response.json()) as { choices: Array<{ message: { content: string } }> };
-  const raw = data.choices[0]?.message?.content ?? "";
-  const jsonStart = raw.indexOf("{");
-  const jsonEnd = raw.lastIndexOf("}");
-  if (jsonStart < 0 || jsonEnd <= jsonStart) throw new Error("No JSON in OpenAI puzzle response");
-  const parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1)) as { puzzles?: unknown };
-  const rawPuzzles: AiPuzzleRaw[] = Array.isArray(parsed.puzzles) ? (parsed.puzzles as AiPuzzleRaw[]) : [];
-  if (rawPuzzles.length === 0) throw new Error("OpenAI returned no puzzles array");
-
-  return rawPuzzles.map((rp): Puzzle => {
-    const cat = rp.category === "logic" || rp.category === "physical" || rp.category === "electronic"
-      ? rp.category
-      : "logic";
-
-    const edRaw = rp.electronicDetails && typeof rp.electronicDetails === "object" && rp.electronicDetails !== null
-      ? (rp.electronicDetails as Record<string, unknown>)
-      : null;
-
-    const electronicDetails: Puzzle["electronicDetails"] = edRaw
-      ? {
-          parts: Array.isArray(edRaw.parts) ? (edRaw.parts as string[]) : [],
-          wiringDiagram: Array.isArray(edRaw.wiringDiagram) ? (edRaw.wiringDiagram as string[]) : [],
-          wiringDiagramSvg: typeof edRaw.wiringDiagramSvg === "string" ? edRaw.wiringDiagramSvg : "",
-          buildSteps: Array.isArray(edRaw.buildSteps) ? (edRaw.buildSteps as string[]) : [],
-          arduinoCode: typeof edRaw.arduinoCode === "string" ? edRaw.arduinoCode : "",
-        }
-      : undefined;
-
-    return {
-      id: `pz_ai_${nextAiPuzzleId++}`,
-      category: cat,
-      themeTags: Array.isArray(rp.themeTags)
-        ? (rp.themeTags as string[])
-        : [theme.name.toLowerCase().replace(/\s+/g, "-"), "ai-generated"],
-      title: typeof rp.title === "string" && rp.title.trim() ? rp.title.trim() : "Original Puzzle",
-      objective: typeof rp.objective === "string" ? rp.objective.trim() : "",
-      howItWorks: typeof rp.howItWorks === "string" ? rp.howItWorks.trim() : "",
-      narrative_justification: typeof rp.narrative_justification === "string" ? rp.narrative_justification.trim() : undefined,
-      bill_of_materials: Array.isArray(rp.bill_of_materials) ? (rp.bill_of_materials as string[]) : undefined,
-      solveSteps: Array.isArray(rp.solveSteps) ? (rp.solveSteps as string[]) : [],
-      referenceLinks: [],
-      difficulty: targetDifficulty,
-      audienceTrack: "main",
-      electronicDetails,
-    };
-  });
-};
-
-// ─── End AI Puzzle Generation ─────────────────────────────────────────────────
+// ─── AI Puzzle Generation — see services/ai/puzzles.ts (Logic Compiler) ───────
 
 const port = process.env.PORT || 3001;
 
