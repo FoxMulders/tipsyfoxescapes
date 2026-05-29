@@ -5,6 +5,11 @@ export default function handler(_req, res) {
   const onVercel = Boolean(process.env.VERCEL);
   const warnings = [];
   if (onVercel) {
+    if (!String(process.env.OPENAI_API_KEY ?? "").trim().startsWith("sk-")) {
+      warnings.push(
+        "OPENAI_API_KEY is not set — AI themes, Master Generator, and Council of Ten are disabled; the app serves static catalog fallbacks only.",
+      );
+    }
     if (!kvUrl || !kvToken) {
       warnings.push(
         "KV_REST_API_URL and KV_REST_API_TOKEN are not set — users, auth tokens, and OAuth exchange codes will not persist across serverless instances. Link Upstash Redis (Vercel KV) to this project.",

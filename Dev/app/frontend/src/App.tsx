@@ -84,6 +84,7 @@ import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
 import { RoomDetailsWorkspace } from "@/features/planning/components/RoomDetailsWorkspace";
 import { CouncilTelemetryPanel } from "@/features/planning/components/GenerationTelemetryPanel";
+import { OpenAiOpsBanner } from "@/features/planning/components/OpenAiOpsBanner";
 import type { GenerationTelemetry } from "@/features/planning/domain/generationTelemetry";
 import { PlanningProvider, type PlanningContextValue } from "@/features/planning/context/PlanningProvider";
 import { PlanningBridge } from "@/features/planning/context/PlanningBridge";
@@ -2119,6 +2120,8 @@ export default function App() {
   const [puzzlesGenerating, setPuzzlesGenerating] = useState(false);
   const [generationTelemetry, setGenerationTelemetry] = useState<GenerationTelemetry | null>(null);
   const [lastRoomSkeleton, setLastRoomSkeleton] = useState<RoomSkeleton | null>(null);
+  const [serverOpenAiConfigured, setServerOpenAiConfigured] = useState<boolean | null>(null);
+  const [themesAiGenerated, setThemesAiGenerated] = useState<boolean | null>(null);
   const [themeSessionExpiredNotice, setThemeSessionExpiredNotice] = useState("");
   const [selectedThemeId, setSelectedThemeId] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -2335,6 +2338,12 @@ export default function App() {
     void fetchServiceHealth(API_BASE).then((row) => {
       if (row) setServiceHealth(row);
     });
+    void fetch("/version")
+      .then((r) => r.json())
+      .then((d: { openAiConfigured?: boolean }) => {
+        if (typeof d.openAiConfigured === "boolean") setServerOpenAiConfigured(d.openAiConfigured);
+      })
+      .catch(() => {});
   }, []);
 
   useTopNavHeight(topNavRef, builderShellRef, flowMapBarRef, [appView, authUser?.id, authUser?.billingTier]);
@@ -4220,7 +4229,12 @@ export default function App() {
           ? JSON.stringify({ sessionId: activeSessionId, excludeThemeIds: currentThemes.map((theme) => theme.id) })
           : JSON.stringify({ sessionId: activeSessionId }),
     });
-    const data = (await response.json()) as { themes?: Theme[]; error?: { message?: string; code?: string } };
+    const data = (await response.json()) as {
+      themes?: Theme[];
+      aiGenerated?: boolean;
+      openAiConfigured?: boolean;
+      error?: { message?: string; code?: string };
+    };
     if (!response.ok || !data.themes) {
       if (isGenerationAuthExpired(response, data)) {
         handleThemeGenerationAuthExpired();
@@ -4242,6 +4256,10 @@ export default function App() {
       return undefined;
     }
     const nextThemes = data.themes;
+    if (typeof data.openAiConfigured === "boolean") {
+      setServerOpenAiConfigured(data.openAiConfigured);
+    }
+    setThemesAiGenerated(Boolean(data.aiGenerated));
     flushSync(() => {
       setThemes(nextThemes);
       setSelectedThemeId((prev) => {
@@ -4288,6 +4306,8 @@ export default function App() {
         generationEngine?: GenerationTelemetry["engine"];
         masterGeneratorAttempted?: boolean;
         councilReport?: GenerationTelemetry["councilReport"];
+        generationDiagnostics?: GenerationTelemetry["diagnostics"];
+        openAiConfigured?: boolean;
         roomSkeleton?: RoomSkeleton;
         user?: unknown;
         error?: { message?: string; code?: string };
@@ -4386,7 +4406,11 @@ export default function App() {
         masterAttempted: Boolean(data.masterGeneratorAttempted),
         generatedAt: new Date().toISOString(),
         councilReport: data.councilReport,
+        diagnostics: data.generationDiagnostics,
       });
+      if (typeof data.openAiConfigured === "boolean") {
+        setServerOpenAiConfigured(data.openAiConfigured);
+      }
       if (planningRef.current) {
         const commercialVenue = planningRef.current.state.targetInterface === "commercial_venue";
         const themeName = selectedTheme?.name ?? "your theme";
@@ -6793,6 +6817,7 @@ export default function App() {
                 generationTelemetry={generationTelemetry}
                 puzzlesGenerating={puzzlesGenerating}
                 spatialFlowSummary={lastRoomSkeleton?.flow_summary ?? null}
+                serverOpenAiConfigured={serverOpenAiConfigured}
                 authName={authUser.name}
                 authEmail={authUser.email}
                 billingTierLabel={formatBillingTierLabel(authUser.billingTier)}
@@ -6811,6 +6836,7 @@ export default function App() {
             ) : null}
             {flowWizardStep === "themes" ? (
               <div className="flow-content flow-content--themes-step">
+                <OpenAiOpsBanner configured={serverOpenAiConfigured} />
                 <div className="theme-view-toggle-row theme-view-toggle-row--themes-step">
                   <span className="theme-view-toggle-legend" id="theme-view-toggle-label">
                     Theme view
@@ -7033,10 +7059,21 @@ export default function App() {
                           <div className="theme-generating-spinner" aria-hidden="true">
                             <span /><span /><span />
                           </div>
-                          <p className="theme-generating-headline">Generating original themes…</p>
+                          <p className="theme-generating-headline">
+                            {serverOpenAiConfigured === false ? "Loading theme catalog…" : "Generating original themes…"}
+                          </p>
                           <p className="theme-generating-sub muted">
-                            The AI is crafting 3 unique escape-room concepts tailored to your setup.
-                            This usually takes <strong>10–20 seconds</strong> — hang tight.
+                            {serverOpenAiConfigured === false ? (
+                              <>
+                                <strong>OPENAI_API_KEY</strong> is not set on the server — showing the static theme pool instead of
+                                fresh AI concepts.
+                              </>
+                            ) : (
+                              <>
+                                The AI is crafting 3 unique escape-room concepts tailored to your setup. This usually takes{" "}
+                                <strong>10–20 seconds</strong> — hang tight.
+                              </>
+                            )}
                           </p>
                           <div className="theme-generating-bar" aria-hidden="true">
                             <div className="theme-generating-bar__fill" />
@@ -7115,6 +7152,7 @@ export default function App() {
             ) : null}
             {flowWizardStep === "themes-puzzles" ? (
               <div className="puzzle-builder-layout">
+                <OpenAiOpsBanner configured={serverOpenAiConfigured} className="puzzle-builder-layout__banner" />
                 <div className="puzzle-builder-layout__main flow-content">
                 {!hasFullCatalogAccess ? (
                   <p className="muted puzzle-builder-freegen-note puzzle-builder-freegen-note--top">
@@ -7528,7 +7566,11 @@ export default function App() {
                 </Suspense>
               </div>
               <aside className="puzzle-builder-layout__telemetry glass-panel" aria-label="Generation telemetry">
-                <CouncilTelemetryPanel loading={puzzlesGenerating} telemetry={generationTelemetry} />
+                <CouncilTelemetryPanel
+                  loading={puzzlesGenerating}
+                  telemetry={generationTelemetry}
+                  serverOpenAiConfigured={serverOpenAiConfigured}
+                />
               </aside>
             </div>
             ) : null}

@@ -19,6 +19,7 @@ type RoomDetailsWorkspaceProps = {
   generationTelemetry?: GenerationTelemetry | null;
   puzzlesGenerating?: boolean;
   spatialFlowSummary?: string | null;
+  serverOpenAiConfigured?: boolean | null;
 } & BuilderAccountStripProps;
 
 export function RoomDetailsWorkspace({
@@ -32,6 +33,7 @@ export function RoomDetailsWorkspace({
   generationTelemetry,
   puzzlesGenerating,
   spatialFlowSummary,
+  serverOpenAiConfigured,
   authName,
   authEmail,
   billingTierLabel,
@@ -68,6 +70,7 @@ export function RoomDetailsWorkspace({
           sessionSyncing={sessionSyncing}
           generationTelemetry={generationTelemetry}
           puzzlesGenerating={puzzlesGenerating}
+          serverOpenAiConfigured={serverOpenAiConfigured}
           eventSuggestions={eventSuggestions}
           itemHistory={itemHistory}
           authName={authName}

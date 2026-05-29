@@ -37,6 +37,8 @@ const resolveBuildId = () => {
   return String(process.env.BUILD_ID ?? "").trim();
 };
 
+const openAiConfigured = () => String(process.env.OPENAI_API_KEY ?? "").trim().startsWith("sk-");
+
 const version = readAppVersion();
 
 /** Public app version for ops and footer cross-check. */
@@ -45,6 +47,7 @@ module.exports = function handler(_req, res) {
   const body = JSON.stringify({
     version,
     build: build || "local",
+    openAiConfigured: openAiConfigured(),
   });
   res.statusCode = 200;
   res.setHeader("Content-Type", "application/json; charset=utf-8");

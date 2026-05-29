@@ -7891,6 +7891,25 @@ ul.auth-hero-para {
   color: #b45309;
 }
 
+.puzzle-builder-layout__banner {
+  grid-column: 1 / -1;
+}
+
+.openai-ops-banner {
+  margin: 0 0 0.5rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid #f59e0b;
+  background: #fef3c7;
+  color: #451a03;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.openai-ops-banner code {
+  font-size: 0.75rem;
+}
+
 .council-telemetry__warn {
   color: #b45309;
   margin: 0;

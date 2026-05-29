@@ -31,9 +31,10 @@ type CouncilTelemetryPanelProps = {
   loading?: boolean;
   telemetry: GenerationTelemetry | null;
   compact?: boolean;
+  serverOpenAiConfigured?: boolean | null;
 };
 
-export function CouncilTelemetryPanel({ loading, telemetry, compact }: CouncilTelemetryPanelProps) {
+export function CouncilTelemetryPanel({ loading, telemetry, compact, serverOpenAiConfigured }: CouncilTelemetryPanelProps) {
   if (loading) {
     return (
       <section className="council-telemetry council-telemetry--loading" aria-live="polite" aria-busy="true">
@@ -60,27 +61,47 @@ export function CouncilTelemetryPanel({ loading, telemetry, compact }: CouncilTe
           <h4 className="council-telemetry__title">Generation engine</h4>
           <GenerationEngineBadge engine="static_catalog" />
         </header>
-        <p className="muted text-sm">
-          Master Generator and Council of Ten run when you open <strong>Build puzzle set</strong> (step 3) with a theme selected.
-          This panel shows the engine badge, persona scores, and wow-factor after that generate completes.
-        </p>
-        <ol className="council-telemetry__steps muted text-xs">
-          <li>Finish room details → Continue to theme selection</li>
-          <li>Pick a theme → open Build puzzle set</li>
-          <li>Wait ~30s — blueprint zones and council scores update</li>
-        </ol>
+        {serverOpenAiConfigured === false ? (
+          <p className="council-telemetry__warn text-sm" role="alert">
+            <strong>OPENAI_API_KEY is missing on the server.</strong> Master Generator and Council cannot run — you will only see
+            static catalog puzzles (Pattern Archive, Riddle Ledger, etc.) until the key is added in Vercel and the app is
+            redeployed.
+          </p>
+        ) : (
+          <>
+            <p className="muted text-sm">
+              Master Generator and Council of Ten run when you open <strong>Build puzzle set</strong> (step 3) with a theme
+              selected.
+            </p>
+            <ol className="council-telemetry__steps muted text-xs">
+              <li>Finish room details → Continue to theme selection</li>
+              <li>Pick a theme → open Build puzzle set</li>
+              <li>Wait ~30s — blueprint zones and council scores update</li>
+            </ol>
+          </>
+        )}
       </section>
     );
   }
 
   const council = telemetry.councilReport;
+  const missingKey =
+    telemetry.diagnostics?.openAiConfigured === false ||
+    telemetry.diagnostics?.staticReason === "missing_openai_key" ||
+    serverOpenAiConfigured === false;
   return (
     <section className="council-telemetry" aria-live="polite">
       <header className="council-telemetry__head">
         <h4 className="council-telemetry__title">Generation engine</h4>
         <GenerationEngineBadge engine={telemetry.engine} />
       </header>
-      {telemetry.masterAttempted && telemetry.engine !== "ai_generated" ? (
+      {missingKey ? (
+        <p className="council-telemetry__warn text-sm" role="alert">
+          <strong>OPENAI_API_KEY is not configured on the server.</strong>{" "}
+          {telemetry.diagnostics?.opsHint ??
+            "Add the key in Vercel production env vars and redeploy, then refresh themes and regenerate puzzles."}
+        </p>
+      ) : telemetry.masterAttempted && telemetry.engine !== "ai_generated" ? (
         <p className="council-telemetry__warn text-sm" role="note">
           Master Generator was attempted but this set came from the static catalog — check OpenAI key, catalog tier, or council
           revision loops.
@@ -128,7 +149,9 @@ export function CouncilTelemetryPanel({ loading, telemetry, compact }: CouncilTe
         <p className="muted text-sm">
           {telemetry.engine === "ai_generated"
             ? "AI puzzles generated without council metadata (legacy path)."
-            : "Static catalog path — no council evaluation."}
+            : missingKey
+              ? "Static catalog only — Council did not run because OpenAI is not configured."
+              : "Static catalog path — no council evaluation."}
         </p>
       )}
       <p className="council-telemetry__ts muted text-xs">

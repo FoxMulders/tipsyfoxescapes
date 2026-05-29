@@ -5,9 +5,10 @@ import type { GenerationTelemetry } from "../domain/generationTelemetry";
 type StickyDashboardProps = SidebarAdminProps & BuilderAccountStripProps & {
   generationTelemetry?: GenerationTelemetry | null;
   puzzlesGenerating?: boolean;
+  serverOpenAiConfigured?: boolean | null;
 };
 
-export function StickyDashboard({ className, generationTelemetry, puzzlesGenerating, ...props }: StickyDashboardProps) {
+export function StickyDashboard({ className, generationTelemetry, puzzlesGenerating, serverOpenAiConfigured, ...props }: StickyDashboardProps) {
   return (
     <aside className={`sticky-dashboard glass-panel ${className ?? ""}`} aria-label="Plan snapshot and account">
       <SidebarAdmin
@@ -15,6 +16,7 @@ export function StickyDashboard({ className, generationTelemetry, puzzlesGenerat
         className="sticky-dashboard__inner"
         generationTelemetry={generationTelemetry}
         puzzlesGenerating={puzzlesGenerating}
+        serverOpenAiConfigured={serverOpenAiConfigured}
       />
       <BuilderAccountStrip
         authName={props.authName}

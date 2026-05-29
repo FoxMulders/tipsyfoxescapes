@@ -18,11 +18,21 @@ export type CouncilReportClient = {
   verdicts?: CouncilVerdictClient[];
 };
 
+export type GenerationDiagnostics = {
+  openAiConfigured: boolean;
+  fullCatalogAccess: boolean;
+  masterAttempted: boolean;
+  councilEligible: boolean;
+  staticReason?: string;
+  opsHint?: string;
+};
+
 export type GenerationTelemetry = {
   engine: GenerationEngine;
   masterAttempted: boolean;
   generatedAt: string;
   councilReport?: CouncilReportClient;
+  diagnostics?: GenerationDiagnostics;
 };
 
 export const generationEngineLabel = (engine: GenerationEngine): string => {

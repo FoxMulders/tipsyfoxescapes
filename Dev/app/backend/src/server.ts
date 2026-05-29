@@ -111,6 +111,7 @@ import { auditStoryDesign } from "./storyDesignQa.js";
 import { loadPlanningSessions, persistPlanningSessions } from "./runtimePersistence.js";
 import { handleFacebookWebhookVerify } from "./oauthServerless.js";
 import { handleGitHubWebhook } from "./githubWebhook.js";
+import { isOpenAiConfigured, OPENAI_MISSING_OPS_HINT } from "./openAiConfig.js";
 
 type PuzzleReferenceLink = {
   title: string;
@@ -5159,6 +5160,8 @@ app.post("/api/themes/generate", async (req, res) => {
     res.json({
       themes: enriched,
       trialCatalog: { fixed: true, themeIds: [...CURATED_TRIAL_THEME_ORDER] },
+      openAiConfigured: isOpenAiConfigured(),
+      aiGenerated: false,
     });
     return;
   }
@@ -5173,7 +5176,7 @@ app.post("/api/themes/generate", async (req, res) => {
       });
       const enriched = injectItemsIntoThemes(enrichThemesWithRecommended(aiThemes, session), session);
       session.generatedThemes = enriched;
-      res.json({ themes: enriched, aiGenerated: true });
+      res.json({ themes: enriched, aiGenerated: true, openAiConfigured: true });
       return;
     } catch (err) {
       console.error("[themes/generate] OpenAI failed — falling back to static pool:", err instanceof Error ? err.message : String(err));
@@ -5204,7 +5207,7 @@ app.post("/api/themes/generate", async (req, res) => {
     session,
   );
   session.generatedThemes = enriched;
-  res.json({ themes: enriched });
+  res.json({ themes: enriched, aiGenerated: false, openAiConfigured: isOpenAiConfigured() });
 });
 
 app.post("/api/themes/refresh", async (req, res) => {
@@ -5227,6 +5230,8 @@ app.post("/api/themes/refresh", async (req, res) => {
     res.json({
       themes: enriched,
       trialCatalog: { fixed: true, themeIds: [...CURATED_TRIAL_THEME_ORDER] },
+      openAiConfigured: isOpenAiConfigured(),
+      aiGenerated: false,
     });
     return;
   }
@@ -5248,7 +5253,7 @@ app.post("/api/themes/refresh", async (req, res) => {
       });
       const enrichedAi = injectItemsIntoThemes(enrichThemesWithRecommended(aiThemes, session), session);
       session.generatedThemes = enrichedAi;
-      res.json({ themes: enrichedAi, aiGenerated: true });
+      res.json({ themes: enrichedAi, aiGenerated: true, openAiConfigured: true });
       return;
     } catch (err) {
       console.error("[themes/refresh] OpenAI failed — falling back to static pool:", err instanceof Error ? err.message : String(err));
@@ -5282,7 +5287,7 @@ app.post("/api/themes/refresh", async (req, res) => {
     session,
   );
   session.generatedThemes = enrichedRefresh;
-  res.json({ themes: enrichedRefresh });
+  res.json({ themes: enrichedRefresh, aiGenerated: false, openAiConfigured: isOpenAiConfigured() });
 });
 
 app.post("/api/themes/custom", async (req, res) => {
@@ -5464,8 +5469,8 @@ app.post("/api/puzzles/generate", async (req, res) => {
     sessionMinutes,
   );
 
+  const openAiConfigured = isOpenAiConfigured();
   const puzzleApiKey = String(process.env.OPENAI_API_KEY ?? "").trim();
-  const openAiConfigured = puzzleApiKey.startsWith("sk-");
   const aiPuzzlesEnabled = Boolean(billingUser && hasFullCatalogAccessUser(billingUser)) && openAiConfigured;
 
   let aiGeneratedPuzzles: Puzzle[] = [];
@@ -5665,6 +5670,23 @@ app.post("/api/puzzles/generate", async (req, res) => {
     puzzleAccess: fullAccess ? "full" : "preview",
     generationEngine,
     masterGeneratorAttempted: masterAttempted,
+    openAiConfigured,
+    generationDiagnostics: {
+      openAiConfigured,
+      fullCatalogAccess: hasFullCatalogAccessUser(billingUser),
+      masterAttempted,
+      councilEligible: masterAttempted,
+      staticReason: !openAiConfigured
+        ? "missing_openai_key"
+        : !hasFullCatalogAccessUser(billingUser)
+          ? "trial_or_free_catalog"
+          : masterAttempted && aiGeneratedPuzzles.length === 0
+            ? "master_generator_failed"
+            : !masterAttempted
+              ? "master_not_attempted"
+              : undefined,
+      opsHint: !openAiConfigured ? OPENAI_MISSING_OPS_HINT : undefined,
+    },
     roomSkeleton: session.roomSkeleton,
     councilReport: session.councilReport,
     user: billingUser ? toPublicUser(billingUser) : undefined,
