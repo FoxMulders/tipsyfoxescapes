@@ -93,7 +93,10 @@ import {
   type LifecycleStatus,
 } from "./userLifecycle.js";
 import { allPuzzlesPassedPuzzleQa, applyPuzzleQaGate, type PuzzleQaReport } from "./puzzleQa.js";
-import { callOpenAiPuzzles as runDiegeticPuzzleCompiler } from "./services/ai/puzzles.js";
+import { runMasterGenerator } from "./services/ai/masterGenerator.js";
+import { applyTargetInterfaceCategoryCounts } from "./generationPolicy.js";
+import type { RoomSkeleton } from "./services/ai/schemas/roomSkeleton.js";
+import type { CouncilAggregate } from "./services/ai/councilOfTen.js";
 import { markStaticCatalogPuzzle } from "./hardwareProfile.js";
 import type { HardwareProfile } from "./hardwareProfile.js";
 import {
@@ -292,6 +295,12 @@ type SessionState = {
   /** Safety protocols isolated from general staging copy. */
   suggestedSafetyProtocols: string[];
   currentStoryPlan?: StoryPlan;
+  /** AI room flow skeleton from Master Generator Step 0. */
+  roomSkeleton?: RoomSkeleton;
+  /** Council of Ten consensus metadata from last AI generation. */
+  councilReport?: Pick<CouncilAggregate, "passed" | "averageScore" | "wowCount" | "revisionNotes"> & {
+    iterations: number;
+  };
   /** Home host vs retail venue live-ops mode (derived from plan tier when unset). */
   operatingMode?: OperatingMode;
   /** Draft vs manifested room — credit reserved at successful puzzle generation. */
@@ -2294,7 +2303,12 @@ const resolveGeneratedCategoryCounts = (session: SessionState, remaining: number
   if (mix && remaining > 0) {
     let { logic, physical, electronic } = mix;
     const sum0 = logic + physical + electronic;
-    if (sum0 === 0) return computeDefaultCategoryCounts(remaining, sessionMinutes);
+    if (sum0 === 0) {
+      return applyTargetInterfaceCategoryCounts(
+        computeDefaultCategoryCounts(remaining, sessionMinutes),
+        session.planningInput.targetInterface,
+      );
+    }
     if (sum0 !== remaining) {
       const scale = remaining / sum0;
       logic = Math.max(0, Math.round(logic * scale));
@@ -2338,12 +2352,26 @@ const resolveGeneratedCategoryCounts = (session: SessionState, remaining: number
       if (total === prev) break;
     }
     if (remaining >= 3) {
-      if (logic === 0 || physical === 0) return computeDefaultCategoryCounts(remaining, sessionMinutes);
-      if (sessionMinutes > 15 && electronic === 0) return computeDefaultCategoryCounts(remaining, sessionMinutes);
+      if (logic === 0 || physical === 0) {
+        return applyTargetInterfaceCategoryCounts(
+          computeDefaultCategoryCounts(remaining, sessionMinutes),
+          session.planningInput.targetInterface,
+        );
+      }
+      if (sessionMinutes > 15 && electronic === 0) {
+        return applyTargetInterfaceCategoryCounts(
+          computeDefaultCategoryCounts(remaining, sessionMinutes),
+          session.planningInput.targetInterface,
+        );
+      }
     }
-    return { logic, physical, electronic };
+    return applyTargetInterfaceCategoryCounts(
+      { logic, physical, electronic },
+      session.planningInput.targetInterface,
+    );
   }
-  return computeDefaultCategoryCounts(remaining, sessionMinutes);
+  const base = computeDefaultCategoryCounts(remaining, sessionMinutes);
+  return applyTargetInterfaceCategoryCounts(base, session.planningInput.targetInterface);
 };
 
 const stripBadInventoryAnchorsFromPuzzles = (puzzles: Puzzle[], issueFields: string[]): Puzzle[] => {
@@ -5431,9 +5459,11 @@ app.post("/api/puzzles/generate", async (req, res) => {
   const aiPuzzlesEnabled = Boolean(billingUser && hasFullCatalogAccessUser(billingUser)) && puzzleApiKey.startsWith("sk-");
 
   let aiGeneratedPuzzles: Puzzle[] = [];
+  let masterRoomSkeleton: RoomSkeleton | undefined;
+  let masterCouncilReport: SessionState["councilReport"];
   if (aiPuzzlesEnabled && (logicCount + physicalCount + electronicCount) > 0) {
     try {
-      aiGeneratedPuzzles = await runDiegeticPuzzleCompiler({
+      const master = await runMasterGenerator({
         apiKey: puzzleApiKey,
         theme: {
           name: session.selectedTheme!.name,
@@ -5448,10 +5478,22 @@ app.post("/api/puzzles/generate", async (req, res) => {
         },
         categoryCounts: { logic: logicCount, physical: physicalCount, electronic: electronicCount },
         targetDifficulty,
+        targetInterface: session.planningInput.targetInterface,
         allocateId: () => `pz_ai_${nextAiPuzzleId++}`,
       });
+      aiGeneratedPuzzles = master.puzzles;
+      masterRoomSkeleton = master.roomSkeleton;
+      masterCouncilReport = master.council
+        ? {
+            passed: master.council.passed,
+            averageScore: master.council.averageScore,
+            wowCount: master.council.wowCount,
+            revisionNotes: master.council.revisionNotes,
+            iterations: master.councilIterations,
+          }
+        : undefined;
     } catch (err) {
-      console.error("[puzzles/generate] OpenAI failed — falling back to static pool:", err instanceof Error ? err.message : String(err));
+      console.error("[puzzles/generate] Master Generator failed — falling back to static pool:", err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -5479,7 +5521,9 @@ app.post("/api/puzzles/generate", async (req, res) => {
   if (session.planningInput.youthAddOnEnabled) {
     const ageNote = session.planningInput.youthAddOnAgeNote?.trim() ?? "";
     const youthCats: Array<"logic" | "physical" | "electronic"> =
-      sessionMinutes >= 25 ? ["logic", "physical", "electronic"] : ["logic", "physical"];
+      sessionMinutes >= 25 && session.planningInput.targetInterface === "commercial_venue"
+        ? ["logic", "physical", "electronic"]
+        : ["logic", "physical"];
     for (let yi = 0; yi < youthCats.length; yi += 1) {
       const picked = pickYouthPuzzle(session, session.selectedTheme, youthCats[yi], generationSeenIds);
       if (!picked) continue;
@@ -5538,6 +5582,8 @@ app.post("/api/puzzles/generate", async (req, res) => {
   generatedForResponse = finalized.puzzles;
   generatedForResponse.forEach((puzzle) => session.seenPuzzleIds.add(puzzle.id));
   session.currentPuzzles = generatedForResponse;
+  session.roomSkeleton = masterRoomSkeleton;
+  session.councilReport = masterCouncilReport;
   session.suggestedAdditionsRequired = finalized.lists.required;
   session.suggestedAdditions = finalized.lists.optional;
   session.suggestedSafetyProtocols = finalized.lists.safety;
@@ -5586,6 +5632,8 @@ app.post("/api/puzzles/generate", async (req, res) => {
     manifestCreditConsumed: manifestResult.creditConsumed,
     trialConsumed: manifestResult.trialConsumed,
     puzzleAccess: fullAccess ? "full" : "preview",
+    roomSkeleton: fullAccess ? session.roomSkeleton : undefined,
+    councilReport: fullAccess ? session.councilReport : undefined,
     user: billingUser ? toPublicUser(billingUser) : undefined,
   });
 });

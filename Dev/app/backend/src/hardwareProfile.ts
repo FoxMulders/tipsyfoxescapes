@@ -8,6 +8,7 @@ export const HARDWARE_PROFILES = [
   "rfid",
   "relay_maglock",
   "analog_sensor",
+  "print_and_play",
   "generic",
 ] as const;
 
@@ -22,6 +23,7 @@ export const HARDWARE_PROFILE_LABELS: Record<HardwareProfile, string> = {
   rfid: "MFRC522 RFID tag sequence",
   relay_maglock: "Relay-driven maglock / strike release",
   analog_sensor: "Analog threshold sensor (LDR, pressure, pot)",
+  print_and_play: "Printable clues, paper ciphers, and household props — no MCU",
   generic: "Non-MCU or unspecified digital output",
 };
 
@@ -44,7 +46,10 @@ export const resolveHardwareProfile = (
   explicit: HardwareProfile | undefined,
   wiringDiagram: string[],
   parts: string[],
-): HardwareProfile => explicit ?? detectSketchProfileLegacy(wiringDiagram, parts);
+): HardwareProfile => {
+  if (explicit === "print_and_play") return "print_and_play";
+  return explicit ?? detectSketchProfileLegacy(wiringDiagram, parts);
+};
 
 /** Legacy text heuristics for saved puzzles missing hardware_profile. */
 export const detectSketchProfileLegacy = (
@@ -56,6 +61,7 @@ export const detectSketchProfileLegacy = (
   if (/\bmfrc522\b|\brfid\b/.test(blob)) return "rfid";
   if (/\bmaglock\b|\breed switch\b|\brelay module\b|\brelay\b/.test(blob)) return "relay_maglock";
   if (/\banalog\b|\bldr\b|\bphotoresistor\b|\bfsr\b|\bpressure sensor\b/.test(blob)) return "analog_sensor";
+  if (/\bprint(able|ed)?\b|\bcipher sheet\b|\bpaper clue\b/.test(blob)) return "print_and_play";
   if (/\bbuzzer\b|\btone\b|\bpiezo\b/.test(blob)) return "buzzer";
   if (/\bbutton\b|\bswitch\b/.test(blob) && /\bled\b/.test(blob)) return "button_led";
   return "generic";

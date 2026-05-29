@@ -272,6 +272,13 @@ void loop() {
   int reading = analogRead(kSensorPin);
   digitalWrite(kOutputPin, reading >= kThreshold ? HIGH : LOW);
 }`;
+    case "print_and_play":
+      return `${header}
+/*
+ * print_and_play — no MCU upload required.
+ * Host prints clue media and stages physical props per BOM and solveSteps.
+ */
+`;
     default:
       return `${header}
 const int kOutputPin = 9;
@@ -297,6 +304,8 @@ const documentationUrlForProfile = (profile: HardwareProfile): string => {
       return TRUSTED_MAKER_LIBRARIES.mfrc522Guide.url;
     case "relay_maglock":
       return TRUSTED_MAKER_LIBRARIES.reedSwitchGuide.url;
+    case "print_and_play":
+      return TRUSTED_MAKER_LIBRARIES.adafruitLearn.url;
     default:
       return TRUSTED_MAKER_LIBRARIES.arduinoUnoPinout.url;
   }

@@ -178,6 +178,9 @@ export const enrichPuzzlesWithManufacturingSchema = <T extends PuzzleWithManufac
       const profile =
         puzzle.hardware_profile ??
         puzzle.electronicDetails.hardware_profile;
+      if (profile === "print_and_play") {
+        return next;
+      }
       const bundle = routeArduinoProductionBundle(
         puzzle.title,
         puzzle.electronicDetails.wiringDiagram ?? [],

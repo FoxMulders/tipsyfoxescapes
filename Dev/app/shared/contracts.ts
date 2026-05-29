@@ -10,6 +10,7 @@ export type HardwareProfile =
   | "rfid"
   | "relay_maglock"
   | "analog_sensor"
+  | "print_and_play"
   | "generic";
 
 export type RoomDifficulty = "easy" | "medium" | "hard";

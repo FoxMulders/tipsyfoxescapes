@@ -6,10 +6,18 @@
 import { auditPuzzleQa, type PuzzleForQa } from "../../puzzleQa.js";
 import { auditArduinoPreviewFirmware, formatPinoutMapComment } from "../../firmwarePreviewValidation.js";
 import type { HardwareProfile } from "../../hardwareProfile.js";
+import {
+  assertHomePartyHardwareProfile,
+  commercialCompilerSystem,
+  homePartyCompilerSystem,
+  isHomePartyTarget,
+} from "../../generationPolicy.js";
 import { PUZZLE_GENERATION_INVENTORY_POLICY } from "../../puzzleManufacturingSchema.js";
 import { assembleDiegeticPuzzle, validateDiegeticFields } from "./diegeticValidation.js";
 import { STEP2_FIRMWARE_SYSTEM } from "./firmwarePreviewPrompt.js";
 import { callOpenAiStructured } from "./openaiStructured.js";
+import type { RoomSkeleton } from "./schemas/roomSkeleton.js";
+import type { TargetInterface } from "../../../../shared/contracts.js";
 import {
   DiegeticLayerSchema,
   PuzzlePresentationSchema,
@@ -63,6 +71,9 @@ export type CallOpenAiPuzzlesInput = {
   planning: AiPuzzlePlanningContext;
   categoryCounts: { logic: number; physical: number; electronic: number };
   targetDifficulty: "easy" | "medium" | "hard";
+  targetInterface?: TargetInterface;
+  roomSkeleton?: RoomSkeleton;
+  compilerRevisionNotes?: string;
   allocateId: () => string;
 };
 
@@ -78,11 +89,16 @@ RULES (non-negotiable):
 - For electronic puzzles include a working Arduino sketch (setup() + non-empty loop()) and wiring lines.
 - Set banned_word_check=true ONLY when all copy avoids banned tropes.`;
 
-const buildPlanningBlock = (planning: AiPuzzlePlanningContext, difficulty: string): string => {
+const buildPlanningBlock = (
+  planning: AiPuzzlePlanningContext,
+  difficulty: string,
+  targetInterface?: TargetInterface,
+): string => {
   const items =
     planning.availableItems.length > 0 ? planning.availableItems.join(", ") : "common household items";
   return [
     `Environment: ${planning.environmentType || "home living room"}`,
+    `Target interface: ${targetInterface ?? "home_party"}`,
     `Props available: ${items}`,
     `Players: ${planning.playersConcurrent} concurrent`,
     `Session length: ${planning.sessionDurationMinutes} min`,
@@ -141,24 +157,36 @@ const mapToPuzzle = (
       : undefined,
 });
 
+type CompilerContext = {
+  targetInterface?: TargetInterface;
+  roomSkeleton?: RoomSkeleton;
+  revisionNotes?: string;
+};
+
 const compileDiegeticLayer = async (
   apiKey: string,
   theme: AiPuzzleThemeContext,
   planning: AiPuzzlePlanningContext,
   category: "logic" | "physical" | "electronic",
   difficulty: string,
+  ctx: CompilerContext,
   feedback?: string,
 ): Promise<DiegeticLayer> => {
+  const home = isHomePartyTarget(ctx.targetInterface);
   const userPrompt = [
     `Theme: "${theme.name}"`,
     `Theme premise: ${theme.tldr}`,
-    buildPlanningBlock(planning, difficulty),
+    buildPlanningBlock(planning, difficulty, ctx.targetInterface),
+    ctx.roomSkeleton ? `\nApproved room skeleton:\n${JSON.stringify(ctx.roomSkeleton, null, 2)}` : "",
     "",
     `Compile STEP 1 — diegetic hardware/physical layer for ONE ${category} puzzle.`,
     "Output ONLY the physical affordances and trigger mechanism — NO narrative flavor yet.",
-    category === "electronic"
-      ? "Set hardware_profile to the primary MCU mechanic (relay_maglock for maglock/strike, touch, rfid, button_led, buzzer, analog_sensor)."
-      : "Set hardware_profile to generic (no dedicated production firmware template).",
+    home
+      ? "Set hardware_profile to print_and_play (household props, paper clues, padlocks — no MCU)."
+      : category === "electronic"
+        ? "Set hardware_profile to the primary MCU mechanic (relay_maglock for maglock/strike, touch, rfid, button_led, buzzer, analog_sensor)."
+        : "Set hardware_profile to generic or print_and_play when no MCU is required.",
+    ctx.revisionNotes ? `\nCOUNCIL REVISION NOTES:\n${ctx.revisionNotes}` : "",
     feedback ? `\nREVISION NOTES:\n${feedback}` : "",
   ]
     .filter(Boolean)
@@ -166,7 +194,7 @@ const compileDiegeticLayer = async (
 
   return callOpenAiStructured({
     apiKey,
-    system: COMPILER_SYSTEM,
+    system: `${COMPILER_SYSTEM}\n\n${home ? homePartyCompilerSystem : commercialCompilerSystem}`,
     user: userPrompt,
     schema: DiegeticLayerSchema,
     schemaName: "diegetic_layer",
@@ -182,12 +210,15 @@ const compilePuzzlePresentation = async (
   category: "logic" | "physical" | "electronic",
   difficulty: string,
   layer: DiegeticLayer,
+  ctx: CompilerContext,
   feedback?: string,
 ): Promise<PuzzlePresentation> => {
+  const home = isHomePartyTarget(ctx.targetInterface);
   const userPrompt = [
     `Theme: "${theme.name}"`,
     `Theme premise: ${theme.tldr}`,
-    buildPlanningBlock(planning, difficulty),
+    buildPlanningBlock(planning, difficulty, ctx.targetInterface),
+    ctx.roomSkeleton ? `\nApproved room skeleton:\n${JSON.stringify(ctx.roomSkeleton, null, 2)}` : "",
     "",
     `Compile STEP 2 — host-facing presentation for ONE ${category} puzzle.`,
     "Derive title, objective, solveSteps, and narrative_justification ONLY from this validated physical layer:",
@@ -196,9 +227,12 @@ const compilePuzzlePresentation = async (
     "narrative_justification MUST explain why this exact mechanism exists in the room fiction.",
     "Do NOT use: represents, symbolizes, simulates, cipher chart, padlock.",
     "Set banned_word_check=true only when all strings avoid those tropes.",
-    category === "electronic"
-      ? "Include electronicDetails with hardware_profile matching Step 1, hardware_pinout_map, parts, wiringDiagram, buildSteps, and preview arduinoCode per firmware rules."
-      : "Set electronicDetails to null.",
+    home
+      ? "Home party: set electronicDetails to null; hardware_profile stays print_and_play."
+      : category === "electronic"
+        ? "Include electronicDetails with hardware_profile matching Step 1, hardware_pinout_map, parts, wiringDiagram, buildSteps, and preview arduinoCode per firmware rules."
+        : "Set electronicDetails to null.",
+    ctx.revisionNotes ? `\nCOUNCIL REVISION NOTES:\n${ctx.revisionNotes}` : "",
     feedback ? `\nREVISION NOTES:\n${feedback}` : "",
   ]
     .filter(Boolean)
@@ -206,7 +240,7 @@ const compilePuzzlePresentation = async (
 
   return callOpenAiStructured({
     apiKey,
-    system: `${COMPILER_SYSTEM}\n\n${STEP2_FIRMWARE_SYSTEM}`,
+    system: `${COMPILER_SYSTEM}\n\n${home ? homePartyCompilerSystem : `${commercialCompilerSystem}\n\n${STEP2_FIRMWARE_SYSTEM}`}`,
     user: userPrompt,
     schema: PuzzlePresentationSchema,
     schemaName: "puzzle_presentation",
@@ -218,7 +252,20 @@ const compilePuzzlePresentation = async (
 const validateCompiledPuzzle = (
   layer: DiegeticLayer,
   presentation: PuzzlePresentation,
+  targetInterface?: TargetInterface,
 ): { ok: true } | { ok: false; message: string } => {
+  const home = isHomePartyTarget(targetInterface);
+  if (home) {
+    const homeErr = assertHomePartyHardwareProfile(layer.hardware_profile);
+    if (homeErr) return { ok: false, message: homeErr };
+    if (presentation.category === "electronic") {
+      return { ok: false, message: "Home party mode must not emit electronic category puzzles." };
+    }
+    if (presentation.electronicDetails) {
+      return { ok: false, message: "Home party mode must not include electronicDetails / firmware." };
+    }
+  }
+
   if (presentation.category === "electronic" && !presentation.electronicDetails) {
     return { ok: false, message: "Electronic puzzle missing electronicDetails." };
   }
@@ -270,7 +317,9 @@ const compileSinglePuzzle = async (
   input: CallOpenAiPuzzlesInput,
   category: "logic" | "physical" | "electronic",
 ): Promise<AiGeneratedPuzzle | null> => {
-  const { apiKey, theme, planning, targetDifficulty, allocateId } = input;
+  const { apiKey, theme, planning, targetDifficulty, allocateId, targetInterface, roomSkeleton, compilerRevisionNotes } =
+    input;
+  const ctx: CompilerContext = { targetInterface, roomSkeleton, revisionNotes: compilerRevisionNotes };
   let feedback = "";
 
   for (let qaPass = 0; qaPass < QA_MAX_ATTEMPTS; qaPass += 1) {
@@ -282,6 +331,7 @@ const compileSinglePuzzle = async (
           planning,
           category,
           targetDifficulty,
+          ctx,
           feedback || undefined,
         );
         const presentation = await compilePuzzlePresentation(
@@ -291,6 +341,7 @@ const compileSinglePuzzle = async (
           category,
           targetDifficulty,
           layer,
+          ctx,
           feedback || undefined,
         );
 
@@ -299,7 +350,7 @@ const compileSinglePuzzle = async (
           continue;
         }
 
-        const validation = validateCompiledPuzzle(layer, presentation);
+        const validation = validateCompiledPuzzle(layer, presentation, targetInterface);
         if (!validation.ok) {
           feedback = validation.message;
           continue;

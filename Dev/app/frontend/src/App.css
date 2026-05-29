@@ -7239,15 +7239,22 @@ ul.auth-hero-para {
   --cad-neon-violet: #a78bfa;
   --cad-panel-border: 1px solid hsl(187 70% 42% / 0.22);
   min-width: 0;
+  height: calc(100vh - var(--app-top-nav-height, 0px));
+  max-height: calc(100vh - var(--app-top-nav-height, 0px));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .room-builder-cad__grid {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr) 300px;
+  grid-template-columns: 320px minmax(0, 1fr) 360px;
   gap: var(--cad-grid-gap, 8px);
   align-items: stretch;
   min-width: 0;
-  min-height: min(72vh, 640px);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .room-builder-cad__center {
@@ -7276,8 +7283,14 @@ ul.auth-hero-para {
 .room-config-panel {
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - var(--app-top-nav-height, 0px) - 6rem);
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.room-config-panel__scroll {
   overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .room-config-panel__header {
@@ -7352,6 +7365,35 @@ ul.auth-hero-para {
 .builder-account-strip__btn {
   width: 100%;
   justify-content: flex-start;
+}
+
+.room-builder-cad .sticky-dashboard {
+  position: relative;
+  top: auto;
+  align-self: stretch;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.room-builder-cad .sticky-dashboard__inner {
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.room-builder-cad .blueprint-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.room-builder-cad .blueprint-workspace__stage {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .sticky-dashboard {
