@@ -2276,6 +2276,15 @@ export default function App() {
     (options?: { seedThemes?: boolean }) => Promise<string | undefined>
   >(async () => undefined);
   const themesAutoFetchInFlight = useRef(false);
+  /** Bumped to cancel in-flight theme generation (e.g. user chose custom theme). */
+  const themeGenerationTokenRef = useRef(0);
+  const startThemeGenerationRef = useRef<
+    (
+      activeSessionId: string,
+      endpoint?: "/api/themes/generate" | "/api/themes/refresh",
+      currentThemes?: Theme[],
+    ) => Promise<void>
+  >(async () => {});
   const puzzlesRequestInFlight = useRef(false);
   const wizardNavLastRef = useRef<{ at: number; index: number }>({ at: 0, index: -1 });
   const wizardNavigationBusyRef = useRef(false);
@@ -2911,6 +2920,10 @@ export default function App() {
     if (!activeSessionId) return;
     const synced = await syncPlanningInputToServer(activeSessionId, "strict");
     if (!synced) return;
+    if (themePath !== "custom") {
+      setThemePath("generated");
+      void startThemeGenerationRef.current(activeSessionId, "/api/themes/generate", []);
+    }
     setWizardStep("themes");
   };
 
@@ -4221,15 +4234,20 @@ export default function App() {
     activeSessionId: string,
     endpoint: "/api/themes/generate" | "/api/themes/refresh",
     currentThemes: Theme[],
+    generationToken?: number,
   ): Promise<Theme[] | undefined> => {
+    const themeGenerationStale = (): boolean =>
+      generationToken !== undefined && generationToken !== themeGenerationTokenRef.current;
+
     if (authUser && !hasAuthToken()) {
       handleThemeGenerationAuthExpired();
       return undefined;
     }
 
     const importBrowserThemes = async (): Promise<Theme[] | undefined> => {
+      if (themeGenerationStale()) return undefined;
       const ready = await probeBrowserLanguageModel();
-      if (!ready) return undefined;
+      if (!ready || themeGenerationStale()) return undefined;
       const drafts = await generateThemesInBrowser({
         playersConcurrent: String(playersConcurrent),
         participantsTotal: String(participantsTotal),
@@ -4244,6 +4262,7 @@ export default function App() {
           endpoint === "/api/themes/refresh" ? currentThemes.map((theme) => theme.name).filter(Boolean) : undefined,
       });
       if (!drafts?.length) return undefined;
+      if (themeGenerationStale()) return undefined;
       const browserResponse = await apiFetch("/api/themes/browser-import", {
         method: "POST",
         headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
@@ -4259,6 +4278,7 @@ export default function App() {
         if (handleBillingGate(browserData.error?.code, browserData.error?.message)) return undefined;
         return undefined;
       }
+      if (themeGenerationStale()) return undefined;
       const nextThemes = browserData.themes;
       if (typeof browserData.openAiConfigured === "boolean") {
         setServerOpenAiConfigured(browserData.openAiConfigured);
@@ -4271,7 +4291,6 @@ export default function App() {
           return "";
         });
         setThemeSessionExpiredNotice("");
-        setThemeIdeasLoading(false);
       });
       toastMessageOnce("Original themes drafted on-device in Chrome.", TOAST_ID.browserThemes);
       return nextThemes;
@@ -4285,6 +4304,7 @@ export default function App() {
         // fall through to server catalog
       }
     }
+    if (themeGenerationStale()) return undefined;
 
     const response = await apiFetch(endpoint, {
       method: "POST",
@@ -4301,6 +4321,7 @@ export default function App() {
       error?: { message?: string; code?: string };
     };
     if (!response.ok || !data.themes) {
+      if (themeGenerationStale()) return undefined;
       if (isGenerationAuthExpired(response, data)) {
         handleThemeGenerationAuthExpired();
         return undefined;
@@ -4312,7 +4333,7 @@ export default function App() {
         if (isAuthPlanningRestorePending()) return undefined;
         const freshId = await recoverPlanningSessionRef.current({ seedThemes: true });
         if (freshId && freshId !== activeSessionId) {
-          return requestThemes(freshId, endpoint, currentThemes);
+          return requestThemes(freshId, endpoint, currentThemes, generationToken);
         }
         setError(planningSessionRecoveryNotice);
         return undefined;
@@ -4332,6 +4353,7 @@ export default function App() {
         // keep static catalog themes
       }
     }
+    if (themeGenerationStale()) return undefined;
     setThemesAiGenerated(Boolean(data.aiGenerated));
     flushSync(() => {
       setThemes(nextThemes);
@@ -4340,10 +4362,40 @@ export default function App() {
         return "";
       });
       setThemeSessionExpiredNotice("");
-      setThemeIdeasLoading(false);
     });
     return nextThemes;
   };
+
+  const cancelThemeGeneration = (): void => {
+    themeGenerationTokenRef.current += 1;
+    themesAutoFetchInFlight.current = false;
+    setThemeIdeasLoading(false);
+  };
+
+  const startThemeGeneration = async (
+    activeSessionId: string,
+    endpoint: "/api/themes/generate" | "/api/themes/refresh" = "/api/themes/generate",
+    currentThemes: Theme[] = [],
+  ): Promise<void> => {
+    const token = ++themeGenerationTokenRef.current;
+    themesAutoFetchInFlight.current = true;
+    setThemeIdeasLoading(true);
+    setError("");
+    setThemeSessionExpiredNotice("");
+    try {
+      await requestThemes(activeSessionId, endpoint, currentThemes, token);
+    } catch (err) {
+      if (token === themeGenerationTokenRef.current) {
+        setError(classifyApiCatchError(err));
+      }
+    } finally {
+      if (token === themeGenerationTokenRef.current) {
+        themesAutoFetchInFlight.current = false;
+        setThemeIdeasLoading(false);
+      }
+    }
+  };
+  startThemeGenerationRef.current = startThemeGeneration;
 
   const requestPuzzles = async (activeSessionId: string, themeId: string, themeForEnhance?: Theme | null): Promise<boolean> => {
     if (puzzlesRequestInFlight.current) return false;
@@ -4864,27 +4916,13 @@ export default function App() {
   };
 
   const loadThemes = async (endpoint: "/api/themes/generate" | "/api/themes/refresh") => {
-    // Load initial or refreshed theme options for the active session.
-    setError("");
-    setThemeSessionExpiredNotice("");
-    setThemeIdeasLoading(true);
-    try {
-      const activeSessionId = await ensureSession();
-      if (!activeSessionId) {
-        setThemeIdeasLoading(false);
-        return;
-      }
-      await requestThemes(activeSessionId, endpoint, themes);
-    } catch (err) {
-      setError(classifyApiCatchError(err));
-    } finally {
-      setThemeIdeasLoading(false);
-    }
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) return;
+    await startThemeGeneration(activeSessionId, endpoint, themes);
   };
 
   useEffect(() => {
     if (wizardStep !== "themes" || themePath === "custom") {
-      themesAutoFetchInFlight.current = false;
       return;
     }
     if (themes.length > 0) {
@@ -4892,41 +4930,24 @@ export default function App() {
       if (themePath === null) setThemePath("generated");
       return;
     }
-    if (themesAutoFetchInFlight.current) {
+    if (themesAutoFetchInFlight.current || themeIdeasLoading) {
       return;
     }
     if (isAuthPlanningRestorePending()) return;
-    themesAutoFetchInFlight.current = true;
     if (themePath === null) {
       setThemePath("generated");
     }
     let cancelled = false;
     void (async () => {
-      setError("");
-      setThemeSessionExpiredNotice("");
-      setThemeIdeasLoading(true);
       const activeSessionId = sessionId || (await createSession(undefined, { seedThemes: false }));
-      if (cancelled || !activeSessionId) {
-        themesAutoFetchInFlight.current = false;
-        setThemeIdeasLoading(false);
-        return;
-      }
-      try {
-        await requestThemes(activeSessionId, "/api/themes/generate", []);
-      } catch (err) {
-        if (!cancelled) {
-          setError(classifyApiCatchError(err));
-        }
-      } finally {
-        if (!cancelled) themesAutoFetchInFlight.current = false;
-        if (!cancelled) setThemeIdeasLoading(false);
-      }
+      if (cancelled || !activeSessionId) return;
+      await startThemeGeneration(activeSessionId, "/api/themes/generate", []);
     })();
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap theme list when step opens; avoid duplicate fetches when themePath flips null→generated
-  }, [wizardStep, sessionId, themes.length, themePath, hasFullCatalogAccess, authBootstrapReady]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap when themes step opens without duplicating in-flight work
+  }, [wizardStep, sessionId, themes.length, themePath, themeIdeasLoading, authBootstrapReady]);
 
   /** Live preview: replace default architectural shell with named flow zones once duration is set. */
   useEffect(() => {
@@ -6195,9 +6216,9 @@ export default function App() {
                 ? "Export markdown, mark approval if you want, and save the plan to your account."
                 : null;
 
-  const showBackInFlowHeader = !(flowWizardStep === "themes" && themePath === "generated");
+  const showBackInFlowHeader = !(flowWizardStep === "themes" && themePath !== "custom");
   const themeHeaderActions =
-    flowWizardStep === "themes" && themePath === "generated" ? (
+    flowWizardStep === "themes" && themePath !== "custom" ? (
       <div className="theme-header-actions" role="group" aria-label="Theme navigation">
         {canGoWizardBack ? (
           <button type="button" className="secondary-btn flow-back-btn" onClick={goWizardBack}>
@@ -7018,6 +7039,7 @@ export default function App() {
                       disabled={!hasFullCatalogAccess}
                       title={hasFullCatalogAccess ? undefined : "Features unlocked with subscription"}
                       onClick={() => {
+                        cancelThemeGeneration();
                         setThemePath("custom");
                         setThemes([]);
                         setSelectedThemeId("");
@@ -7033,7 +7055,6 @@ export default function App() {
                         onClick={() => {
                           setThemePath("generated");
                           resetCustomThemeCoach();
-                          setThemeIdeasLoading(true);
                           void loadThemes("/api/themes/generate");
                         }}
                       >
@@ -7186,7 +7207,7 @@ export default function App() {
                     </div>
                   </div>
                 ) : null}
-                {themePath === "generated" ? (
+                {themePath !== "custom" ? (
                   <>
                     <div className="subcard compact-block theme-selection-card">
                       {themeSessionExpiredNotice ? (
@@ -7228,7 +7249,7 @@ export default function App() {
                         </div>
                       ) : null}
                       {themes.length === 0 && !themeIdeasLoading && !themeSessionExpiredNotice ? (
-                        <p className="muted">Theme ideas will appear here automatically once your session is ready.</p>
+                        <p className="muted">Generating theme ideas for your room…</p>
                       ) : null}
                       {themes.length > 0 ? (
                         <ul className={`theme-ideas-list ${validationFlags.selectedThemeId ? "invalid-list" : ""}`}>
