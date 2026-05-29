@@ -14,7 +14,7 @@ export type RoomLayoutElement = {
   xM: number;
   yM: number;
   rotationDeg?: number;
-  meta?: { propKey?: string; locked?: boolean };
+  meta?: { propKey?: string; locked?: boolean; skeletonZoneId?: string };
 };
 
 export type RoomLayoutDocument = {

@@ -87,6 +87,8 @@ import { CouncilTelemetryPanel } from "@/features/planning/components/Generation
 import type { GenerationTelemetry } from "@/features/planning/domain/generationTelemetry";
 import { PlanningProvider, type PlanningContextValue } from "@/features/planning/context/PlanningProvider";
 import { PlanningBridge } from "@/features/planning/context/PlanningBridge";
+import { applyRoomSkeletonToLayout } from "@/features/planning/layout-designer/roomSkeletonLayout";
+import type { RoomSkeleton } from "../../shared/roomSkeleton";
 import { estimatePuzzleNodes } from "@/features/planning/domain/estimatePuzzleNodes";
 import { EVENT_CONTEXT_PRESETS, ENVIRONMENT_CUSTOM_OPTION, ENVIRONMENT_PRESETS, getSuggestedPropOptionsForPlanning, isCommercialVenueEventContext, PROP_LABEL_BLOCKLIST } from "@/features/planning/domain/propPresets";
 import { dedupeStringsPreserveOrder } from "@/features/planning/domain/parseItems";
@@ -4281,6 +4283,7 @@ export default function App() {
         generationEngine?: GenerationTelemetry["engine"];
         masterGeneratorAttempted?: boolean;
         councilReport?: GenerationTelemetry["councilReport"];
+        roomSkeleton?: RoomSkeleton;
         user?: unknown;
         error?: { message?: string; code?: string };
       };
@@ -4379,6 +4382,14 @@ export default function App() {
           masterAttempted: Boolean(data.masterGeneratorAttempted),
           generatedAt: new Date().toISOString(),
           councilReport: data.councilReport,
+        });
+      }
+      if (data.roomSkeleton?.zones?.length && planningRef.current) {
+        const nextLayout = applyRoomSkeletonToLayout(planningRef.current.state.roomLayout, data.roomSkeleton);
+        planningRef.current.dispatch({ type: "SET_ROOM_LAYOUT", layout: nextLayout });
+        planningRef.current.dispatch({
+          type: "LAYOUT_ANNOUNCE",
+          message: `AI plotted ${data.roomSkeleton.zones.length} zones on the blueprint.`,
         });
       }
       return true;
