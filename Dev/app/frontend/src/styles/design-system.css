@@ -27,6 +27,7 @@
 
   /* —— Mystery / escape-room palette —— */
   --tf-teal: hsl(187 92% 48%);
+  --color-primary-neon: var(--tf-teal);
   --tf-teal-dim: hsl(187 70% 38%);
   --tf-teal-glow: hsl(187 92% 48% / 0.35);
   --tf-amber: hsl(38 92% 58%);
@@ -59,6 +60,11 @@
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
   --radius-pill: 999px;
+
+  /* —— Creative engines —— */
+  --color-success-neon: hsl(142 76% 52%);
+  --color-hardware-error: hsl(0 72% 55%);
+  --color-narrative-node: hsl(265 68% 62%);
 }
 
 /* —— Global interactive affordances —— */

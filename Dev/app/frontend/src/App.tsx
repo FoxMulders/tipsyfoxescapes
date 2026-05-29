@@ -82,7 +82,14 @@ import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
 import { type BillingPlan } from "@/components/account/PlansAndBillingSection";
 import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
-import { RoomDetailsStep } from "@/components/planning/RoomDetailsStep";
+import { RoomDetailsWorkspace } from "@/features/planning/components/RoomDetailsWorkspace";
+import { SidebarAdmin } from "@/features/planning/components/SidebarAdmin";
+import { PlanningProvider, type PlanningContextValue } from "@/features/planning/context/PlanningProvider";
+import { PlanningBridge } from "@/features/planning/context/PlanningBridge";
+import { estimatePuzzleNodes } from "@/features/planning/domain/estimatePuzzleNodes";
+import { EVENT_CONTEXT_PRESETS, isCommercialVenueEventContext } from "@/features/planning/domain/propPresets";
+import { dedupeStringsPreserveOrder } from "@/features/planning/domain/parseItems";
+import { isCreativeEnginesEnabled } from "@/features/creative-engines/featureFlag.ts";
 import { ThemeCuratedCard } from "@/components/planning/ThemeCuratedCard";
 import {
   calculateEscapePlanPrice,
@@ -149,6 +156,9 @@ const UpgradePromptDialog = lazy(() =>
 );
 const HomePostExportModal = lazy(() =>
   import("@/components/live/HomePostExportModal").then((m) => ({ default: m.HomePostExportModal })),
+);
+const CreativeEnginesWorkspace = lazy(() =>
+  import("@/features/creative-engines/CreativeEnginesWorkspace.tsx").then((m) => ({ default: m.CreativeEnginesWorkspace })),
 );
 
 const BRAND_NAME = "Tipsy Fox Escapes";
@@ -966,18 +976,8 @@ function JuniorGateIntegrationCallout({
 
 const collapseWs = (s: string): string => s.replace(/\s+/g, " ").trim();
 
-/** Mirrors `estimatePuzzleCount` in the backend for live UI feedback. */
-const estimateClientPuzzleCount = (playersConcurrent: number, sessionDurationMinutes: number): number => {
-  if (sessionDurationMinutes <= 5) return 1;
-  if (sessionDurationMinutes <= 10) return Math.min(2, Math.max(1, Math.ceil(playersConcurrent / 3)));
-  if (sessionDurationMinutes <= 15) return Math.min(3, Math.max(2, Math.ceil(playersConcurrent / 2)));
-  if (sessionDurationMinutes <= 30) {
-    const raw = Math.ceil((playersConcurrent * sessionDurationMinutes) / 38);
-    return Math.min(8, Math.max(2, raw));
-  }
-  const raw = Math.ceil((playersConcurrent * sessionDurationMinutes) / 30);
-  return Math.max(4, Math.min(18, raw));
-};
+/** Mirrors backend estimate — use {@link estimatePuzzleNodes} from planning domain. */
+const estimateClientPuzzleCount = estimatePuzzleNodes;
 
 function RollingPuzzleEstimate({ target }: { target: number }) {
   const [display, setDisplay] = useState(target);
@@ -7914,6 +7914,28 @@ export default function App() {
                       </Suspense>
                       <NarrativeFlowGuide storyPlan={storyPlan} />
                     </div>
+                  ) : null}
+                  {isCreativeEnginesEnabled() && puzzles.length > 0 ? (
+                    <Suspense fallback={<p className="muted">Loading creative engines…</p>}>
+                      <CreativeEnginesWorkspace
+                        sessionId={sessionId}
+                        puzzles={puzzles.map((p) => ({
+                          id: p.id,
+                          title: p.title,
+                          audienceTrack: p.audienceTrack,
+                        }))}
+                        storyStages={
+                          storyPlan?.stages?.map((st) => ({
+                            stage: st.stage,
+                            title: st.title,
+                            storyBeat: st.storyBeat,
+                            requiredPuzzleIds: st.requiredPuzzleIds,
+                          })) ?? []
+                        }
+                        progressionGraph={storyPlan?.progressionGraph ?? null}
+                        youthAddOnEnabled={youthAddOnEnabled}
+                      />
+                    </Suspense>
                   ) : null}
                 </>
               ) : null}

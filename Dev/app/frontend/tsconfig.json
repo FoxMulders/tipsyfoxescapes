@@ -13,6 +13,10 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/features/planning/domain/_propBody.tmp.ts",
+    "src/features/planning/layout-designer/**"
+  ]
 }
 
