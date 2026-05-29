@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { RoomConfigurationPanel } from "./RoomConfigurationPanel";
 import { StickyDashboard } from "./StickyDashboard";
+import type { BuilderAccountStripProps } from "./BuilderAccountStrip";
 
 const BlueprintWorkspace = lazy(() =>
   import("./BlueprintWorkspace").then((m) => ({ default: m.BlueprintWorkspace })),
@@ -14,7 +15,7 @@ type RoomDetailsWorkspaceProps = {
   themeLabel: string;
   mainPuzzleCount: number;
   sessionSyncing?: boolean;
-};
+} & BuilderAccountStripProps;
 
 export function RoomDetailsWorkspace({
   eventSuggestions,
@@ -24,6 +25,14 @@ export function RoomDetailsWorkspace({
   themeLabel,
   mainPuzzleCount,
   sessionSyncing,
+  authName,
+  authEmail,
+  billingTierLabel,
+  planStatusDetail,
+  appView,
+  showAdminTab,
+  onAppViewChange,
+  onSignOut,
 }: RoomDetailsWorkspaceProps) {
   return (
     <div className="room-builder-cad flow-content flow-content--blueprint">
@@ -47,6 +56,14 @@ export function RoomDetailsWorkspace({
           sessionSyncing={sessionSyncing}
           eventSuggestions={eventSuggestions}
           itemHistory={itemHistory}
+          authName={authName}
+          authEmail={authEmail}
+          billingTierLabel={billingTierLabel}
+          planStatusDetail={planStatusDetail}
+          appView={appView}
+          showAdminTab={showAdminTab}
+          onAppViewChange={onAppViewChange}
+          onSignOut={onSignOut}
         />
       </div>
 

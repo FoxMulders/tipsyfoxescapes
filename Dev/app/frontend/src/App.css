@@ -7295,6 +7295,65 @@ ul.auth-hero-para {
   gap: var(--cad-grid-gap, 8px);
 }
 
+.room-config-panel .inspiration-drawer-trigger {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 44px;
+  max-height: none;
+}
+
+.page-shell--room-cad-setup {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.page-shell--room-cad-setup .app-main-col {
+  max-width: none;
+}
+
+.builder-account-strip {
+  margin-top: var(--cad-grid-gap, 8px);
+  padding: calc(var(--cad-grid-gap, 8px) * 1.25);
+  border-top: var(--cad-panel-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cad-grid-gap, 8px);
+}
+
+.builder-account-strip__tier {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid hsl(187 70% 42% / 0.35);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cad-neon-cyan, #22d3ee);
+}
+
+.builder-account-strip__name {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.builder-account-strip__email,
+.builder-account-strip__slots {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.builder-account-strip__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.builder-account-strip__btn {
+  width: 100%;
+  justify-content: flex-start;
+}
+
 .sticky-dashboard {
   position: sticky;
   top: calc(var(--app-top-nav-height, 0px) + 0.5rem);

@@ -6223,7 +6223,9 @@ export default function App() {
       {/* Main application layout and interactive sections. */}
       <main
         ref={builderShellRef}
-        className="page-shell page-shell--layered page-shell--cols"
+        className={`page-shell page-shell--layered page-shell--cols${
+          appView === "builder" && flowWizardStep === "setup" ? " page-shell--room-cad-setup" : ""
+        }`}
       >
       <div className="app-main-col">
       {authUser.billingTier === "trial" && appView === "builder" ? (
@@ -6691,6 +6693,20 @@ export default function App() {
                 }
                 mainPuzzleCount={mainTrackPuzzles.length}
                 sessionSyncing={planningSyncing}
+                authName={authUser.name}
+                authEmail={authUser.email}
+                billingTierLabel={formatBillingTierLabel(authUser.billingTier)}
+                planStatusDetail={`${authUser.roomsRemaining} of ${authUser.roomAllowance} save slots · ${authUser.exportCreditsRemaining} export credits`}
+                appView={appView}
+                showAdminTab={authUser.role === "admin" || authUser.isAdmin}
+                onAppViewChange={(view) => {
+                  if (view === "admin") {
+                    navigate("/admin/dashboard");
+                    return;
+                  }
+                  setAppView(view);
+                }}
+                onSignOut={signOut}
               />
             ) : null}
             {flowWizardStep === "themes" ? (
@@ -8184,6 +8200,7 @@ export default function App() {
       ) : null}
       <GlobalFooter buildStamp={APP_BUILD_STAMP} />
       </div>
+      {!(appView === "builder" && flowWizardStep === "setup") ? (
       <aside className="app-sidebar-col">
         <TopNavBar
           ref={topNavRef}
@@ -8208,6 +8225,7 @@ export default function App() {
           puzzleCount={puzzles.length}
         />
       </aside>
+      ) : null}
       </main>
     </>
   );
