@@ -5067,7 +5067,7 @@ export default function App() {
   };
 
   const addCustomTheme = async () => {
-    // Persist a custom theme and auto-select it.
+    // Persist a custom theme, select it, and open the puzzle builder (with generation).
     setError("");
     if (!hasFullCatalogAccess) {
       setError(
@@ -5082,6 +5082,14 @@ export default function App() {
       flagMissingFields(["customThemeName"]);
       return;
     }
+    if (!buildPlanningBody("strict")) {
+      flagMissingFields(collectStrictPlanningMissing());
+      setError("Complete room details (players, duration, and environment) before saving your custom theme.");
+      setWizardStep("setup");
+      setActivePanel("plan");
+      scrollFirstInvalidRoomFieldIntoView();
+      return;
+    }
     setCustomThemeSaving(true);
     try {
       const activeSessionId = await ensureSession();
@@ -5089,6 +5097,9 @@ export default function App() {
         setError("Could not start a planning session. Check that the backend is running and try again.");
         return;
       }
+      const synced = await syncPlanningInputToServer(activeSessionId, "strict");
+      if (!synced) return;
+
       let response: Response;
       try {
         response = await apiFetch("/api/themes/custom", {
@@ -5104,32 +5115,59 @@ export default function App() {
         setError(classifyApiCatchError(err));
         return;
       }
-      let data: { theme?: Theme; error?: { message?: string } };
+      let data: { theme?: Theme; error?: { message?: string; code?: string } };
       try {
-        data = (await response.json()) as { theme?: Theme; error?: { message?: string } };
+        data = (await response.json()) as { theme?: Theme; error?: { message?: string; code?: string } };
       } catch {
         setError(unexpectedApiResponseMessage(response.status));
         return;
       }
       if (!response.ok || !data.theme) {
-        setError(data.error?.message ?? `Failed to add custom theme (${response.status}).`);
-        return;
+        if (handleBillingGate(data.error?.code, data.error?.message)) return;
+        if (isInvalidPlanningSessionResponse(response, data)) {
+          const freshId = await recoverPlanningSessionRef.current({ seedThemes: false });
+          if (freshId) {
+            await syncPlanningInputToServer(freshId, "strict");
+            const retry = await apiFetch("/api/themes/custom", {
+              method: "POST",
+              headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
+              body: JSON.stringify({
+                sessionId: freshId,
+                name: customThemeName,
+                description: customThemeDescription,
+              }),
+            });
+            data = (await retry.json()) as { theme?: Theme; error?: { message?: string; code?: string } };
+            if (!retry.ok || !data.theme) {
+              setError(data.error?.message ?? planningSessionRecoveryNotice);
+              return;
+            }
+            response = retry;
+          } else {
+            setError(planningSessionRecoveryNotice);
+            return;
+          }
+        } else {
+          setError(data.error?.message ?? `Failed to add custom theme (${response.status}).`);
+          return;
+        }
       }
-      if (!buildPlanningBody("strict")) {
-        flagMissingFields(collectStrictPlanningMissing());
-        setError("Room details are incomplete. Fix required fields under Room details before continuing.");
-        setWizardStep("setup");
-        setActivePanel("plan");
-        scrollFirstInvalidRoomFieldIntoView();
-        return;
-      }
-      const synced = await syncPlanningInputToServer(activeSessionId, "strict");
-      if (!synced) return;
-      setThemes((current) => [data.theme as Theme, ...current.filter((theme) => theme.id !== data.theme?.id)]);
-      setSelectedThemeId(data.theme.id);
+
+      const savedTheme = data.theme!;
+      setThemes((current) => [savedTheme, ...current.filter((theme) => theme.id !== savedTheme.id)]);
+      setSelectedThemeId(savedTheme.id);
+      setValidationFlags((current) => ({ ...current, selectedThemeId: false, customThemeName: false }));
       rememberInput("customThemeName", customThemeName);
       rememberInput("customThemeDescription", customThemeDescription);
+
+      setActivePanel("themes");
       setWizardStep("themes-puzzles");
+      if (puzzles.length === 0) {
+        const generated = await requestPuzzles(activeSessionId, savedTheme.id, savedTheme);
+        if (!generated) {
+          setError("Theme saved, but puzzle generation did not finish. Try Continue to puzzle builder below or open Output review.");
+        }
+      }
     } finally {
       setCustomThemeSaving(false);
     }
@@ -7204,6 +7242,16 @@ export default function App() {
                       >
                         {customThemeSaving ? "Saving…" : "Add and Select Custom Theme"}
                       </button>
+                      {selectedThemeId && themePath === "custom" ? (
+                        <button
+                          type="button"
+                          className="secondary-btn theme-custom-continue-btn"
+                          disabled={customThemeSaving || puzzlesGenerating}
+                          onClick={() => void proceedFromThemesToPuzzles()}
+                        >
+                          Continue to puzzle builder →
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}
@@ -8357,9 +8405,13 @@ export default function App() {
           <button type="button" className="mobile-continue-fab" onClick={() => void proceedFromSetupToThemes()}>
             Continue → Themes
           </button>
-        ) : flowWizardStep === "themes" && selectedThemeId ? (
-          <button type="button" className="mobile-continue-fab" onClick={() => void proceedFromThemesToPuzzles()}>
-            Continue → Build puzzles
+        ) : flowWizardStep === "themes" && (selectedThemeId || (themePath === "custom" && customThemeName.trim())) ? (
+          <button
+            type="button"
+            className="mobile-continue-fab"
+            onClick={() => void (selectedThemeId ? proceedFromThemesToPuzzles() : addCustomTheme())}
+          >
+            {selectedThemeId ? "Continue → Build puzzles" : "Save theme → Build puzzles"}
           </button>
         ) : flowWizardStep === "themes-puzzles" ? (
           <button
