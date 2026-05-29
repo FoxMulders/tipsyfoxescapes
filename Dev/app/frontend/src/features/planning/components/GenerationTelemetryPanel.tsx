@@ -58,8 +58,17 @@ export function CouncilTelemetryPanel({ loading, telemetry, compact }: CouncilTe
       <section className="council-telemetry council-telemetry--empty" aria-live="polite">
         <header className="council-telemetry__head">
           <h4 className="council-telemetry__title">Generation engine</h4>
+          <GenerationEngineBadge engine="static_catalog" />
         </header>
-        <p className="muted text-sm">Generate a puzzle set to see Master Generator telemetry here.</p>
+        <p className="muted text-sm">
+          Master Generator and Council of Ten run when you open <strong>Build puzzle set</strong> (step 3) with a theme selected.
+          This panel shows the engine badge, persona scores, and wow-factor after that generate completes.
+        </p>
+        <ol className="council-telemetry__steps muted text-xs">
+          <li>Finish room details → Continue to theme selection</li>
+          <li>Pick a theme → open Build puzzle set</li>
+          <li>Wait ~30s — blueprint zones and council scores update</li>
+        </ol>
       </section>
     );
   }

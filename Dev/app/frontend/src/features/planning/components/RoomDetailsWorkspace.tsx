@@ -18,6 +18,7 @@ type RoomDetailsWorkspaceProps = {
   sessionSyncing?: boolean;
   generationTelemetry?: GenerationTelemetry | null;
   puzzlesGenerating?: boolean;
+  spatialFlowSummary?: string | null;
 } & BuilderAccountStripProps;
 
 export function RoomDetailsWorkspace({
@@ -30,6 +31,7 @@ export function RoomDetailsWorkspace({
   sessionSyncing,
   generationTelemetry,
   puzzlesGenerating,
+  spatialFlowSummary,
   authName,
   authEmail,
   billingTierLabel,
@@ -49,6 +51,11 @@ export function RoomDetailsWorkspace({
         />
 
         <div className="room-builder-cad__center">
+          {spatialFlowSummary ? (
+            <p className="blueprint-flow-summary muted text-sm" role="note">
+              <strong>Spatial flow:</strong> {spatialFlowSummary}
+            </p>
+          ) : null}
           <Suspense fallback={<p className="muted p-4 text-sm">Loading blueprint workspace…</p>}>
             <BlueprintWorkspace />
           </Suspense>

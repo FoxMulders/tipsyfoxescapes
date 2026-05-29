@@ -7262,6 +7262,7 @@ ul.auth-hero-para {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  gap: 0.35rem;
 }
 
 .room-builder-cad__dashboard {
@@ -7306,6 +7307,17 @@ ul.auth-hero-para {
   display: flex;
   flex-direction: column;
   gap: var(--cad-grid-gap, 8px);
+}
+
+.room-config-panel .room-details-duration-row {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.room-config-panel .room-details-duration-row .puzzle-estimate-badge {
+  align-self: stretch;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .room-config-panel .inspiration-drawer-trigger {
@@ -7882,6 +7894,43 @@ ul.auth-hero-para {
 .council-telemetry__warn {
   color: #b45309;
   margin: 0;
+}
+
+.council-telemetry__steps {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.blueprint-layout-mode {
+  display: inline-flex;
+  margin-top: 0.25rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.blueprint-layout-mode--shell {
+  color: hsl(215 20% 35%);
+  background: hsl(215 20% 92%);
+  border: 1px solid hsl(215 15% 75%);
+}
+
+.blueprint-layout-mode--skeleton {
+  color: #042f2e;
+  background: linear-gradient(135deg, #5eead4, #22d3ee);
+  border: 1px solid hsl(187 70% 42% / 0.45);
+}
+
+.room-config-panel .room-details-duration-row .puzzle-estimate-badge {
+  align-self: stretch;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .council-telemetry__verdicts {

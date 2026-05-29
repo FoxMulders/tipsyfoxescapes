@@ -2125,6 +2125,7 @@ export default function App() {
   const [serviceHealth, setServiceHealth] = useState<ServiceHealth | null>(null);
   const [sessionId, setSessionId] = useState<string>("");
   const planningRef = useRef<PlanningContextValue | null>(null);
+  const layoutPreviewKeyRef = useRef("");
   const [playersConcurrent, setPlayersConcurrent] = useState<string>("2");
   const [participantsTotal, setParticipantsTotal] = useState<string>("6");
   const [sessionDurationMinutes, setSessionDurationMinutes] = useState<string>("45");
@@ -4764,6 +4765,62 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap theme list when step opens; avoid duplicate fetches when themePath flips null→generated
   }, [wizardStep, sessionId, themes.length, themePath, hasFullCatalogAccess, authBootstrapReady]);
 
+  /** Live preview: replace default architectural shell with named flow zones once duration is set. */
+  useEffect(() => {
+    let cancelled = false;
+    const applyPreview = () => {
+      if (cancelled) return;
+      const planning = planningRef.current;
+      if (!planning) {
+        requestAnimationFrame(applyPreview);
+        return;
+      }
+      if (generationTelemetry?.engine === "ai_generated") return;
+
+      const duration = planning.state.sessionDurationMinutes.trim();
+      const durationN = Number(duration);
+      if (!duration || !Number.isFinite(durationN) || durationN < 10) return;
+
+      const theme =
+        themes.find((t) => t.id === selectedThemeId) ??
+        (customThemeName.trim() ? { name: customThemeName.trim() } : null);
+      const themeName = theme?.name ?? "Your escape room";
+      const commercial = planning.state.targetInterface === "commercial_venue";
+      const previewKey = `${themeName}|${commercial}|${duration}|${planning.state.playersConcurrent}`;
+
+      const layout = planning.state.roomLayout;
+      const hasManualEdits = layout.elements.some(
+        (e) => !e.id.startsWith("shell_") && !e.id.startsWith("skel_"),
+      );
+      if (hasManualEdits) return;
+
+      if (layoutPreviewKeyRef.current === previewKey && layout.elements.some((e) => e.id.startsWith("skel_"))) {
+        return;
+      }
+      layoutPreviewKeyRef.current = previewKey;
+
+      const skeleton = buildHeuristicRoomSkeleton(themeName, commercial);
+      setLastRoomSkeleton(skeleton);
+      const baseLayout = layoutHasOnlyPresetShell(layout)
+        ? layout
+        : { ...layout, elements: layout.elements.filter((e) => !e.id.startsWith("skel_")) };
+      const next = applyRoomSkeletonToLayout(baseLayout, skeleton);
+      planning.dispatch({ type: "SET_ROOM_LAYOUT", layout: next });
+    };
+    applyPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    sessionDurationMinutes,
+    playersConcurrent,
+    targetInterface,
+    selectedThemeId,
+    themes,
+    customThemeName,
+    generationTelemetry?.engine,
+  ]);
+
   /** Auto-generate a theme-fit puzzle set when entering Build with a selected theme. */
   useEffect(() => {
     if (wizardStep !== "themes-puzzles" || !selectedThemeId || puzzles.length > 0) {
@@ -6735,6 +6792,7 @@ export default function App() {
                 sessionSyncing={planningSyncing}
                 generationTelemetry={generationTelemetry}
                 puzzlesGenerating={puzzlesGenerating}
+                spatialFlowSummary={lastRoomSkeleton?.flow_summary ?? null}
                 authName={authUser.name}
                 authEmail={authUser.email}
                 billingTierLabel={formatBillingTierLabel(authUser.billingTier)}

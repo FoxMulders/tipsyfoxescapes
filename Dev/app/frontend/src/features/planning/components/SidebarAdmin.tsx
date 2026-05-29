@@ -51,7 +51,6 @@ export function SidebarAdmin(props: SidebarAdminProps) {
       <CouncilTelemetryPanel
         loading={puzzlesGenerating}
         telemetry={generationTelemetry ?? null}
-        compact
       />
       <header className="sticky-dashboard__snapshot-head">
         <h3 className="planning-snapshot-rail-title">Plan snapshot</h3>

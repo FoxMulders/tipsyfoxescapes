@@ -3,6 +3,7 @@ import { usePlanning } from "../context/PlanningProvider";
 import { LayoutCanvas } from "../layout-designer/LayoutCanvas";
 import { LayoutA11yMirror } from "../layout-designer/LayoutA11yMirror";
 import { BlueprintToolbar } from "../layout-designer/BlueprintToolbar";
+import { layoutHasOnlyPresetShell } from "../layout-designer/roomSkeletonLayout";
 import {
   dockItemToPalette,
   nextAutoPuzzlePosition,
@@ -19,6 +20,10 @@ export function BlueprintWorkspace() {
   const [pendingItem, setPendingItem] = useState<PaletteItem | null>(null);
   const [showGridLayer, setShowGridLayer] = useState(true); // UI affordance; snap tied to reducer
   const activeKey = pendingItem ? `${pendingItem.kind}:${pendingItem.label}` : null;
+  const hasSkeletonZones = state.roomLayout.elements.some(
+    (e) => e.id.startsWith("skel_") || Boolean(e.meta?.skeletonZoneId),
+  );
+  const shellPresetOnly = layoutHasOnlyPresetShell(state.roomLayout);
 
   const pick = (item: PaletteItem) => {
     setPendingItem(item);
@@ -60,6 +65,11 @@ export function BlueprintWorkspace() {
           <p className="blueprint-workspace__lead muted text-sm">
             Isometric CAD grid · 0.5m snap · drag zones and puzzle nodes
           </p>
+          {hasSkeletonZones ? (
+            <span className="blueprint-layout-mode blueprint-layout-mode--skeleton">Flow zones plotted</span>
+          ) : shellPresetOnly ? (
+            <span className="blueprint-layout-mode blueprint-layout-mode--shell">Architectural shell</span>
+          ) : null}
         </div>
       </header>
 
