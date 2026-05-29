@@ -3,6 +3,12 @@
  * instead of bare tone() demos.
  */
 
+import {
+  detectSketchProfileLegacy,
+  type HardwareProfile,
+  resolveHardwareProfile,
+} from "./hardwareProfile.js";
+
 export type ArduinoPinoutRow = {
   pin: string;
   function: string;
@@ -14,6 +20,7 @@ export type ArduinoProductionBundle = {
   arduinoCode: string;
   buildDocumentationUrl: string;
   makerLibraryLinks: Array<{ title: string; url: string }>;
+  hardwareProfile: HardwareProfile;
 };
 
 export const TRUSTED_MAKER_LIBRARIES = {
@@ -44,6 +51,10 @@ export const TRUSTED_MAKER_LIBRARIES = {
   mfrc522Guide: {
     title: "Arduino MFRC522 RFID wiring",
     url: "https://github.com/miguelbalboa/rfid",
+  },
+  reedSwitchGuide: {
+    title: "Adafruit reed switch overview and wiring",
+    url: "https://learn.adafruit.com/reed-switch/overview",
   },
 } as const;
 
@@ -84,21 +95,10 @@ export const buildPinoutTableFromWiring = (wiringDiagram: string[]): ArduinoPino
 const pinoutTableToCommentBlock = (rows: ArduinoPinoutRow[]): string =>
   rows.map((r) => `// ${r.pin.padEnd(8)} → ${r.connectsTo} (${r.function})`).join("\n");
 
-const detectSketchProfile = (wiringDiagram: string[], parts: string[]): "button_led" | "buzzer" | "touch" | "rfid" | "generic" => {
-  const blob = `${wiringDiagram.join(" ")} ${parts.join(" ")}`.toLowerCase();
-  if (/\bmpr121\b|\btouch\b/.test(blob)) return "touch";
-  if (/\bmfrc522\b|\brfid\b/.test(blob)) return "rfid";
-  if (/\bbuzzer\b|\btone\b/.test(blob)) return "buzzer";
-  if (/\bbutton\b|\bswitch\b/.test(blob) && /\bled\b/.test(blob)) return "button_led";
-  return "generic";
-};
-
-const buildSketchForProfile = (
-  profile: ReturnType<typeof detectSketchProfile>,
-  rows: ArduinoPinoutRow[],
-): string => {
+const buildSketchForProfile = (profile: HardwareProfile, rows: ArduinoPinoutRow[]): string => {
   const header = `/*
  * Production routing sketch — verify pinout against your bench wiring before live play.
+ * Profile: ${profile}
  * Pin map:
 ${pinoutTableToCommentBlock(rows)}
  */`;
@@ -122,7 +122,7 @@ void setup() {
 void loop() {
   if (digitalRead(kButtonPin) == LOW && millis() - lastDebounceMs > 280) {
     lastDebounceMs = millis();
-  pressCount++;
+    pressCount++;
   }
   if (pressCount >= 3) {
     digitalWrite(kStatusLedPin, LOW);
@@ -221,9 +221,59 @@ void loop() {
   mfrc522.PICC_HaltA();
   mfrc522.PCD_StopCrypto1();
 }`;
+    case "relay_maglock":
+      return `${header}
+const int reedPins[3] = {2, 3, 4};
+const int relayPin = 7;
+const int sequence[3] = {0, 1, 2};
+int step = 0;
+unsigned long lastTrigger = 0;
+const unsigned long debounceMs = 200;
+
+void setup() {
+  for (int i = 0; i < 3; i++) {
+    pinMode(reedPins[i], INPUT_PULLUP);
+  }
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW);
+}
+
+void loop() {
+  unsigned long now = millis();
+  for (int i = 0; i < 3; i++) {
+    if (digitalRead(reedPins[i]) == LOW && now - lastTrigger > debounceMs) {
+      lastTrigger = now;
+      if (i == sequence[step]) {
+        step++;
+      } else {
+        step = 0;
+      }
+    }
+  }
+  if (step >= 3) {
+    digitalWrite(relayPin, HIGH);
+  }
+}`;
+    case "analog_sensor":
+      return `${header}
+const int kSensorPin = A0;
+const int kOutputPin = 9;
+const int kThreshold = 512;
+unsigned long lastSampleMs = 0;
+
+void setup() {
+  pinMode(kOutputPin, OUTPUT);
+  digitalWrite(kOutputPin, LOW);
+}
+
+void loop() {
+  if (millis() - lastSampleMs < 50) return;
+  lastSampleMs = millis();
+  int reading = analogRead(kSensorPin);
+  digitalWrite(kOutputPin, reading >= kThreshold ? HIGH : LOW);
+}`;
     default:
       return `${header}
-// Map each output in setup()/loop() to the pinout table above.
 const int kOutputPin = 9;
 
 void setup() {
@@ -239,25 +289,38 @@ void loop() {
   }
 };
 
+const documentationUrlForProfile = (profile: HardwareProfile): string => {
+  switch (profile) {
+    case "touch":
+      return TRUSTED_MAKER_LIBRARIES.mpr121Guide.url;
+    case "rfid":
+      return TRUSTED_MAKER_LIBRARIES.mfrc522Guide.url;
+    case "relay_maglock":
+      return TRUSTED_MAKER_LIBRARIES.reedSwitchGuide.url;
+    default:
+      return TRUSTED_MAKER_LIBRARIES.arduinoUnoPinout.url;
+  }
+};
+
 export const routeArduinoProductionBundle = (
-  puzzleTitle: string,
+  _puzzleTitle: string,
   wiringDiagram: string[],
   parts: string[],
+  hardwareProfile?: HardwareProfile,
 ): ArduinoProductionBundle => {
   const pinoutTable = buildPinoutTableFromWiring(wiringDiagram);
-  const profile = detectSketchProfile(wiringDiagram, parts);
-  const buildDocumentationUrl =
-    profile === "touch"
-      ? TRUSTED_MAKER_LIBRARIES.mpr121Guide.url
-      : profile === "rfid"
-        ? TRUSTED_MAKER_LIBRARIES.mfrc522Guide.url
-        : TRUSTED_MAKER_LIBRARIES.arduinoUnoPinout.url;
+  const profile = resolveHardwareProfile(hardwareProfile, wiringDiagram, parts);
+  const buildDocumentationUrl = documentationUrlForProfile(profile);
 
   const makerLibraryLinks = [
     TRUSTED_MAKER_LIBRARIES.arduinoUnoPinout,
     TRUSTED_MAKER_LIBRARIES.arduinoLanguageReference,
     TRUSTED_MAKER_LIBRARIES.playfulTechnology,
-    profile === "touch" ? TRUSTED_MAKER_LIBRARIES.mpr121Guide : TRUSTED_MAKER_LIBRARIES.sparkfunTutorials,
+    profile === "touch"
+      ? TRUSTED_MAKER_LIBRARIES.mpr121Guide
+      : profile === "relay_maglock"
+        ? TRUSTED_MAKER_LIBRARIES.reedSwitchGuide
+        : TRUSTED_MAKER_LIBRARIES.sparkfunTutorials,
   ];
 
   return {
@@ -265,8 +328,12 @@ export const routeArduinoProductionBundle = (
     arduinoCode: buildSketchForProfile(profile, pinoutTable),
     buildDocumentationUrl,
     makerLibraryLinks,
+    hardwareProfile: profile,
   };
 };
+
+/** @deprecated Use detectSketchProfileLegacy from hardwareProfile.ts */
+export const detectSketchProfileFromText = detectSketchProfileLegacy;
 
 export const formatPinoutTableMarkdown = (rows: ArduinoPinoutRow[]): string[] => {
   if (rows.length === 0) return ["_No pinout rows — add wiring diagram lines in the generator._"];

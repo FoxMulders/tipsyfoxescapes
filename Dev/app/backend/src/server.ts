@@ -94,6 +94,8 @@ import {
 } from "./userLifecycle.js";
 import { allPuzzlesPassedPuzzleQa, applyPuzzleQaGate, type PuzzleQaReport } from "./puzzleQa.js";
 import { callOpenAiPuzzles as runDiegeticPuzzleCompiler } from "./services/ai/puzzles.js";
+import { markStaticCatalogPuzzle } from "./hardwareProfile.js";
+import type { HardwareProfile } from "./hardwareProfile.js";
 import {
   enrichPuzzlesWithManufacturingSchema,
   PUZZLE_GENERATION_INVENTORY_POLICY,
@@ -141,6 +143,10 @@ type Puzzle = {
   required_parts_and_props?: string[];
   /** Official wiring / fabrication guide URL. */
   build_documentation_url?: string;
+  /** When true, export/finalize preserves human-written firmware from the static catalog pool. */
+  isStaticCatalog?: boolean;
+  /** Production firmware template key — set by AI Step 1 and export router for generated puzzles. */
+  hardware_profile?: HardwareProfile;
   electronicDetails?: {
     parts: string[];
     wiringDiagram: string[];
@@ -148,6 +154,7 @@ type Puzzle = {
     buildSteps: string[];
     arduinoCode: string;
     pinoutTable?: Array<{ pin: string; function: string; connectsTo: string }>;
+    hardware_profile?: HardwareProfile;
   };
   /** Puzzle QA department report (links scrubbed; copy/diagram checks). */
   puzzleQa?: PuzzleQaReport;
@@ -3722,7 +3729,7 @@ const cloneYouthAddOnPuzzle = (
   gatesAdult: boolean,
   ageNote: string,
 ): Puzzle => ({
-  ...base,
+  ...markStaticCatalogPuzzle(base),
   id: `${base.id}_youth_${sessionId}_${index}`,
   audienceTrack: "youth_addon",
   gatesAdultProgression: gatesAdult,
@@ -5454,17 +5461,17 @@ app.post("/api/puzzles/generate", async (req, res) => {
   } else {
     for (let i = 0; i < logicCount; i += 1) {
       const puzzle = pickPuzzle("logic");
-      generated.push({ ...puzzle, audienceTrack: "main" });
+      generated.push({ ...markStaticCatalogPuzzle(puzzle), audienceTrack: "main" });
       generationSeenIds.add(puzzle.id);
     }
     for (let i = 0; i < physicalCount; i += 1) {
       const puzzle = pickPuzzle("physical");
-      generated.push({ ...puzzle, audienceTrack: "main" });
+      generated.push({ ...markStaticCatalogPuzzle(puzzle), audienceTrack: "main" });
       generationSeenIds.add(puzzle.id);
     }
     for (let i = 0; i < electronicCount; i += 1) {
       const puzzle = pickPuzzle("electronic");
-      generated.push({ ...puzzle, audienceTrack: "main" });
+      generated.push({ ...markStaticCatalogPuzzle(puzzle), audienceTrack: "main" });
       generationSeenIds.add(puzzle.id);
     }
   }
@@ -5512,7 +5519,7 @@ app.post("/api/puzzles/generate", async (req, res) => {
       const candidate = pickPuzzle(failing.category);
       if (!candidate || generatedForResponse.some((p) => p.id === candidate.id)) continue;
       const [withReason] = withThemeFitReasons(
-        [{ ...candidate, audienceTrack: "main" }],
+        [{ ...markStaticCatalogPuzzle(candidate), audienceTrack: "main" }],
         session.selectedTheme,
         session,
       );
@@ -5637,14 +5644,14 @@ app.post("/api/puzzles/:puzzleId/replace", async (req, res) => {
   session.seenPuzzleIds.add(replacement.id);
   const mergedReplacement: Puzzle = isYouthSlot
     ? {
-        ...replacement,
+        ...markStaticCatalogPuzzle(replacement),
         difficulty: replacement.difficulty === "hard" ? "medium" : replacement.difficulty,
         title: `[Junior add-on] ${replacement.title}`,
         audienceTrack: "youth_addon",
         gatesAdultProgression: Boolean(target.gatesAdultProgression),
         objective: `Youth-friendly parallel track: ${replacement.objective}`,
       }
-    : { ...replacement, audienceTrack: target.audienceTrack ?? "main" };
+    : { ...markStaticCatalogPuzzle(replacement), audienceTrack: target.audienceTrack ?? "main" };
   session.currentPuzzles = session.currentPuzzles.map((puzzle) => (puzzle.id === puzzleId ? mergedReplacement : puzzle));
   if (session.selectedTheme) {
     session.currentPuzzles = breakDuplicateSavedRoomPuzzleSet(
@@ -5809,7 +5816,7 @@ app.post("/api/puzzles/fill-slot", async (req, res) => {
         Boolean(gatesAdultProgression),
         ageNote,
       )
-    : { ...replacement, audienceTrack: "main" };
+    : { ...markStaticCatalogPuzzle(replacement), audienceTrack: "main" };
   session.currentPuzzles = [...session.currentPuzzles, mergedReplacement];
   session.currentPuzzles = breakDuplicateSavedRoomPuzzleSet(
     session.selectedTheme.id,

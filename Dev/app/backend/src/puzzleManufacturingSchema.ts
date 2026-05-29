@@ -8,6 +8,7 @@ import {
   TRUSTED_MAKER_LIBRARIES,
   type ArduinoPinoutRow,
 } from "./arduinoResourceRouter.js";
+import { isStaticCatalogPuzzle, type HardwareProfile } from "./hardwareProfile.js";
 
 export type PuzzleManufacturingFields = {
   physical_anchor_prop?: string;
@@ -28,6 +29,8 @@ export type PuzzleWithManufacturing = {
   solveSteps: string[];
   difficulty: "easy" | "medium" | "hard";
   stageHint?: string;
+  isStaticCatalog?: boolean;
+  hardware_profile?: HardwareProfile;
   electronicDetails?: {
     parts: string[];
     wiringDiagram: string[];
@@ -35,6 +38,7 @@ export type PuzzleWithManufacturing = {
     buildSteps: string[];
     arduinoCode: string;
     pinoutTable?: ArduinoPinoutRow[];
+    hardware_profile?: HardwareProfile;
   };
 } & PuzzleManufacturingFields;
 
@@ -170,11 +174,15 @@ export const enrichPuzzlesWithManufacturingSchema = <T extends PuzzleWithManufac
       };
     }
 
-    if (puzzle.category === "electronic" && puzzle.electronicDetails) {
+    if (puzzle.category === "electronic" && puzzle.electronicDetails && !isStaticCatalogPuzzle(puzzle)) {
+      const profile =
+        puzzle.hardware_profile ??
+        puzzle.electronicDetails.hardware_profile;
       const bundle = routeArduinoProductionBundle(
         puzzle.title,
         puzzle.electronicDetails.wiringDiagram ?? [],
         puzzle.electronicDetails.parts ?? [],
+        profile,
       );
       const pinoutMd = formatPinoutTableMarkdown(bundle.pinoutTable);
       const extraRefs = bundle.makerLibraryLinks.map((link) => ({
@@ -205,8 +213,10 @@ export const enrichPuzzlesWithManufacturingSchema = <T extends PuzzleWithManufac
         bill_of_materials: [...new Set(bom.map((r) => r.trim()).filter(Boolean))],
         required_parts_and_props: [...new Set(bom.map((r) => r.trim()).filter(Boolean))],
         referenceLinks: mergedRefs,
+        hardware_profile: bundle.hardwareProfile,
         electronicDetails: {
           ...puzzle.electronicDetails,
+          hardware_profile: bundle.hardwareProfile,
           pinoutTable: bundle.pinoutTable,
           arduinoCode: bundle.arduinoCode,
           buildSteps: [

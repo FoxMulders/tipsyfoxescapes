@@ -5,6 +5,7 @@
 
 import { auditPuzzleQa, type PuzzleForQa } from "../../puzzleQa.js";
 import { auditArduinoPreviewFirmware, formatPinoutMapComment } from "../../firmwarePreviewValidation.js";
+import type { HardwareProfile } from "../../hardwareProfile.js";
 import { PUZZLE_GENERATION_INVENTORY_POLICY } from "../../puzzleManufacturingSchema.js";
 import { assembleDiegeticPuzzle, validateDiegeticFields } from "./diegeticValidation.js";
 import { STEP2_FIRMWARE_SYSTEM } from "./firmwarePreviewPrompt.js";
@@ -28,6 +29,8 @@ export type AiGeneratedPuzzle = {
   solveSteps: string[];
   difficulty: "easy" | "medium" | "hard";
   audienceTrack: "main";
+  isStaticCatalog?: false;
+  hardware_profile?: HardwareProfile;
   narrative_justification?: string;
   bill_of_materials?: string[];
   required_parts_and_props?: string[];
@@ -37,6 +40,7 @@ export type AiGeneratedPuzzle = {
     wiringDiagramSvg: string;
     buildSteps: string[];
     arduinoCode: string;
+    hardware_profile?: HardwareProfile;
   };
 };
 
@@ -120,9 +124,12 @@ const mapToPuzzle = (
   referenceLinks: [],
   difficulty,
   audienceTrack: "main",
+  isStaticCatalog: false,
+  hardware_profile: layer.hardware_profile,
   electronicDetails:
     presentation.category === "electronic" && presentation.electronicDetails
       ? {
+          hardware_profile: presentation.electronicDetails.hardware_profile,
           parts: presentation.electronicDetails.parts,
           wiringDiagram: presentation.electronicDetails.wiringDiagram,
           wiringDiagramSvg: presentation.electronicDetails.wiringDiagramSvg,
@@ -149,6 +156,9 @@ const compileDiegeticLayer = async (
     "",
     `Compile STEP 1 — diegetic hardware/physical layer for ONE ${category} puzzle.`,
     "Output ONLY the physical affordances and trigger mechanism — NO narrative flavor yet.",
+    category === "electronic"
+      ? "Set hardware_profile to the primary MCU mechanic (relay_maglock for maglock/strike, touch, rfid, button_led, buzzer, analog_sensor)."
+      : "Set hardware_profile to generic (no dedicated production firmware template).",
     feedback ? `\nREVISION NOTES:\n${feedback}` : "",
   ]
     .filter(Boolean)
@@ -187,7 +197,7 @@ const compilePuzzlePresentation = async (
     "Do NOT use: represents, symbolizes, simulates, cipher chart, padlock.",
     "Set banned_word_check=true only when all strings avoid those tropes.",
     category === "electronic"
-      ? "Include electronicDetails with hardware_pinout_map (role -> Uno pin), parts, wiringDiagram, buildSteps, and preview arduinoCode per firmware rules."
+      ? "Include electronicDetails with hardware_profile matching Step 1, hardware_pinout_map, parts, wiringDiagram, buildSteps, and preview arduinoCode per firmware rules."
       : "Set electronicDetails to null.",
     feedback ? `\nREVISION NOTES:\n${feedback}` : "",
   ]
@@ -235,6 +245,15 @@ const validateCompiledPuzzle = (
   }
 
   if (presentation.category === "electronic" && presentation.electronicDetails) {
+    if (layer.hardware_profile !== presentation.electronicDetails.hardware_profile) {
+      return {
+        ok: false,
+        message: `hardware_profile mismatch: Step 1="${layer.hardware_profile}" vs Step 2="${presentation.electronicDetails.hardware_profile}".`,
+      };
+    }
+    if (layer.hardware_profile === "generic") {
+      return { ok: false, message: "Electronic puzzles must declare a specific hardware_profile, not generic." };
+    }
     const firmwareIssues = auditArduinoPreviewFirmware(
       presentation.electronicDetails.arduinoCode,
       presentation.electronicDetails.parts,

@@ -1,7 +1,11 @@
 import { z } from "zod";
+import { HardwareProfileSchema } from "../../../hardwareProfile.js";
 
 /** Step 1 — hardware and physical affordances before any narrative flavor. */
 export const DiegeticLayerSchema = z.object({
+  hardware_profile: HardwareProfileSchema.describe(
+    "Primary electronic mechanic for production firmware routing. For logic/physical puzzles without MCU outputs use generic; for electronic puzzles pick the closest profile (relay_maglock for maglock/strike releases).",
+  ),
   hardware_and_electronics: z.object({
     required_components: z.array(z.string()).min(1),
     trigger_mechanism: z.string().min(20),
@@ -14,6 +18,7 @@ export const DiegeticLayerSchema = z.object({
 
 /** User-facing diegetic core — narrative is last and must pass banned-word checks. */
 export const DiegeticPuzzleSchema = z.object({
+  hardware_profile: DiegeticLayerSchema.shape.hardware_profile,
   hardware_and_electronics: DiegeticLayerSchema.shape.hardware_and_electronics,
   physical_prop_translation: DiegeticLayerSchema.shape.physical_prop_translation,
   narrative_justification: z.string().min(20),
@@ -25,6 +30,9 @@ export const HardwarePinoutMapSchema = z
   .refine((map) => Object.keys(map).length >= 1, { message: "At least one pin mapping required." });
 
 export const ElectronicDetailsSchema = z.object({
+  hardware_profile: HardwareProfileSchema.describe(
+    "Must match Step 1 hardware_profile — drives export firmware template selection.",
+  ),
   parts: z.array(z.string()).min(2),
   wiringDiagram: z.array(z.string()).min(2),
   wiringDiagramSvg: z.string(),

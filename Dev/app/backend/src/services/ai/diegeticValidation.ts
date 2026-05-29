@@ -57,6 +57,7 @@ export const validateDiegeticFields = (
 
 export const assembleDiegeticPuzzle = (input: {
   layer: {
+    hardware_profile: import("../../hardwareProfile.js").HardwareProfile;
     hardware_and_electronics: { required_components: string[]; trigger_mechanism: string };
     physical_prop_translation: { player_action: string; prop_design: string };
   };
@@ -64,6 +65,7 @@ export const assembleDiegeticPuzzle = (input: {
   banned_word_check: boolean;
 }): DiegeticValidationResult & { puzzle?: import("./schemas/diegeticPuzzle.js").DiegeticPuzzle } => {
   const diegetic = {
+    hardware_profile: input.layer.hardware_profile,
     hardware_and_electronics: input.layer.hardware_and_electronics,
     physical_prop_translation: input.layer.physical_prop_translation,
     narrative_justification: input.narrative_justification.trim(),

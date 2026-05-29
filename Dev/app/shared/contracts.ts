@@ -3,6 +3,15 @@ import type { RoomLayoutDocument } from "./roomLayout.js";
 export type Difficulty = "easy" | "medium" | "hard";
 export type PuzzleCategory = "logic" | "physical" | "electronic";
 
+export type HardwareProfile =
+  | "button_led"
+  | "buzzer"
+  | "touch"
+  | "rfid"
+  | "relay_maglock"
+  | "analog_sensor"
+  | "generic";
+
 export type RoomDifficulty = "easy" | "medium" | "hard";
 
 /** Commercial empty shell vs. an existing lived-in / furnished space. */
@@ -56,6 +65,8 @@ export interface Puzzle {
   bill_of_materials?: string[];
   required_parts_and_props?: string[];
   build_documentation_url?: string;
+  isStaticCatalog?: boolean;
+  hardware_profile?: HardwareProfile;
 }
 
 export interface CreateSessionResponse {

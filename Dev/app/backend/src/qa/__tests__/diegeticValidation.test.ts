@@ -7,6 +7,7 @@ import {
 } from "../../services/ai/diegeticValidation.js";
 
 const validLayer = {
+  hardware_profile: "generic" as const,
   hardware_and_electronics: {
     required_components: ["magnetic reed switch", "hinged panel", "counterweight"],
     trigger_mechanism:
@@ -98,6 +99,7 @@ describe("PuzzlePresentationSchema", () => {
       banned_word_check: true,
       themeTags: ["sci-fi", "relay"],
       electronicDetails: {
+        hardware_profile: "button_led",
         parts: ["Arduino Uno", "Relay module", "Push buttons"],
         wiringDiagram: ["D2 -> button -> GND", "D8 -> relay IN"],
         wiringDiagramSvg: "",
