@@ -1,5 +1,7 @@
 import { PlanningSidebar, type PlanningSidebarProps } from "@/components/planning/PlanningSidebar";
 import { usePlanning } from "../context/PlanningProvider";
+import { CouncilTelemetryPanel } from "./GenerationTelemetryPanel";
+import type { GenerationTelemetry } from "../domain/generationTelemetry";
 
 export type SidebarAdminProps = Omit<
   PlanningSidebarProps,
@@ -34,16 +36,23 @@ export type SidebarAdminProps = Omit<
   | "plannerTarget"
 > & {
   className?: string;
+  generationTelemetry?: GenerationTelemetry | null;
+  puzzlesGenerating?: boolean;
 };
 
 export function SidebarAdmin(props: SidebarAdminProps) {
   const { state, dispatch, propPresetLabels, commercialVenueContext, placedPuzzleNodeCount, plannerMainPuzzleTarget, clearValidation } =
     usePlanning();
 
-  const { className, ...sidebarProps } = props;
+  const { className, generationTelemetry, puzzlesGenerating, ...sidebarProps } = props;
 
   return (
     <div className={`sidebar-admin planning-snapshot-rail ${className ?? ""}`} aria-label="Plan and account overview">
+      <CouncilTelemetryPanel
+        loading={puzzlesGenerating}
+        telemetry={generationTelemetry ?? null}
+        compact
+      />
       <header className="sticky-dashboard__snapshot-head">
         <h3 className="planning-snapshot-rail-title">Plan snapshot</h3>
         <div className="sidebar-admin__placed-count sticky-dashboard__telemetry" role="status">

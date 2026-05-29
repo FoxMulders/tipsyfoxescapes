@@ -300,7 +300,17 @@ type SessionState = {
   /** Council of Ten consensus metadata from last AI generation. */
   councilReport?: Pick<CouncilAggregate, "passed" | "averageScore" | "wowCount" | "revisionNotes"> & {
     iterations: number;
+    verdicts?: Array<{
+      personaId: string;
+      title: string;
+      score: number;
+      wow_factor: boolean;
+      critical_feedback: string;
+    }>;
   };
+  /** Last puzzle generation source for client telemetry. */
+  lastGenerationEngine?: "ai_generated" | "static_fallback" | "static_catalog";
+  lastMasterGeneratorAttempted?: boolean;
   /** Home host vs retail venue live-ops mode (derived from plan tier when unset). */
   operatingMode?: OperatingMode;
   /** Draft vs manifested room — credit reserved at successful puzzle generation. */
@@ -5461,7 +5471,8 @@ app.post("/api/puzzles/generate", async (req, res) => {
   let aiGeneratedPuzzles: Puzzle[] = [];
   let masterRoomSkeleton: RoomSkeleton | undefined;
   let masterCouncilReport: SessionState["councilReport"];
-  if (aiPuzzlesEnabled && (logicCount + physicalCount + electronicCount) > 0) {
+  const masterAttempted = aiPuzzlesEnabled && logicCount + physicalCount + electronicCount > 0;
+  if (masterAttempted) {
     try {
       const master = await runMasterGenerator({
         apiKey: puzzleApiKey,
@@ -5490,12 +5501,22 @@ app.post("/api/puzzles/generate", async (req, res) => {
             wowCount: master.council.wowCount,
             revisionNotes: master.council.revisionNotes,
             iterations: master.councilIterations,
+            verdicts: master.council.verdicts.map((v) => ({
+              personaId: v.personaId,
+              title: v.title,
+              score: v.score,
+              wow_factor: v.wow_factor,
+              critical_feedback: v.critical_feedback,
+            })),
           }
         : undefined;
     } catch (err) {
       console.error("[puzzles/generate] Master Generator failed — falling back to static pool:", err instanceof Error ? err.message : String(err));
     }
   }
+
+  const generationEngine: SessionState["lastGenerationEngine"] =
+    aiGeneratedPuzzles.length > 0 ? "ai_generated" : masterAttempted ? "static_fallback" : "static_catalog";
 
   const generated: Puzzle[] = [...existingPuzzleTemplates];
   if (aiGeneratedPuzzles.length > 0) {
@@ -5584,6 +5605,8 @@ app.post("/api/puzzles/generate", async (req, res) => {
   session.currentPuzzles = generatedForResponse;
   session.roomSkeleton = masterRoomSkeleton;
   session.councilReport = masterCouncilReport;
+  session.lastGenerationEngine = generationEngine;
+  session.lastMasterGeneratorAttempted = masterAttempted;
   session.suggestedAdditionsRequired = finalized.lists.required;
   session.suggestedAdditions = finalized.lists.optional;
   session.suggestedSafetyProtocols = finalized.lists.safety;
@@ -5632,8 +5655,10 @@ app.post("/api/puzzles/generate", async (req, res) => {
     manifestCreditConsumed: manifestResult.creditConsumed,
     trialConsumed: manifestResult.trialConsumed,
     puzzleAccess: fullAccess ? "full" : "preview",
+    generationEngine,
+    masterGeneratorAttempted: masterAttempted,
     roomSkeleton: fullAccess ? session.roomSkeleton : undefined,
-    councilReport: fullAccess ? session.councilReport : undefined,
+    councilReport: session.councilReport,
     user: billingUser ? toPublicUser(billingUser) : undefined,
   });
 });

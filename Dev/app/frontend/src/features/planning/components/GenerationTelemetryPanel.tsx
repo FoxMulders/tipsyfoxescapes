@@ -1,0 +1,145 @@
+import type { CouncilReportClient, CouncilVerdictClient, GenerationEngine, GenerationTelemetry } from "../domain/generationTelemetry";
+import { generationEngineLabel } from "../domain/generationTelemetry";
+
+type GenerationEngineBadgeProps = {
+  engine: GenerationEngine;
+  loading?: boolean;
+};
+
+export function GenerationEngineBadge({ engine, loading }: GenerationEngineBadgeProps) {
+  if (loading) {
+    return (
+      <span className="generation-engine-badge generation-engine-badge--loading" role="status">
+        Council deliberating…
+      </span>
+    );
+  }
+  const variant =
+    engine === "ai_generated"
+      ? "ai"
+      : engine === "static_fallback"
+        ? "fallback"
+        : "catalog";
+  return (
+    <span className={`generation-engine-badge generation-engine-badge--${variant}`} role="status">
+      {generationEngineLabel(engine)}
+    </span>
+  );
+}
+
+type CouncilTelemetryPanelProps = {
+  loading?: boolean;
+  telemetry: GenerationTelemetry | null;
+  compact?: boolean;
+};
+
+export function CouncilTelemetryPanel({ loading, telemetry, compact }: CouncilTelemetryPanelProps) {
+  if (loading) {
+    return (
+      <section className="council-telemetry council-telemetry--loading" aria-live="polite" aria-busy="true">
+        <header className="council-telemetry__head">
+          <h4 className="council-telemetry__title">Council of Ten</h4>
+          <GenerationEngineBadge engine="static_catalog" loading={true} />
+        </header>
+        <p className="council-telemetry__lead muted text-sm">
+          Compiling room skeleton, diegetic puzzles, and preview firmware — then ten expert personas score the design.
+        </p>
+        <ul className="council-telemetry__persona-skeleton" aria-hidden="true">
+          {Array.from({ length: 10 }, (_, i) => (
+            <li key={i} className="council-telemetry__persona-skeleton-row" />
+          ))}
+        </ul>
+      </section>
+    );
+  }
+
+  if (!telemetry) {
+    return (
+      <section className="council-telemetry council-telemetry--empty" aria-live="polite">
+        <header className="council-telemetry__head">
+          <h4 className="council-telemetry__title">Generation engine</h4>
+        </header>
+        <p className="muted text-sm">Generate a puzzle set to see Master Generator telemetry here.</p>
+      </section>
+    );
+  }
+
+  const council = telemetry.councilReport;
+  return (
+    <section className="council-telemetry" aria-live="polite">
+      <header className="council-telemetry__head">
+        <h4 className="council-telemetry__title">Generation engine</h4>
+        <GenerationEngineBadge engine={telemetry.engine} />
+      </header>
+      {telemetry.masterAttempted && telemetry.engine !== "ai_generated" ? (
+        <p className="council-telemetry__warn text-sm" role="note">
+          Master Generator was attempted but this set came from the static catalog — check OpenAI key, catalog tier, or council
+          revision loops.
+        </p>
+      ) : null}
+      {council ? (
+        <>
+          <div className="council-telemetry__summary">
+            <div className="council-telemetry__metric">
+              <span className="council-telemetry__metric-label">Avg score</span>
+              <strong className="council-telemetry__metric-value">{council.averageScore.toFixed(1)}</strong>
+              <span className="muted text-xs">/ 10</span>
+            </div>
+            <div className="council-telemetry__metric">
+              <span className="council-telemetry__metric-label">Wow votes</span>
+              <strong className="council-telemetry__metric-value">{council.wowCount}</strong>
+              <span className="muted text-xs">/ 10</span>
+            </div>
+            <div className="council-telemetry__metric">
+              <span className="council-telemetry__metric-label">Loops</span>
+              <strong className="council-telemetry__metric-value">{council.iterations}</strong>
+            </div>
+          </div>
+          <p
+            className={`council-telemetry__consensus text-sm ${council.passed ? "council-telemetry__consensus--pass" : "council-telemetry__consensus--fail"}`}
+            role="status"
+          >
+            {council.passed ? "Council consensus passed" : "Shipped after max revision loops (best effort)"}
+          </p>
+          {!compact && council.verdicts && council.verdicts.length > 0 ? (
+            <ul className="council-telemetry__verdicts">
+              {council.verdicts.map((v) => (
+                <CouncilVerdictRow key={v.personaId} verdict={v} />
+              ))}
+            </ul>
+          ) : null}
+          {!council.passed && council.revisionNotes ? (
+            <details className="council-telemetry__revision">
+              <summary className="text-sm">Revision notes</summary>
+              <pre className="council-telemetry__revision-body">{council.revisionNotes}</pre>
+            </details>
+          ) : null}
+        </>
+      ) : (
+        <p className="muted text-sm">
+          {telemetry.engine === "ai_generated"
+            ? "AI puzzles generated without council metadata (legacy path)."
+            : "Static catalog path — no council evaluation."}
+        </p>
+      )}
+      <p className="council-telemetry__ts muted text-xs">
+        Last run {new Date(telemetry.generatedAt).toLocaleString()}
+      </p>
+    </section>
+  );
+}
+
+function CouncilVerdictRow({ verdict }: { verdict: CouncilVerdictClient }) {
+  return (
+    <li className={`council-telemetry__verdict ${verdict.wow_factor ? "council-telemetry__verdict--wow" : ""}`}>
+      <div className="council-telemetry__verdict-head">
+        <span className="council-telemetry__verdict-title">{verdict.title}</span>
+        <span className="council-telemetry__verdict-score tabular-nums">{verdict.score.toFixed(1)}</span>
+        {verdict.wow_factor ? <span className="council-telemetry__wow-pill">Wow</span> : null}
+      </div>
+      {!verdict.wow_factor && verdict.critical_feedback ? (
+        <p className="council-telemetry__verdict-note muted text-xs">{verdict.critical_feedback}</p>
+      ) : null}
+    </li>
+  );
+}

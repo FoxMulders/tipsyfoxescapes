@@ -83,6 +83,8 @@ import { type BillingPlan } from "@/components/account/PlansAndBillingSection";
 import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
 import { RoomDetailsWorkspace } from "@/features/planning/components/RoomDetailsWorkspace";
+import { CouncilTelemetryPanel } from "@/features/planning/components/GenerationTelemetryPanel";
+import type { GenerationTelemetry } from "@/features/planning/domain/generationTelemetry";
 import { PlanningProvider, type PlanningContextValue } from "@/features/planning/context/PlanningProvider";
 import { PlanningBridge } from "@/features/planning/context/PlanningBridge";
 import { estimatePuzzleNodes } from "@/features/planning/domain/estimatePuzzleNodes";
@@ -2110,6 +2112,7 @@ export default function App() {
   const [themes, setThemes] = useState<Theme[]>([]);
   const [themeIdeasLoading, setThemeIdeasLoading] = useState(false);
   const [puzzlesGenerating, setPuzzlesGenerating] = useState(false);
+  const [generationTelemetry, setGenerationTelemetry] = useState<GenerationTelemetry | null>(null);
   const [themeSessionExpiredNotice, setThemeSessionExpiredNotice] = useState("");
   const [selectedThemeId, setSelectedThemeId] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -4275,6 +4278,9 @@ export default function App() {
         suggestedAdditions?: string[];
         suggestedAdditionsRequired?: string[];
         suggestedSafetyProtocols?: string[];
+        generationEngine?: GenerationTelemetry["engine"];
+        masterGeneratorAttempted?: boolean;
+        councilReport?: GenerationTelemetry["councilReport"];
         user?: unknown;
         error?: { message?: string; code?: string };
       };
@@ -4367,6 +4373,14 @@ export default function App() {
       setSuggestedAdditionsRequired(baseSuggestedRequired);
       setSuggestedAdditions(aiEnhancement?.suggestedAdditions?.length ? aiEnhancement.suggestedAdditions : baseSuggestedAdditions);
       setSuggestedSafetyProtocols(baseSafetyProtocols);
+      if (data.generationEngine) {
+        setGenerationTelemetry({
+          engine: data.generationEngine,
+          masterAttempted: Boolean(data.masterGeneratorAttempted),
+          generatedAt: new Date().toISOString(),
+          councilReport: data.councilReport,
+        });
+      }
       return true;
     } catch (err) {
       setError(classifyApiCatchError(err));
@@ -6693,6 +6707,8 @@ export default function App() {
                 }
                 mainPuzzleCount={mainTrackPuzzles.length}
                 sessionSyncing={planningSyncing}
+                generationTelemetry={generationTelemetry}
+                puzzlesGenerating={puzzlesGenerating}
                 authName={authUser.name}
                 authEmail={authUser.email}
                 billingTierLabel={formatBillingTierLabel(authUser.billingTier)}
@@ -7014,7 +7030,8 @@ export default function App() {
               </div>
             ) : null}
             {flowWizardStep === "themes-puzzles" ? (
-              <div className="flow-content">
+              <div className="puzzle-builder-layout">
+                <div className="puzzle-builder-layout__main flow-content">
                 {!hasFullCatalogAccess ? (
                   <p className="muted puzzle-builder-freegen-note puzzle-builder-freegen-note--top">
                     <strong>Trial:</strong> a puzzle set usually loads when you open this step. If the list is still empty, use{" "}
@@ -7051,21 +7068,6 @@ export default function App() {
                   </p>
                 </div>
                 <h2>Build puzzle set</h2>
-                {puzzlesGenerating ? (
-                  <div className="theme-generating-indicator" role="status" aria-live="polite">
-                    <div className="theme-generating-spinner" aria-hidden="true">
-                      <span /><span /><span />
-                    </div>
-                    <p className="theme-generating-headline">Generating builder-ready puzzles…</p>
-                    <p className="theme-generating-sub muted">
-                      Crafting logic, physical, and electronic puzzles for your theme.
-                      This usually takes <strong>10–30 seconds</strong>.
-                    </p>
-                    <div className="theme-generating-bar" aria-hidden="true">
-                      <div className="theme-generating-bar__fill" />
-                    </div>
-                  </div>
-                ) : null}
                 <p className="puzzle-pool-selection-note" role="note">
                   The generator drafted these thematic puzzles to match your room capacity. Select the active pool, toggle
                   variations, or leave unselected puzzles as backups—the set updates when you continue to review.
@@ -7427,6 +7429,10 @@ export default function App() {
                   ) : null}
                 </div>
               </div>
+              <aside className="puzzle-builder-layout__telemetry glass-panel" aria-label="Generation telemetry">
+                <CouncilTelemetryPanel loading={puzzlesGenerating} telemetry={generationTelemetry} />
+              </aside>
+            </div>
             ) : null}
           {flowWizardStep === "saved" && hasSavedPlans && showPlanPicker ? (
         <section className="card mission-panel">

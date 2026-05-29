@@ -5,6 +5,7 @@
   "outputDirectory": "frontend/dist",
   "env": {
     "SKIP_VERSION_BUMP": "1",
+    "VITE_LAYOUT_DESIGNER": "1",
     "DATA_DIR": "/tmp/erb-data",
     "OAUTH_GOOGLE_ENABLED": "1",
     "AUTH_CALLBACK_BASE_URL": "https://www.tipsyfoxescapes.ca"

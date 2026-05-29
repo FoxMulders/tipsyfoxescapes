@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { RoomConfigurationPanel } from "./RoomConfigurationPanel";
 import { StickyDashboard } from "./StickyDashboard";
 import type { BuilderAccountStripProps } from "./BuilderAccountStrip";
+import type { GenerationTelemetry } from "../domain/generationTelemetry";
 
 const BlueprintWorkspace = lazy(() =>
   import("./BlueprintWorkspace").then((m) => ({ default: m.BlueprintWorkspace })),
@@ -15,6 +16,8 @@ type RoomDetailsWorkspaceProps = {
   themeLabel: string;
   mainPuzzleCount: number;
   sessionSyncing?: boolean;
+  generationTelemetry?: GenerationTelemetry | null;
+  puzzlesGenerating?: boolean;
 } & BuilderAccountStripProps;
 
 export function RoomDetailsWorkspace({
@@ -25,6 +28,8 @@ export function RoomDetailsWorkspace({
   themeLabel,
   mainPuzzleCount,
   sessionSyncing,
+  generationTelemetry,
+  puzzlesGenerating,
   authName,
   authEmail,
   billingTierLabel,
@@ -54,6 +59,8 @@ export function RoomDetailsWorkspace({
           themeLabel={themeLabel}
           mainPuzzleCount={mainPuzzleCount}
           sessionSyncing={sessionSyncing}
+          generationTelemetry={generationTelemetry}
+          puzzlesGenerating={puzzlesGenerating}
           eventSuggestions={eventSuggestions}
           itemHistory={itemHistory}
           authName={authName}

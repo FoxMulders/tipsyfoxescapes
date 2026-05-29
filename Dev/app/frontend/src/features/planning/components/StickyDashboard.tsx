@@ -1,12 +1,21 @@
 import { SidebarAdmin, type SidebarAdminProps } from "./SidebarAdmin";
 import { BuilderAccountStrip, type BuilderAccountStripProps } from "./BuilderAccountStrip";
+import type { GenerationTelemetry } from "../domain/generationTelemetry";
 
-type StickyDashboardProps = SidebarAdminProps & BuilderAccountStripProps;
+type StickyDashboardProps = SidebarAdminProps & BuilderAccountStripProps & {
+  generationTelemetry?: GenerationTelemetry | null;
+  puzzlesGenerating?: boolean;
+};
 
-export function StickyDashboard({ className, ...props }: StickyDashboardProps) {
+export function StickyDashboard({ className, generationTelemetry, puzzlesGenerating, ...props }: StickyDashboardProps) {
   return (
     <aside className={`sticky-dashboard glass-panel ${className ?? ""}`} aria-label="Plan snapshot and account">
-      <SidebarAdmin {...props} className="sticky-dashboard__inner" />
+      <SidebarAdmin
+        {...props}
+        className="sticky-dashboard__inner"
+        generationTelemetry={generationTelemetry}
+        puzzlesGenerating={puzzlesGenerating}
+      />
       <BuilderAccountStrip
         authName={props.authName}
         authEmail={props.authEmail}
