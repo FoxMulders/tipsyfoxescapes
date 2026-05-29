@@ -45,8 +45,8 @@ export function CustomThemeCoachPanel({
     <div className="theme-coach-card" role="region" aria-label="Theme coach chat">
       <h3 className="theme-coach-heading">Theme coach · built-in AI</h3>
       <p className="muted theme-coach-lead">
-        The coach asks short questions about tone, audience, and how your real room fits the story—pick an answer button for
-        each turn (no free typing).
+        The coach asks one short question per turn about tone, audience, and how your real room fits the story—pick the button
+        that answers that question (no free typing).
       </p>
       {!coachPrereqsOk ? (
         <p className="theme-coach-locked-note" role="status">

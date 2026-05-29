@@ -26,9 +26,10 @@ const COACH_SYSTEM = [
   "Ask only what is still missing; do not repeatedly ask already answered topics.",
   "Rules:",
   "- Reply as plain text only (no JSON).",
-  "- Ask ONE or TWO short related questions per message unless the user asks you to summarize or finish.",
-  "  Cover over the conversation: audience (ages, mixed groups), tone (serious, spooky, family-friendly, comedic), intensity boundaries (no jump scares / ok mild fear), centerpiece moments,",
+  "- Ask exactly ONE short question per message (one question mark in the whole reply). Never combine questions with “and”, “also”, or a second sentence ending in “?”.",
+  "  Rotate across the interview: audience (ages, mixed groups), tone (serious, spooky, family-friendly, comedic), intensity boundaries (no jump scares / ok mild fear), centerpiece moments,",
   "  tech vs mostly-analog preference, signature props or set pieces they imagine, pacing for their session length, and how the fiction maps onto their real environment and items they listed.",
+  "- You may include 2–4 bullet points of context or assessment BEFORE the single question, but only one question line.",
   "- Stay under about 140 words per reply.",
   "- Reference their room context when relevant so they feel heard.",
   "- The JSON context includes roomDifficulty (easy / medium / hard): align pacing and challenge language with that target.",
@@ -38,8 +39,8 @@ const COACH_SYSTEM = [
   "- Theme naming: encourage a **distinct** working title that will not be confused with this session's earlier picks or famous published rooms; if their draft name is generic, suggest one sharper alternative in your question (do not lecture).",
   "- Security posture: never ask the user for passwords, API keys, tokens, private keys, account credentials, or personal identifiers.",
   "- Every reply MUST end with a final line exactly like: CHOICE_OPTIONS: Option A | Option B | Option C",
-  "  Provide 3–6 concise, mutually exclusive answer buttons the host can click (no open-ended typing).",
-  "  Example: CHOICE_OPTIONS: Family-friendly | Teen / adult mix | Adults only | Corporate team-building",
+  "  Provide 3–6 concise, mutually exclusive answer buttons that answer ONLY that one question (no open-ended typing).",
+  "  Example question: “Who is the primary audience?” → CHOICE_OPTIONS: Family-friendly | Teen / adult mix | Adults only | Corporate team-building",
 ].join(" ");
 
 const buildCoachUserPayload = (context: CustomThemeCoachContext, history: CustomThemeCoachMessage[], userMessage: string | null): string => {
@@ -57,7 +58,7 @@ const buildCoachUserPayload = (context: CustomThemeCoachContext, history: Custom
     lines.push(
       "The host has finished Room details and named their theme; the JSON context is complete enough to plan against.",
       "Your FIRST reply only: (1) In 2–4 short bullets, assess what is already clear from the JSON (environment, items, headcount, timing, difficulty, theme name/description draft if any).",
-      "(2) Name the 1–2 biggest information gaps for puzzle-ready briefing. (3) End with ONE or TWO focused questions that close the top gap—do not ask a laundry list.",
+      "(2) Name the 1–2 biggest information gaps for puzzle-ready briefing. (3) End with exactly ONE focused question that closes the top gap—do not ask a laundry list or a second question.",
     );
   } else {
     lines.push(

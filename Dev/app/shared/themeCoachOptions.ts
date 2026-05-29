@@ -92,15 +92,40 @@ export const validateThemeCoachTranscript = (messages: ThemeCoachChoiceMessage[]
   return null;
 };
 
+/** Keep intro bullets but only the first question — options map to one ask per turn. */
+export const enforceSingleCoachQuestion = (content: string): string => {
+  const text = content.replace(/\r\n/g, "\n").trim();
+  if (!text || !text.includes("?")) return text;
+  const lines = text.split("\n");
+  const outLines: string[] = [];
+  let questionClosed = false;
+  for (const line of lines) {
+    if (!questionClosed) {
+      if (!line.includes("?")) {
+        outLines.push(line);
+        continue;
+      }
+      const qPos = line.indexOf("?");
+      outLines.push(line.slice(0, qPos + 1).trim());
+      questionClosed = true;
+      continue;
+    }
+    if (line.includes("?")) continue;
+    outLines.push(line);
+  }
+  return outLines.join("\n").trim();
+};
+
 export const buildAssistantCoachMessage = (
   raw: string,
   id: string,
 ): ThemeCoachChoiceMessage => {
   const { content, options } = parseCoachChoiceOptions(raw);
+  const singleQuestionContent = enforceSingleCoachQuestion(content);
   return {
     id,
     role: "assistant",
-    content,
+    content: singleQuestionContent,
     ...(options.length > 0 ? { options } : {}),
   };
 };

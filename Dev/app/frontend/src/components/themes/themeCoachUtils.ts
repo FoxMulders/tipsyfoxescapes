@@ -1,5 +1,6 @@
 import {
   buildAssistantCoachMessage,
+  enforceSingleCoachQuestion,
   isAllowedCoachUserReply,
   normalizeCoachOptions,
   parseCoachChoiceOptions,
@@ -14,7 +15,7 @@ export function newCoachMessageId(): string {
     : `coach-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export { buildAssistantCoachMessage, isAllowedCoachUserReply, normalizeCoachOptions, parseCoachChoiceOptions };
+export { buildAssistantCoachMessage, isAllowedCoachUserReply, normalizeCoachOptions, parseCoachChoiceOptions, enforceSingleCoachQuestion };
 
 export const getLatestPendingCoachOptions = (messages: ThemeCoachUiMessage[]): string[] => {
   if (messages.length === 0) return [];
