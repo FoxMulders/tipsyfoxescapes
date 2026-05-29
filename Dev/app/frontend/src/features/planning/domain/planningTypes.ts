@@ -1,5 +1,5 @@
 import type { PropFabricationKind } from "@/components/planning/PropFabricationSection";
-import type { RoomLayoutDocument } from "../../../../../shared/roomLayout";
+import { DEFAULT_ROOM_LAYOUT, type RoomLayoutDocument } from "../../../../../shared/roomLayout";
 import type { TargetInterface, VenueBuildType } from "../../../../../shared/contracts";
 
 export type PlanningFormState = {
@@ -76,14 +76,7 @@ export const DEFAULT_PLANNING_FORM_STATE: PlanningFormState = {
   customMixPhysical: "",
   customMixElectronic: "",
   validationFlags: {},
-  roomLayout: {
-    version: 1,
-    roomWidthM: 8,
-    roomHeightM: 6,
-    snapM: 0.5,
-    snapEnabled: true,
-    elements: [],
-  },
+  roomLayout: { ...DEFAULT_ROOM_LAYOUT, elements: DEFAULT_ROOM_LAYOUT.elements.map((e) => ({ ...e })) },
   layoutSelectedId: null,
   layoutA11yAnnouncement: "",
 };

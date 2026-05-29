@@ -29,9 +29,12 @@ export function buildLayoutPalette(
   presetLabels: string[],
 ): PaletteItem[] {
   const items: PaletteItem[] = [
+    { kind: "airlock", label: "Airlock", category: "Shell" },
+    { kind: "tech_pit", label: "Tech Pit", category: "Shell" },
+    { kind: "finale", label: "Finale zone", category: "Shell" },
+    { kind: "puzzle_node", label: "Puzzle node", category: "Gameplay" },
     { kind: "wall", label: "Wall segment", category: "Structure" },
     { kind: "door", label: "Door", category: "Structure" },
-    { kind: "puzzle_node", label: "Puzzle node", category: "Gameplay" },
   ];
   if (targetInterface === "commercial_venue") {
     items.push(

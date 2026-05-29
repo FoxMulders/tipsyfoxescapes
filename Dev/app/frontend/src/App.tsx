@@ -83,7 +83,6 @@ import { type BillingPlan } from "@/components/account/PlansAndBillingSection";
 import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
 import { RoomDetailsWorkspace } from "@/features/planning/components/RoomDetailsWorkspace";
-import { SidebarAdmin } from "@/features/planning/components/SidebarAdmin";
 import { PlanningProvider, type PlanningContextValue } from "@/features/planning/context/PlanningProvider";
 import { PlanningBridge } from "@/features/planning/context/PlanningBridge";
 import { estimatePuzzleNodes } from "@/features/planning/domain/estimatePuzzleNodes";
@@ -6680,28 +6679,19 @@ export default function App() {
               ) : null}
             </div>
             {flowWizardStep === "setup" ? (
-              <div className="room-details-workspace">
-                <div className="room-details-workspace__main">
-                  <RoomDetailsWorkspace
-                    eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
-                    itemHistory={inputHistory.availableItems ?? []}
-                    onContinue={() => void proceedFromSetupToThemes()}
-                    onOpenInspiration={() => setInspirationOpen(true)}
-                  />
-                </div>
-                <SidebarAdmin
-                  className="room-details-workspace__sidebar room-details-workspace__sidebar--desktop"
-                  themeLabel={
-                    themePath === "custom"
-                      ? customThemeName.trim() || "Custom theme"
-                      : selectedTheme?.name ?? (selectedThemeId ? "Theme selected" : "Not selected")
-                  }
-                  mainPuzzleCount={mainTrackPuzzles.length}
-                  sessionSyncing={planningSyncing}
-                  eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
-                  itemHistory={inputHistory.availableItems ?? []}
-                />
-              </div>
+              <RoomDetailsWorkspace
+                eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
+                itemHistory={inputHistory.availableItems ?? []}
+                onContinue={() => void proceedFromSetupToThemes()}
+                onOpenInspiration={() => setInspirationOpen(true)}
+                themeLabel={
+                  themePath === "custom"
+                    ? customThemeName.trim() || "Custom theme"
+                    : selectedTheme?.name ?? (selectedThemeId ? "Theme selected" : "Not selected")
+                }
+                mainPuzzleCount={mainTrackPuzzles.length}
+                sessionSyncing={planningSyncing}
+              />
             ) : null}
             {flowWizardStep === "themes" ? (
               <div className="flow-content flow-content--themes-step">

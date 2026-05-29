@@ -11,6 +11,7 @@ describe("validateRoomLayout", () => {
     const parsed = validateRoomLayout(DEFAULT_ROOM_LAYOUT);
     expect(parsed).not.toBeNull();
     expect(parsed?.version).toBe(1);
+    expect(parsed?.elements.length).toBeGreaterThan(0);
   });
 
   it("rejects out-of-bounds elements", () => {

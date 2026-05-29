@@ -7231,38 +7231,285 @@ ul.auth-hero-para {
   text-align: left;
 }
 
-/* ── Room details workspace: main form + planning sidebar ── */
-.room-details-workspace {
+/* ── Room builder CAD: config | blueprint | dashboard ── */
+.room-builder-cad {
+  --cad-panel-radius: 8px;
+  --cad-grid-gap: 8px;
+  --cad-neon-cyan: #22d3ee;
+  --cad-neon-violet: #a78bfa;
+  --cad-panel-border: 1px solid hsl(187 70% 42% / 0.22);
+  min-width: 0;
+}
+
+.room-builder-cad__grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: var(--shell-panel-gap, 1rem);
-  align-items: start;
+  grid-template-columns: 340px minmax(0, 1fr) 300px;
+  gap: var(--cad-grid-gap, 8px);
+  align-items: stretch;
+  min-width: 0;
+  min-height: min(72vh, 640px);
+}
+
+.room-builder-cad__center {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.room-builder-cad__dashboard {
   min-width: 0;
 }
 
-.room-details-workspace__main {
+.room-builder-cad__cta {
+  margin-top: var(--cad-grid-gap, 8px);
+}
+
+.room-config-panel,
+.blueprint-workspace,
+.sticky-dashboard {
+  border-radius: var(--cad-panel-radius, 8px);
+  border: var(--cad-panel-border);
   min-width: 0;
 }
 
-.room-details-workspace__sidebar {
-  min-width: 0;
-}
-
-.room-details-workspace__sidebar--desktop {
-  position: sticky;
-  top: calc(var(--app-top-nav-height, 0px) + 1rem);
-  align-self: start;
-  max-height: calc(100vh - var(--app-top-nav-height, 0px) - 2rem);
+.room-config-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - var(--app-top-nav-height, 0px) - 6rem);
   overflow: auto;
 }
 
-@media (max-width: 1024px) {
-  .room-details-workspace {
-    grid-template-columns: minmax(0, 1fr);
+.room-config-panel__header {
+  padding: var(--cad-grid-gap, 8px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cad-grid-gap, 8px);
+  border-bottom: var(--cad-panel-border);
+}
+
+.room-config-panel__body {
+  padding: var(--cad-grid-gap, 8px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cad-grid-gap, 8px);
+}
+
+.sticky-dashboard {
+  position: sticky;
+  top: calc(var(--app-top-nav-height, 0px) + 0.5rem);
+  align-self: start;
+  max-height: calc(100vh - var(--app-top-nav-height, 0px) - 2rem);
+  overflow: auto;
+  width: 100%;
+}
+
+.sticky-dashboard__inner,
+.sticky-dashboard .sidebar-admin {
+  width: 100%;
+  padding: var(--cad-grid-gap, 8px);
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sticky-dashboard__snapshot-head {
+  margin-bottom: var(--cad-grid-gap, 8px);
+}
+
+.sticky-dashboard__telemetry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  padding: var(--cad-grid-gap, 8px);
+  border-radius: var(--cad-panel-radius, 8px);
+  border: 1px solid hsl(187 85% 43% / 0.25);
+  background: hsl(217 32% 12% / 0.85);
+}
+
+.blueprint-workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: hsl(222 47% 8% / 0.96);
+}
+
+.blueprint-workspace__header {
+  padding: var(--cad-grid-gap, 8px) calc(var(--cad-grid-gap, 8px) * 1.5);
+  border-bottom: var(--cad-panel-border);
+}
+
+.blueprint-workspace__title {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--cad-neon-cyan, #22d3ee);
+  text-shadow: 0 0 24px hsl(187 85% 43% / 0.35);
+}
+
+.blueprint-workspace__stage {
+  position: relative;
+  flex: 1;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
+.blueprint-workspace__hud {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.blueprint-workspace__hud > * {
+  pointer-events: auto;
+}
+
+.blueprint-workspace__hud--tl {
+  top: var(--cad-grid-gap, 8px);
+  left: var(--cad-grid-gap, 8px);
+}
+
+.blueprint-workspace__hud--tr {
+  top: var(--cad-grid-gap, 8px);
+  right: var(--cad-grid-gap, 8px);
+  align-items: flex-end;
+  text-align: right;
+}
+
+.blueprint-hud-btn {
+  font-size: 0.75rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--cad-panel-radius, 8px);
+  border: 1px solid hsl(187 70% 42% / 0.35);
+  background: hsl(217 32% 11% / 0.92);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.blueprint-hud-btn:hover {
+  border-color: var(--cad-neon-cyan, #22d3ee);
+  box-shadow: 0 0 12px hsl(187 85% 43% / 0.25);
+}
+
+.blueprint-hud-btn--icon {
+  min-width: 2rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.blueprint-puzzle-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--cad-panel-radius, 8px);
+  border: 1px solid hsl(187 70% 42% / 0.3);
+  background: hsl(217 32% 11% / 0.94);
+}
+
+.blueprint-puzzle-stepper__label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  margin-right: 0.25rem;
+}
+
+.blueprint-puzzle-stepper__value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--cad-neon-cyan, #22d3ee);
+}
+
+.blueprint-puzzle-stepper__target {
+  font-weight: 400;
+  color: #94a3b8;
+  font-size: 0.85em;
+}
+
+.blueprint-toolbar-dock {
+  position: absolute;
+  bottom: var(--cad-grid-gap, 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  gap: var(--cad-grid-gap, 8px);
+  padding: var(--cad-grid-gap, 8px);
+  border-radius: calc(var(--cad-panel-radius, 8px) + 4px);
+  border: 1px solid hsl(187 70% 42% / 0.35);
+  background: hsl(217 32% 10% / 0.94);
+  box-shadow: 0 8px 32px hsl(222 47% 4% / 0.65);
+}
+
+.blueprint-toolbar-dock__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 4.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--cad-panel-radius, 8px);
+  border: 1px solid transparent;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 0.65rem;
+  cursor: pointer;
+}
+
+.blueprint-toolbar-dock__btn:hover,
+.blueprint-toolbar-dock__btn--active {
+  border-color: var(--cad-neon-cyan, #22d3ee);
+  background: hsl(187 85% 43% / 0.12);
+  color: #f0fdff;
+}
+
+.blueprint-toolbar-dock__icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.blueprint-canvas-host.layout-designer-canvas-host {
+  flex: 1;
+  width: 100%;
+  min-height: 320px;
+  max-height: none;
+  aspect-ratio: unset;
+  border: none;
+  border-radius: 0;
+  background: radial-gradient(ellipse at 50% 30%, hsl(217 32% 14% / 0.9), hsl(222 47% 7% / 1));
+}
+
+@media (max-width: 1200px) {
+  .room-builder-cad__grid {
+    grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+    grid-template-rows: auto auto;
   }
 
-  .room-details-workspace__sidebar--desktop {
-    display: none;
+  .room-builder-cad__dashboard {
+    grid-column: 1 / -1;
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .room-builder-cad__grid {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .room-config-panel {
+    max-height: none;
+  }
+
+  .sticky-dashboard {
+    position: static;
   }
 }
 
@@ -7313,7 +7560,7 @@ ul.auth-hero-para {
   }
 }
 
-.layout-designer-canvas-host {
+.layout-designer-canvas-host:not(.blueprint-canvas-host) {
   position: relative;
   width: 100%;
   aspect-ratio: 4 / 3;

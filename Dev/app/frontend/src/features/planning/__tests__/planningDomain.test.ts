@@ -60,7 +60,7 @@ describe("planningReducer layout place", () => {
       element: { kind: "prop", label: "Fake gauge", xM: 1, yM: 1, meta: { propKey: "Fake gauge" } },
     });
     expect(next.availableItems).toContain("Fake gauge");
-    expect(next.roomLayout.elements).toHaveLength(1);
+    expect(next.roomLayout.elements.length).toBe(DEFAULT_PLANNING_FORM_STATE.roomLayout.elements.length + 1);
   });
 });
 

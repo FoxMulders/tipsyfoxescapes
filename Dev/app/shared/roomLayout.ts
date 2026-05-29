@@ -1,4 +1,11 @@
-export type RoomLayoutElementKind = "wall" | "door" | "puzzle_node" | "prop";
+export type RoomLayoutElementKind =
+  | "wall"
+  | "door"
+  | "puzzle_node"
+  | "prop"
+  | "airlock"
+  | "tech_pit"
+  | "finale";
 
 export type RoomLayoutElement = {
   id: string;
@@ -19,13 +26,26 @@ export type RoomLayoutDocument = {
   elements: RoomLayoutElement[];
 };
 
+/** Pre-placed architectural shell for the blueprint workspace (entry → tech pits → finale). */
+export const ARCHITECTURAL_SHELL_ELEMENTS: RoomLayoutElement[] = [
+  { id: "shell_airlock_entry", kind: "airlock", label: "Airlock (entry)", xM: 1, yM: 0.5 },
+  { id: "shell_tech_pit_a", kind: "tech_pit", label: "Tech Pit A", xM: 2.5, yM: 2 },
+  { id: "shell_tech_pit_b", kind: "tech_pit", label: "Tech Pit B", xM: 5, yM: 2 },
+  { id: "shell_puzzle_1", kind: "puzzle_node", label: "Puzzle node 1", xM: 2, yM: 3.5 },
+  { id: "shell_puzzle_2", kind: "puzzle_node", label: "Puzzle node 2", xM: 3.5, yM: 3.5 },
+  { id: "shell_puzzle_3", kind: "puzzle_node", label: "Puzzle node 3", xM: 5, yM: 3.5 },
+  { id: "shell_puzzle_4", kind: "puzzle_node", label: "Puzzle node 4", xM: 6.5, yM: 3.5 },
+  { id: "shell_finale", kind: "finale", label: "Finale zone", xM: 6.5, yM: 5 },
+  { id: "shell_airlock_exit", kind: "airlock", label: "Airlock (exit)", xM: 7, yM: 0.5 },
+];
+
 export const DEFAULT_ROOM_LAYOUT: RoomLayoutDocument = {
   version: 1,
   roomWidthM: 8,
   roomHeightM: 6,
   snapM: 0.5,
   snapEnabled: true,
-  elements: [],
+  elements: ARCHITECTURAL_SHELL_ELEMENTS.map((e) => ({ ...e })),
 };
 
 export const ROOM_LAYOUT_MAX_ELEMENTS = 200;
@@ -45,7 +65,15 @@ export function validateRoomLayout(raw: unknown): RoomLayoutDocument | null {
   if (!Number.isFinite(w) || !Number.isFinite(h)) return null;
   if (w < ROOM_LAYOUT_MIN_M || w > ROOM_LAYOUT_MAX_M || h < ROOM_LAYOUT_MIN_M || h > ROOM_LAYOUT_MAX_M) return null;
   if (!Array.isArray(doc.elements) || doc.elements.length > ROOM_LAYOUT_MAX_ELEMENTS) return null;
-  const allowed = new Set<RoomLayoutElementKind>(["wall", "door", "puzzle_node", "prop"]);
+  const allowed = new Set<RoomLayoutElementKind>([
+    "wall",
+    "door",
+    "puzzle_node",
+    "prop",
+    "airlock",
+    "tech_pit",
+    "finale",
+  ]);
   const elements: RoomLayoutElement[] = [];
   for (const row of doc.elements) {
     if (!row || typeof row !== "object") return null;

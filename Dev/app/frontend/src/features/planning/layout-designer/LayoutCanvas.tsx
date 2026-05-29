@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePlanning } from "../context/PlanningProvider";
 import { hitTestElement, snapMeters, type PaletteItem } from "./layoutScene";
-import { canvasToWorldM, computePxPerM, drawLayoutScene } from "./layoutRenderer";
+import { canvasToWorldM, drawLayoutScene, resolveIsoViewport, type IsoViewport } from "./layoutRenderer";
 import { useLayoutKeyboard } from "./useLayoutKeyboard";
 
 type DragPreview = { id: string; xM: number; yM: number };
@@ -14,7 +14,7 @@ export function LayoutCanvas({ pendingItem }: { pendingItem: PaletteItem | null 
   const dragRef = useRef<{ id: string; offsetXM: number; offsetYM: number } | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
-  const pxPerMRef = useRef(40);
+  const vpRef = useRef<IsoViewport>({ pxPerM: 40, originX: 24, originY: 24 });
 
   useLayoutKeyboard(dispatch);
 
@@ -25,7 +25,7 @@ export function LayoutCanvas({ pendingItem }: { pendingItem: PaletteItem | null 
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext("2d");
       if (!canvas || !ctx) return;
-      drawLayoutScene(ctx, state.roomLayout, pxPerMRef.current, state.layoutSelectedId, hoverId, dragPreview);
+      drawLayoutScene(ctx, state.roomLayout, vpRef.current, state.layoutSelectedId, hoverId, dragPreview);
     });
   }, [state.roomLayout, state.layoutSelectedId, hoverId, dragPreview]);
 
@@ -46,7 +46,7 @@ export function LayoutCanvas({ pendingItem }: { pendingItem: PaletteItem | null 
         canvas.style.height = `${rect.height}px`;
         const ctx = canvas.getContext("2d");
         if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        pxPerMRef.current = computePxPerM(rect.width, rect.height, state.roomLayout);
+        vpRef.current = resolveIsoViewport(rect.width, rect.height, state.roomLayout);
         scheduleDraw();
       }, 80);
     });
@@ -65,7 +65,7 @@ export function LayoutCanvas({ pendingItem }: { pendingItem: PaletteItem | null 
     const canvas = canvasRef.current;
     if (!canvas || !pendingItem) return;
     const rect = canvas.getBoundingClientRect();
-    const { xM: rawX, yM: rawY } = canvasToWorldM(clientX, clientY, rect, state.roomLayout, pxPerMRef.current);
+    const { xM: rawX, yM: rawY } = canvasToWorldM(clientX, clientY, rect, state.roomLayout, vpRef.current);
     const xM = snapMeters(rawX, state.roomLayout.snapM, state.roomLayout.snapEnabled);
     const yM = snapMeters(rawY, state.roomLayout.snapM, state.roomLayout.snapEnabled);
     dispatch({
@@ -84,12 +84,12 @@ export function LayoutCanvas({ pendingItem }: { pendingItem: PaletteItem | null 
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const { xM, yM } = canvasToWorldM(ev.clientX, ev.clientY, rect, state.roomLayout, pxPerMRef.current);
+    const { xM, yM } = canvasToWorldM(ev.clientX, ev.clientY, rect, state.roomLayout, vpRef.current);
     if (pendingItem) {
       placeAt(ev.clientX, ev.clientY);
       return;
     }
-    const hit = hitTestElement(state.roomLayout.elements, xM, yM);
+    const hit = hitTestElement(state.roomLayout.elements, xM, yM, 0.45);
     if (hit) {
       dispatch({ type: "LAYOUT_SELECT", id: hit.id });
       dragRef.current = { id: hit.id, offsetXM: xM - hit.xM, offsetYM: yM - hit.yM };
@@ -103,7 +103,7 @@ export function LayoutCanvas({ pendingItem }: { pendingItem: PaletteItem | null 
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const { xM, yM } = canvasToWorldM(ev.clientX, ev.clientY, rect, state.roomLayout, pxPerMRef.current);
+    const { xM, yM } = canvasToWorldM(ev.clientX, ev.clientY, rect, state.roomLayout, vpRef.current);
     if (dragRef.current) {
       const nx = snapMeters(
         Math.max(0, Math.min(state.roomLayout.roomWidthM, xM - dragRef.current.offsetXM)),
@@ -118,7 +118,7 @@ export function LayoutCanvas({ pendingItem }: { pendingItem: PaletteItem | null 
       setDragPreview({ id: dragRef.current.id, xM: nx, yM: ny });
       return;
     }
-    const hit = hitTestElement(state.roomLayout.elements, xM, yM);
+    const hit = hitTestElement(state.roomLayout.elements, xM, yM, 0.45);
     setHoverId(hit?.id ?? null);
   };
 
@@ -131,12 +131,12 @@ export function LayoutCanvas({ pendingItem }: { pendingItem: PaletteItem | null 
   };
 
   return (
-    <div ref={hostRef} className="layout-designer-canvas-host">
+    <div ref={hostRef} className="blueprint-canvas-host layout-designer-canvas-host">
       <canvas
         ref={canvasRef}
-        className="layout-designer-canvas"
+        className="layout-designer-canvas blueprint-canvas"
         role="img"
-        aria-label="Interactive room layout designer. Use palette buttons then click to place. Arrow keys move selection."
+        aria-label="Isometric blueprint designer. Pick a tool from the dock, then click to place. Arrow keys move selection."
         tabIndex={0}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

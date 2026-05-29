@@ -1,7 +1,7 @@
 import { PlanningSidebar, type PlanningSidebarProps } from "@/components/planning/PlanningSidebar";
 import { usePlanning } from "../context/PlanningProvider";
 
-type SidebarAdminProps = Omit<
+export type SidebarAdminProps = Omit<
   PlanningSidebarProps,
   | "playersConcurrent"
   | "participantsTotal"
@@ -40,18 +40,20 @@ export function SidebarAdmin(props: SidebarAdminProps) {
   const { state, dispatch, propPresetLabels, commercialVenueContext, placedPuzzleNodeCount, plannerMainPuzzleTarget, clearValidation } =
     usePlanning();
 
+  const { className, ...sidebarProps } = props;
+
   return (
-    <aside className={`sidebar-admin planning-snapshot-rail glass-panel ${props.className ?? ""}`} aria-label="Plan and account overview">
-      <div className="sidebar-admin__placed-count" role="status">
-        <span className="text-xs uppercase tracking-wide text-muted-foreground">Placed on layout</span>
-        <strong className="text-lg tabular-nums text-foreground">{placedPuzzleNodeCount}</strong>
-        <span className="muted text-xs">puzzle node{placedPuzzleNodeCount === 1 ? "" : "s"}</span>
-      </div>
-      <p className="sidebar-admin__estimate-hint muted text-xs">
-        AI target estimate: ~{plannerMainPuzzleTarget} main-track nodes (from duration &amp; head count).
-      </p>
+    <div className={`sidebar-admin planning-snapshot-rail ${className ?? ""}`} aria-label="Plan and account overview">
+      <header className="sticky-dashboard__snapshot-head">
+        <h3 className="planning-snapshot-rail-title">Plan snapshot</h3>
+        <div className="sidebar-admin__placed-count sticky-dashboard__telemetry" role="status">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">Blueprint nodes</span>
+          <strong className="text-lg tabular-nums text-foreground">{placedPuzzleNodeCount}</strong>
+          <span className="muted text-xs">/ ~{plannerMainPuzzleTarget} target</span>
+        </div>
+      </header>
       <PlanningSidebar
-        {...props}
+        {...sidebarProps}
         playersConcurrent={state.playersConcurrent}
         participantsTotal={state.participantsTotal}
         sessionDurationMinutes={state.sessionDurationMinutes}
@@ -82,6 +84,6 @@ export function SidebarAdmin(props: SidebarAdminProps) {
         propPresetLabels={propPresetLabels}
         plannerTarget={plannerMainPuzzleTarget}
       />
-    </aside>
+    </div>
   );
 }
