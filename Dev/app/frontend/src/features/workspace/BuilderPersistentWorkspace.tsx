@@ -6,6 +6,12 @@ import type { RoomSkeleton } from "../../../../shared/roomSkeleton";
 import type { GenerationTelemetry } from "@/features/planning/domain/generationTelemetry";
 import { ExperienceDesignerProvider, type ComposeActiveStep } from "./ExperienceDesignerContext";
 import { ExperienceDesignerShell } from "./ExperienceDesignerShell";
+import {
+  GenerationProvider,
+  useGeneration,
+  type RoomBriefContext,
+  type ThemeContext,
+} from "./generation";
 import type { FlowNodeData, PuzzleNodeData, ZoneNodeData } from "./generationFlowGraph";
 import { ComposePage, CuratePage, GeneratingPage, ReviewPage, StudioPage } from "./pages";
 import { resolveWorkspaceStep, workspaceStepFromPath, type WorkspaceStepId } from "./workspaceSteps";
@@ -25,7 +31,6 @@ export type BuilderPersistentWorkspaceProps = {
   eventSuggestions: string[];
   canGenerateRoom: boolean;
   generateRoomDisabledReason?: string;
-  canReview: boolean;
   simpleThemeView: boolean;
   setSimpleThemeView: (v: boolean) => void;
   onGenerateRoom: () => void | Promise<void>;
@@ -36,6 +41,8 @@ export type BuilderPersistentWorkspaceProps = {
   curateContent: ReactNode;
   reviewContent: ReactNode;
   selectedThemeId: string;
+  selectedThemeName: string;
+  roomBrief: RoomBriefContext | null;
   navMenu: WorkspaceNavMenuProps;
   workspaceSessionExpired: boolean;
   workspaceSessionExpiredMessage: string;
@@ -46,7 +53,7 @@ export type BuilderPersistentWorkspaceProps = {
   onResetGeneration: () => void;
 };
 
-export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProps) {
+function BuilderPersistentWorkspaceInner(props: BuilderPersistentWorkspaceProps) {
   const {
     flowWizardStep,
     roomSkeleton,
@@ -60,7 +67,6 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     eventSuggestions,
     canGenerateRoom,
     generateRoomDisabledReason,
-    canReview,
     simpleThemeView,
     setSimpleThemeView,
     onGenerateRoom,
@@ -80,11 +86,15 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     onSaveRoomDetails,
     onResetGeneration,
   } = props;
+
+  const generation = useGeneration();
   const navigate = useNavigate();
   const location = useLocation();
   const activeStep = workspaceStepFromPath(location.pathname);
-  const hasBlueprint = Boolean(roomSkeleton?.zones?.length && puzzles.length > 0);
-  const resolvedStep = resolveWorkspaceStep({ puzzlesGenerating, hasBlueprint, flowWizardStep });
+  const hasRoomData = generation.hasRoomData;
+  const hasBlueprint = hasRoomData;
+  const resolvedStep = resolveWorkspaceStep({ puzzlesGenerating: generation.isGenerating, hasBlueprint, flowWizardStep });
+
   const [composeActiveStep, setComposeActiveStep] = useState<ComposeActiveStep>(() =>
     onTryGenerateRoom() ? "themes" : "room-details",
   );
@@ -93,25 +103,35 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
   const [selectedZone, setSelectedZone] = useState<ZoneNodeData | null>(null);
   const [selectedPuzzle, setSelectedPuzzle] = useState<PuzzleInspectorSlice | null>(null);
   const [layoutRevision] = useState(0);
-  const [prevGenerating, setPrevGenerating] = useState(puzzlesGenerating);
+  const [prevGenerating, setPrevGenerating] = useState(generation.isGenerating);
   const [pendingGenerate, setPendingGenerate] = useState(false);
-  const isGenerating = puzzlesGenerating || pendingGenerate;
+  const isGenerating = generation.isGenerating || pendingGenerate;
 
   useEffect(() => {
-    if (!puzzlesGenerating) {
+    if (!generation.isGenerating) {
       setPendingGenerate(false);
     }
-  }, [puzzlesGenerating]);
+  }, [generation.isGenerating]);
+
+  useEffect(() => {
+    if (generation.status === "error" && generation.error) {
+      toast.error(generation.error);
+      if (generation.retryHint) {
+        toast.message(generation.retryHint, { duration: 8000 });
+      }
+    }
+  }, [generation.status, generation.error, generation.retryHint]);
 
   useEffect(() => {
     if (!isGenerating) return;
     const timer = window.setTimeout(() => {
       setPendingGenerate(false);
+      generation.resetGeneration();
       onResetGeneration();
       toast.error("Generation timed out after 20 seconds. Please try again.");
     }, 20_000);
     return () => window.clearTimeout(timer);
-  }, [isGenerating, onResetGeneration]);
+  }, [isGenerating, generation, onResetGeneration]);
 
   const routeForStep = (step: WorkspaceStepId): string => {
     switch (step) {
@@ -140,26 +160,24 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       navigate(routeForStep(resolvedStep), { replace: true });
       return;
     }
-    // Legacy generating route — redirect once generation finishes or blueprint exists.
     if (active === "generating") {
-      if (puzzlesGenerating) return;
-      navigate(hasBlueprint ? "/builder/studio" : "/builder/compose", { replace: true });
+      if (generation.isGenerating) return;
+      navigate(hasRoomData ? "/builder/studio" : "/builder/compose", { replace: true });
       return;
     }
-    // Compose stays reachable during inline generation progress.
     if (active === "compose") return;
-    if (active === "studio" && !hasBlueprint && !puzzlesGenerating) {
+    if (active === "studio" && !hasRoomData && !generation.isGenerating) {
       navigate("/builder/compose", { replace: true });
       return;
     }
-    if (active === "curate" && !hasBlueprint && !puzzlesGenerating) {
+    if (active === "curate" && !hasRoomData && !generation.isGenerating) {
       navigate("/builder/compose", { replace: true });
       return;
     }
-    if (active === "review" && !canReview) {
-      navigate(hasBlueprint ? "/builder/studio" : "/builder/compose", { replace: true });
+    if (active === "review" && !hasRoomData) {
+      navigate("/builder/compose", { replace: true });
     }
-  }, [resolvedStep, navigate, location.pathname, puzzlesGenerating, hasBlueprint, canReview]);
+  }, [resolvedStep, navigate, location.pathname, generation.isGenerating, hasRoomData]);
 
   const stepContent = useMemo(() => {
     switch (activeStep) {
@@ -177,12 +195,12 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
   }, [activeStep]);
 
   useEffect(() => {
-    if (prevGenerating && !puzzlesGenerating && hasBlueprint) {
+    if (prevGenerating && !generation.isGenerating && hasRoomData) {
       toast.success("Room generated");
       navigate("/builder/studio", { replace: true });
     }
-    setPrevGenerating(puzzlesGenerating);
-  }, [puzzlesGenerating, prevGenerating, hasBlueprint, navigate]);
+    setPrevGenerating(generation.isGenerating);
+  }, [generation.isGenerating, prevGenerating, hasRoomData, navigate]);
 
   const onNodeSelect = useCallback(
     (nodeId: string | null, data: FlowNodeData | null) => {
@@ -209,9 +227,10 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
 
   const handleResetGeneration = useCallback((): void => {
     setPendingGenerate(false);
+    generation.resetGeneration();
     onResetGeneration();
     toast.info("Generation reset — you can try again.");
-  }, [onResetGeneration]);
+  }, [generation, onResetGeneration]);
 
   const handleGenerateClick = useCallback(() => {
     if (!onTryGenerateRoom()) {
@@ -225,34 +244,49 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     flushSync(() => {
       setPendingGenerate(true);
     });
-    void Promise.resolve(onGenerateRoom());
-  }, [onTryGenerateRoom, onPlanningIncomplete, onGenerateRoom]);
+    void generation.runGeneration(async () => {
+      try {
+        await onGenerateRoom();
+      } finally {
+        setPendingGenerate(false);
+      }
+    });
+  }, [onTryGenerateRoom, onPlanningIncomplete, onGenerateRoom, generation]);
 
   const handleStepNavigate = useCallback(
     (step: WorkspaceStepId) => {
       if (step === "generating") {
         if (activeStep === "compose" && canGenerateRoom) {
-          void onGenerateRoom();
+          handleGenerateClick();
         }
         return;
       }
-      if (step === "studio" && !hasBlueprint) return;
-      if (step === "review" && !canReview) return;
+      if (step === "studio" && !hasRoomData) return;
+      if (step === "review" && !hasRoomData) return;
       navigate(routeForStep(step));
     },
-    [activeStep, canGenerateRoom, hasBlueprint, canReview, navigate, onGenerateRoom],
+    [activeStep, canGenerateRoom, hasRoomData, navigate, handleGenerateClick],
   );
+
+  const displaySkeleton = generation.roomData?.skeleton ?? roomSkeleton;
+  const displayPuzzles = generation.roomData?.puzzles ?? puzzles;
+  const displayTelemetry = generation.roomData?.telemetry ?? generationTelemetry;
 
   const contextValue = useMemo(
     () => ({
-      roomSkeleton,
-      generationTelemetry,
+      roomSkeleton: displaySkeleton,
+      generationTelemetry: displayTelemetry,
+      roomData: generation.roomData,
+      hasRoomData,
+      generationStatus: generation.status,
+      generationError: generation.error,
+      generationRetryHint: generation.retryHint,
       isGenerating,
-      puzzles,
+      puzzles: displayPuzzles,
       hasBlueprint,
       canGenerateRoom,
       generateRoomDisabledReason,
-      canReview,
+      canReview: hasRoomData,
       simpleThemeView,
       setSimpleThemeView,
       onGenerateRoom: handleGenerateClick,
@@ -283,14 +317,18 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       layoutRevision,
     }),
     [
-      roomSkeleton,
-      generationTelemetry,
+      displaySkeleton,
+      displayTelemetry,
+      generation.roomData,
+      generation.status,
+      generation.error,
+      generation.retryHint,
+      hasRoomData,
       isGenerating,
-      puzzles,
+      displayPuzzles,
       hasBlueprint,
       canGenerateRoom,
       generateRoomDisabledReason,
-      canReview,
       simpleThemeView,
       setSimpleThemeView,
       handleGenerateClick,
@@ -327,7 +365,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
         hasBlueprint={hasBlueprint}
         isGenerating={isGenerating}
         themeIdeasLoading={themeIdeasLoading}
-        canReview={canReview}
+        hasRoomData={hasRoomData}
         canGenerateRoom={canGenerateRoom}
         generateRoomDisabledReason={generateRoomDisabledReason}
         onGenerateRoom={handleGenerateClick}
@@ -343,5 +381,28 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
         {stepContent}
       </ExperienceDesignerShell>
     </ExperienceDesignerProvider>
+  );
+}
+
+export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProps) {
+  const themeContext: ThemeContext | null = useMemo(() => {
+    if (!props.selectedThemeId.trim()) return null;
+    return {
+      id: props.selectedThemeId,
+      name: props.selectedThemeName.trim() || "Selected theme",
+    };
+  }, [props.selectedThemeId, props.selectedThemeName]);
+
+  return (
+    <GenerationProvider
+      skeleton={props.roomSkeleton}
+      puzzles={props.puzzles}
+      telemetry={props.generationTelemetry}
+      theme={themeContext}
+      roomBrief={props.roomBrief}
+      externalGenerating={props.puzzlesGenerating}
+    >
+      <BuilderPersistentWorkspaceInner {...props} />
+    </GenerationProvider>
   );
 }

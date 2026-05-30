@@ -4,18 +4,26 @@ import type { GenerationTelemetry } from "@/features/planning/domain/generationT
 import type { PuzzleInspectorSlice } from "./WorkspaceInspectorPanel";
 import type { WorkspaceNavMenuProps } from "./WorkspaceNavMenu";
 import type { FlowNodeData, ZoneNodeData } from "./generationFlowGraph";
+import type { GenerationStatus, RoomData } from "./generation/generationTypes";
 
 export type ComposeActiveStep = "room-details" | "themes";
 
 export type ExperienceDesignerContextValue = {
   roomSkeleton: RoomSkeleton | null;
   generationTelemetry: GenerationTelemetry | null;
+  /** Committed room output — Review/Studio gate on this, not loading flags. */
+  roomData: RoomData | null;
+  hasRoomData: boolean;
+  generationStatus: GenerationStatus;
+  generationError: string | null;
+  generationRetryHint: string | null;
   /** Single source of truth for room-generation UI (button, progress bar, header status). */
   isGenerating: boolean;
   puzzles: PuzzleInspectorSlice[];
   hasBlueprint: boolean;
   canGenerateRoom: boolean;
   generateRoomDisabledReason?: string;
+  /** @deprecated Prefer hasRoomData */
   canReview: boolean;
   simpleThemeView: boolean;
   setSimpleThemeView: (v: boolean) => void;

@@ -13,7 +13,7 @@ type WorkspaceStepperProps = {
   onStepNavigate: (step: WorkspaceStepId) => void;
   hasBlueprint: boolean;
   puzzlesGenerating: boolean;
-  canReview: boolean;
+  hasRoomData: boolean;
   canGenerateRoom?: boolean;
 };
 
@@ -54,7 +54,7 @@ export function WorkspaceStepper({
   onStepNavigate,
   hasBlueprint,
   puzzlesGenerating,
-  canReview,
+  hasRoomData,
   canGenerateRoom = false,
 }: WorkspaceStepperProps) {
   const mainSteps = WORKSPACE_STEPS.filter((s) => s.inMainStepper);
@@ -62,7 +62,7 @@ export function WorkspaceStepper({
   return (
     <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto sm:gap-1" aria-label="Workspace steps">
       {mainSteps.map((step, index) => {
-        const state = stepAccessState(step.id, activeStep, { hasBlueprint, puzzlesGenerating, canReview });
+        const state = stepAccessState(step.id, activeStep, { hasBlueprint, puzzlesGenerating, hasRoomData });
         const isGenerateLaunch =
           step.id === "generating" && activeStep === "compose" && canGenerateRoom && !puzzlesGenerating;
         const disabled = (step.transient && !isGenerateLaunch) || state === "locked";

@@ -16,7 +16,7 @@ type ExperienceDesignerShellProps = {
   hasBlueprint: boolean;
   isGenerating: boolean;
   themeIdeasLoading: boolean;
-  canReview: boolean;
+  hasRoomData: boolean;
   canGenerateRoom: boolean;
   generateRoomDisabledReason?: string;
   onGenerateRoom: () => void;
@@ -37,7 +37,7 @@ export function ExperienceDesignerShell({
   hasBlueprint,
   isGenerating,
   themeIdeasLoading,
-  canReview,
+  hasRoomData,
   canGenerateRoom,
   generateRoomDisabledReason,
   onGenerateRoom,
@@ -79,7 +79,7 @@ export function ExperienceDesignerShell({
           onStepNavigate={onStepNavigate}
           hasBlueprint={hasBlueprint}
           puzzlesGenerating={isGenerating}
-          canReview={canReview}
+          hasRoomData={hasRoomData}
           canGenerateRoom={canGenerateRoom}
         />
         {showStudioSegment ? (
@@ -130,7 +130,7 @@ export function ExperienceDesignerShell({
             </>
           ) : null}
           {activeStep === "studio" || activeStep === "curate" ? (
-            <Button type="button" size="sm" disabled={!canReview} onClick={onOpenReview}>
+            <Button type="button" size="sm" disabled={!hasRoomData} onClick={onOpenReview}>
               Continue to review
             </Button>
           ) : null}

@@ -3199,8 +3199,10 @@ export default function App() {
       }
       const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
       await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
+    } catch (err) {
+      setError(classifyApiCatchError(err));
     } finally {
-      if (startedGeneration && !puzzlesRequestInFlight.current) {
+      if (startedGeneration) {
         puzzlesGeneratingInitRef.current = false;
         setPuzzlesGenerating(false);
       }
@@ -3272,7 +3274,25 @@ export default function App() {
     targetInterface,
   ]);
 
-  const canReviewWorkspace = Boolean(selectedThemeId.trim() && puzzles.length > 0);
+  const workspaceRoomBrief = useMemo(() => {
+    if (!buildPlanningBody("strict")) return null;
+    return {
+      playersConcurrent: Number(playersConcurrent) || 1,
+      participantsTotal: Number(participantsTotal) || 1,
+      sessionDurationMinutes: Number(sessionDurationMinutes) || 45,
+      environmentType: environmentType.trim(),
+      availableItems: availableItems.trim(),
+      eventType: eventType.trim() || undefined,
+    };
+  }, [
+    playersConcurrent,
+    participantsTotal,
+    sessionDurationMinutes,
+    environmentType,
+    availableItems,
+    eventType,
+    targetInterface,
+  ]);
 
   const workspaceVenueSummary = useMemo(
     () =>
@@ -8253,7 +8273,8 @@ export default function App() {
                       eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
                       canGenerateRoom={canGenerateRoom}
                       generateRoomDisabledReason={generateRoomDisabledReason}
-                      canReview={canReviewWorkspace}
+                      selectedThemeName={selectedThemeName}
+                      roomBrief={workspaceRoomBrief}
                       simpleThemeView={simpleThemeView}
                       setSimpleThemeView={setSimpleThemeView}
                       onGenerateRoom={() => void handleGenerateRoom()}

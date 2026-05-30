@@ -5,20 +5,25 @@ import { useExperienceDesigner } from "../ExperienceDesignerContext";
 
 export function ReviewPage() {
   const navigate = useNavigate();
-  const { reviewContent, canReview } = useExperienceDesigner();
+  const { reviewContent, roomData, hasRoomData, generationError } = useExperienceDesigner();
 
   useEffect(() => {
-    if (!canReview) {
+    if (!hasRoomData) {
       navigate("/builder/compose", { replace: true });
     }
-  }, [canReview, navigate]);
+  }, [hasRoomData, navigate]);
 
-  if (!canReview) {
+  if (!hasRoomData || !roomData) {
     return null;
   }
 
   return (
     <div className="experience-step experience-step--scroll h-full">
+      {generationError ? (
+        <p className="mx-auto mb-4 max-w-xl px-4 text-sm text-amber-300/90" role="alert">
+          {generationError}
+        </p>
+      ) : null}
       <div className="experience-review-inner">{reviewContent}</div>
       <div className="experience-review-footer flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={() => navigate("/builder/studio")}>

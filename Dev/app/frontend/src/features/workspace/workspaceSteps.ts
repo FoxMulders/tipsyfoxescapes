@@ -44,7 +44,7 @@ export type StepAccessState = "complete" | "active" | "locked";
 export function stepAccessState(
   stepId: WorkspaceStepId,
   activeStep: WorkspaceStepId,
-  input: { hasBlueprint: boolean; puzzlesGenerating: boolean; canReview: boolean },
+  input: { hasBlueprint: boolean; puzzlesGenerating: boolean; hasRoomData: boolean },
 ): StepAccessState {
   if (stepId === activeStep) return "active";
   if (stepId === "generating") return input.puzzlesGenerating ? "active" : "locked";
@@ -59,7 +59,7 @@ export function stepAccessState(
     return activeIdx > stepIdx ? "complete" : activeIdx === stepIdx ? "active" : "complete";
   }
   if (stepId === "review") {
-    if (!input.canReview) return "locked";
+    if (!input.hasRoomData) return "locked";
     return activeStep === "review" ? "active" : input.hasBlueprint ? "complete" : "locked";
   }
   return stepIdx < activeIdx ? "complete" : "locked";
