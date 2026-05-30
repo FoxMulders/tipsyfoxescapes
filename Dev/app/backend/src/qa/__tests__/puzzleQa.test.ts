@@ -12,8 +12,9 @@ describe("Puzzle QA (migrated)", () => {
           title: "Mis-shelved index card",
           objective: "Decode the archive index card.",
           howItWorks:
-            "Players find a cipher key on the index card and decode a short message that unlocks the next compartment.",
+            "Narrative Hook: A mis-shelved index card whispers where the archive spirit hid the next clue.\n\nHow it works: Players find a cipher key on the index card and decode a short message that unlocks the next compartment in the Haunted Library stacks.",
           themeFitReason: 'For "Haunted Library", this cipher uses mis-shelved index cards as diegetic clues.',
+          narrative_justification: "A mis-shelved index card whispers where the archive spirit hid the next clue.",
           referenceLinks: [
             {
               title: "Arduino tone reference",
@@ -36,12 +37,13 @@ describe("Puzzle QA (migrated)", () => {
     title: "Signal Relay",
     objective: "Complete the button-and-LED circuit to reveal the success signal.",
     howItWorks:
-      "Players press the button sequence on the Signal Relay circuit; the Arduino sketch debounces input and toggles the green LED when correct.",
+      "Narrative Hook: Failing ship power forces the crew to reroute the Derelict Station signal bay before life support drops.\n\nHow it works: Players press the illuminated sequence on the relay panel; the control bay toggles the green status lamp when the correct pattern is entered.",
     themeFitReason: 'For "Derelict Station", the relay reads like rerouting failing ship power systems.',
+    narrative_justification: "Failing ship power forces the crew to reroute the signal bay before life support drops.",
     referenceLinks: [
       { title: "Arduino Button built-in example", url: "https://docs.arduino.cc/built-in-examples/digital/Button/" },
     ],
-    solveSteps: ["Wire LEDs and button", "Press the correct sequence"],
+    solveSteps: ["Wire the status lamp circuit", "Press the correct sequence on the relay panel"],
     difficulty: "medium" as const,
     electronicDetails: {
       parts: ["Arduino Uno", "Push button", "Green LED", "220 ohm resistor"],
@@ -141,7 +143,7 @@ describe("Puzzle QA (migrated)", () => {
         themeTags: ["library"],
         title: "Cipher Index",
         objective: "Decode the index card.",
-        howItWorks: "Players decode a short message. Design a cipher chart and insert custom text here for the room.",
+        howItWorks: "Narrative Hook: The archive spirit left a blank cipher frame waiting for the final clue.\n\nHow it works: Players decode a short message. Design a cipher chart and insert custom text here for the room.",
         themeFitReason: 'For "Haunted Library", this cipher uses mis-shelved index cards.',
         referenceLinks: [],
         solveSteps: ["Find key", "Decode message"],
@@ -161,7 +163,7 @@ describe("Puzzle QA (migrated)", () => {
         themeTags: ["sci-fi", "space"],
         title: "Telegraph Tap",
         objective: "Tap the telegraph key in the right rhythm.",
-        howItWorks: "Players use a brass telegraph key and wax seal to send the code that opens the hatch.",
+        howItWorks: "Narrative Hook: Orbital comms still route through the brass tap console in the Orbital Station bay.\n\nHow it works: Players use a brass telegraph key and wax seal to send the code that opens the hatch.",
         themeFitReason: 'For "Orbital Station", the relay reads like ship comms.',
         referenceLinks: [],
         solveSteps: ["Find the rhythm", "Tap the telegraph key"],
@@ -180,7 +182,7 @@ describe("Puzzle QA (migrated)", () => {
         themeTags: [],
         title: "Pattern Archive",
         objective: "Match symbols.",
-        howItWorks: "Players collect symbols from props and align the Pattern Archive sequence on the board.",
+        howItWorks: "Narrative Hook: Misfiled spine colors in the Haunted Library reveal the Pattern Archive order.\n\nHow it works: Players collect symbols from props and align the Pattern Archive sequence on the board.",
         themeFitReason: 'For "Haunted Library", symbol order mirrors misfiled spine colors.',
         referenceLinks: [
           {

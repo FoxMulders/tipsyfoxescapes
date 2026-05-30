@@ -145,7 +145,9 @@ RULES (non-negotiable):
 - NEVER use generic tropes: cipher charts, padlocks as default locks, "represents", "symbolizes", "simulates", "stands for".
 - Every mechanism must be buildable with the host's listed props or common maker parts.
 - solveSteps must contain EXACT player-facing text, numbers, or symbols — no placeholders.
-- For electronic puzzles include a working Arduino sketch (setup() + non-empty loop()) and wiring lines.
+- Player-facing copy (objective, solveSteps, narrative_justification) must NEVER name raw hardware (maglock, RFID, Arduino, relay module) — re-skin as in-world interactions tied to the theme.
+- Every puzzle must anchor to the selected theme with specific setting props, characters, or mood — no generic worksheets.
+- For electronic puzzles include a working Arduino sketch (setup() + non-empty loop()) and wiring lines in maker sections only.
 - Set banned_word_check=true ONLY when all copy avoids banned tropes.`;
 
 const buildPlanningBlock = (
@@ -197,14 +199,18 @@ const buildPlanningBlock = (
     .join("\n");
 };
 
-const buildHowItWorks = (layer: DiegeticLayer): string => {
+const buildHowItWorks = (layer: DiegeticLayer, narrativeHook: string): string => {
   const { prop_design, player_action } = layer.physical_prop_translation;
   const { trigger_mechanism } = layer.hardware_and_electronics;
-  return [
+  const mechanism = [
     `Prop: ${prop_design}`,
     `Interaction: ${player_action}`,
     `Mechanism: ${trigger_mechanism}`,
   ].join(" ");
+  const hook =
+    narrativeHook.trim() ||
+    `The "${prop_design}" demands attention — players must engage before the room releases the next beat.`;
+  return `Narrative Hook: ${hook}\n\nHow it works: ${mechanism}`;
 };
 
 const mapToPuzzle = (
@@ -234,7 +240,7 @@ const mapToPuzzle = (
     themeTags: presentation.themeTags,
     title: presentation.title.trim(),
     objective: presentation.objective.trim(),
-    howItWorks: buildHowItWorks(layer),
+    howItWorks: buildHowItWorks(layer, presentation.narrative_justification),
     narrative_justification: presentation.narrative_justification.trim(),
     bill_of_materials: [...layer.hardware_and_electronics.required_components],
     required_parts_and_props: [...layer.hardware_and_electronics.required_components],
@@ -334,6 +340,8 @@ const compilePuzzlePresentation = async (
     "",
     "narrative_justification MUST be player-facing fiction (1–2 sentences): why the team interacts with this prop in the story, not builder logistics.",
     'Example: "The Curator hid the ledger weights inside the bronze busts—balance them to reveal the chronometer code."',
+    'howItWorks (assembled server-side) MUST begin with "Narrative Hook:" explaining why before how — never open with hardware jargon.',
+    "Do NOT use in player-facing fields: maglock, RFID, Arduino, relay module, MCU — describe the in-world latch, sigil reader, or spirit lock instead.",
     "Do NOT use: represents, symbolizes, simulates, cipher chart, padlock.",
     "Set banned_word_check=true only when all strings avoid those tropes.",
     home

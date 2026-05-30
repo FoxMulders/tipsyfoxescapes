@@ -5,6 +5,11 @@
  */
 
 import { auditThemeFitNarrative } from "../../shared/qa/storyEditorRules.js";
+import {
+  auditBareMechanicalPlayerCopy,
+  auditMandatoryNarrativeHook,
+  auditThematicIntegrity,
+} from "../../shared/qa/narrativeIntegrityRules.js";
 import type { InventoryItem, PropPuzzleLink } from "../../shared/inventory.js";
 import { isStaticCatalogTitle } from "./staticCatalogTitles.js";
 import { auditArduinoPreviewFirmware } from "./firmwarePreviewValidation.js";
@@ -377,10 +382,51 @@ const auditCopyFields = (puzzle: PuzzleForQa, ctx: PuzzleQaContext): PuzzleQaIss
   if (!puzzle.isStaticCatalog && !(puzzle.narrative_justification ?? "").trim()) {
     issues.push({
       code: "NARRATIVE_JUSTIFICATION_MISSING",
-      severity: "warn",
+      severity: "error",
       field: "narrative_justification",
       message: "Story beat is missing — add player-facing fiction explaining why the team interacts with this puzzle in the narrative.",
     });
+  }
+
+  const playerFacingTexts: Array<{ field: string; text: string }> = [
+    { field: "objective", text: puzzle.objective ?? "" },
+    { field: "howItWorks", text: puzzle.howItWorks ?? "" },
+    ...(puzzle.solveSteps ?? []).map((s, i) => ({ field: `solveSteps[${i}]`, text: s })),
+    { field: "narrative_justification", text: puzzle.narrative_justification ?? "" },
+    { field: "themeFitReason", text: puzzle.themeFitReason ?? "" },
+  ];
+
+  issues.push(
+    ...auditMandatoryNarrativeHook(puzzle.howItWorks ?? "").map((i) => ({
+      code: i.code,
+      severity: i.severity,
+      field: i.field,
+      message: i.message,
+    })),
+  );
+
+  if (!puzzle.isStaticCatalog) {
+    issues.push(
+      ...auditThematicIntegrity(
+        playerFacingTexts.map((p) => p.text).join(" "),
+        ctx.themeName,
+        puzzle.themeTags,
+        ["howItWorks"],
+      ).map((i) => ({
+        code: i.code,
+        severity: i.severity,
+        field: i.field,
+        message: i.message,
+      })),
+    );
+    issues.push(
+      ...auditBareMechanicalPlayerCopy(playerFacingTexts).map((i) => ({
+        code: i.code,
+        severity: i.severity,
+        field: i.field,
+        message: i.message,
+      })),
+    );
   }
 
   if ((puzzle.solveSteps ?? []).length < 2) {

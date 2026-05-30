@@ -957,9 +957,22 @@ pre.code-inline {
 }
 
 .workspace-flow-canvas {
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  max-width: 100%;
+  overflow: auto;
   min-height: 0;
+}
+
+.workspace-flow-canvas--linear {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.flow-linear-steps__item {
+  scroll-margin-top: 1rem;
 }
 
 .workspace-flow-canvas__flow .react-flow__pane {

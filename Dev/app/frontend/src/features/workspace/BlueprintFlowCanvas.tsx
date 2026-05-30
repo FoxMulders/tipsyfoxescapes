@@ -13,6 +13,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { RoomSkeleton } from "../../../../shared/roomSkeleton";
+import { FlowLinearSteps } from "./FlowLinearSteps";
 import { generationToFlowGraph, type FlowNodeData } from "./generationFlowGraph";
 import type { PuzzleInspectorSlice } from "./WorkspaceInspectorPanel";
 import { BlueprintZoneNode } from "./nodes/BlueprintZoneNode";
@@ -52,23 +53,28 @@ function BlueprintFlowCanvasInner({
 }: BlueprintFlowCanvasProps) {
   const graph = useMemo(() => generationToFlowGraph(skeleton, puzzles), [skeleton, puzzles]);
   const graphKey = useMemo(
-    () => `${skeleton?.flow_pattern ?? "empty"}:${graph.nodes.map((n) => n.id).join(",")}:${puzzles.length}`,
-    [graph.nodes, puzzles.length, skeleton?.flow_pattern],
+    () => `${graph.layoutMode}:${skeleton?.flow_pattern ?? "empty"}:${graph.nodes.map((n) => n.id).join(",")}:${puzzles.length}`,
+    [graph.layoutMode, graph.nodes, puzzles.length, skeleton?.flow_pattern],
   );
   const [nodes, setNodes, onNodesChange] = useNodesState(graph.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
 
   useEffect(() => {
+    if (graph.layoutMode !== "grid") {
+      setNodes([]);
+      setEdges([]);
+      return;
+    }
     setNodes((prev) => {
       const savedPositions = new Map(prev.map((n) => [n.id, n.position]));
       return graph.nodes.map((n) => ({
         ...n,
         position: savedPositions.get(n.id) ?? n.position,
-        draggable: true,
+        draggable: false,
       }));
     });
     setEdges(graph.edges);
-  }, [graph.nodes, graph.edges, setNodes, setEdges]);
+  }, [graph.nodes, graph.edges, graph.layoutMode, setNodes, setEdges]);
 
   useEffect(() => {
     setNodes((prev) =>
@@ -91,8 +97,16 @@ function BlueprintFlowCanvasInner({
     [onNodeSelect],
   );
 
+  if (graph.layoutMode === "linear") {
+    return (
+      <div className={`workspace-flow-canvas workspace-flow-canvas--linear ${className ?? ""}`}>
+        <FlowLinearSteps steps={graph.linearSteps} />
+      </div>
+    );
+  }
+
   return (
-    <div className={`workspace-flow-canvas relative h-full w-full min-h-0 ${className ?? ""}`}>
+    <div className={`workspace-flow-canvas relative ${className ?? ""}`}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -107,7 +121,7 @@ function BlueprintFlowCanvasInner({
         panOnScroll
         zoomOnPinch
         panOnDrag
-        nodesDraggable
+        nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable
         proOptions={{ hideAttribution: true }}

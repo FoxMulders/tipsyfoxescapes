@@ -1,7 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { RoomSkeleton, RoomZone } from "../../../../shared/roomSkeleton";
 import type { PuzzleInspectorSlice } from "./WorkspaceInspectorPanel";
-import { BLUEPRINT_NODE_GAP_X, BLUEPRINT_NODE_GAP_Y, BLUEPRINT_ORIGIN_X, BLUEPRINT_ORIGIN_Y, zonePosition } from "./skeletonFlowGraph";
+import { BLUEPRINT_ORIGIN_X, BLUEPRINT_ORIGIN_Y } from "./skeletonFlowGraph";
 
 export type ZoneNodeData = {
   kind: "zone";
@@ -9,6 +9,8 @@ export type ZoneNodeData = {
   action: string;
   hardware?: string;
   zoneId: string;
+  row: number;
+  col: number;
 };
 
 export type PuzzleNodeData = {
@@ -19,83 +21,145 @@ export type PuzzleNodeData = {
   objective: string;
   zoneId: string;
   narrativeHook?: string;
+  row: number;
+  col: number;
 };
 
 export type FlowNodeData = ZoneNodeData | PuzzleNodeData;
 
+export type LinearFlowStep = {
+  order: number;
+  kind: "zone" | "puzzle";
+  id: string;
+  label: string;
+  detail?: string;
+};
+
+export type FlowGraphLayout = {
+  nodes: Node<FlowNodeData>[];
+  edges: Edge[];
+  layoutMode: "grid" | "linear";
+  linearSteps: LinearFlowStep[];
+};
+
 const EDGE_STYLE = { stroke: "#5b8fd9", strokeWidth: 2 };
 const FLOW_EDGE_STYLE = { stroke: "#22d3ee", strokeWidth: 2.5 };
 
-const PUZZLE_NODE_ESTIMATED_HEIGHT = 170;
-const PUZZLE_STACK_GAP = 56;
-const ZONE_PUZZLE_OFFSET = 220;
-const MIN_NODE_GAP = 40;
+/** Minimum edge-to-edge buffer between node bounding boxes (px). */
+export const GRID_MIN_H_GAP = 300;
+export const GRID_MIN_V_GAP = 200;
+
+const ZONE_WIDTH = 260;
+const ZONE_HEIGHT = 160;
+const PUZZLE_WIDTH = 240;
+const PUZZLE_HEIGHT = 170;
 
 const estimateNodeSize = (node: Node<FlowNodeData>): { w: number; h: number } => {
-  if (node.type === "blueprintZone") return { w: 260, h: 160 };
-  return { w: 240, h: PUZZLE_NODE_ESTIMATED_HEIGHT };
+  if (node.type === "blueprintZone") return { w: ZONE_WIDTH, h: ZONE_HEIGHT };
+  return { w: PUZZLE_WIDTH, h: PUZZLE_HEIGHT };
 };
 
-/** Push overlapping nodes apart so every pair keeps at least MIN_NODE_GAP between bounds. */
-function enforceMinimumSpacing(nodes: Node<FlowNodeData>[]): Node<FlowNodeData>[] {
-  const placed = nodes.map((node) => ({ ...node, position: { ...node.position } }));
+type Bounds = { x: number; y: number; w: number; h: number };
 
-  for (let pass = 0; pass < 24; pass += 1) {
-    let adjusted = false;
-    for (let i = 0; i < placed.length; i += 1) {
-      for (let j = i + 1; j < placed.length; j += 1) {
-        const a = placed[i];
-        const b = placed[j];
-        const aSize = estimateNodeSize(a);
-        const bSize = estimateNodeSize(b);
-        const dx = b.position.x - a.position.x;
-        const dy = b.position.y - a.position.y;
-        const overlapX = aSize.w / 2 + bSize.w / 2 + MIN_NODE_GAP - Math.abs(dx);
-        const overlapY = aSize.h / 2 + bSize.h / 2 + MIN_NODE_GAP - Math.abs(dy);
+const nodeBounds = (node: Node<FlowNodeData>): Bounds => {
+  const size = estimateNodeSize(node);
+  return {
+    x: node.position.x,
+    y: node.position.y,
+    w: size.w,
+    h: size.h,
+  };
+};
 
-        if (overlapX > 0 && overlapY > 0) {
-          if (overlapX >= overlapY) {
-            const pushX = dx >= 0 ? overlapX : -overlapX;
-            b.position.x += pushX / 2;
-            a.position.x -= pushX / 2;
-          } else {
-            const pushY = dy >= 0 ? overlapY : -overlapY;
-            b.position.y += pushY / 2;
-            a.position.y -= pushY / 2;
-          }
-          adjusted = true;
-        }
-      }
+/** True when horizontal and vertical edge gaps are both below required minimums (overlap / too tight). */
+export const nodesViolateMinGap = (
+  a: Node<FlowNodeData>,
+  b: Node<FlowNodeData>,
+  minH = GRID_MIN_H_GAP,
+  minV = GRID_MIN_V_GAP,
+): boolean => {
+  const ba = nodeBounds(a);
+  const bb = nodeBounds(b);
+  // React Flow positions are top-left; measure edge-to-edge separation.
+  const hGap = Math.max(ba.x - (bb.x + bb.w), bb.x - (ba.x + ba.w));
+  const vGap = Math.max(ba.y - (bb.y + bb.h), bb.y - (ba.y + ba.h));
+  return hGap < minH && vGap < minV;
+};
+
+export const layoutHasCollisionViolations = (nodes: Node<FlowNodeData>[]): boolean => {
+  for (let i = 0; i < nodes.length; i += 1) {
+    for (let j = i + 1; j < nodes.length; j += 1) {
+      if (nodesViolateMinGap(nodes[i], nodes[j])) return true;
     }
-    if (!adjusted) break;
   }
+  return false;
+};
 
-  return placed;
+function zoneGridPosition(col: number, row = 0): { x: number; y: number } {
+  return {
+    x: BLUEPRINT_ORIGIN_X + col * (ZONE_WIDTH + GRID_MIN_H_GAP),
+    y: BLUEPRINT_ORIGIN_Y + row * (ZONE_HEIGHT + GRID_MIN_V_GAP),
+  };
 }
 
-/** Post-generation logic tree: zones L→R with linked puzzle beats beneath each zone. */
+function puzzleGridPosition(zoneCol: number, stackIndex: number, zonePos: { x: number; y: number }): { x: number; y: number } {
+  return {
+    x: zonePos.x,
+    y: zonePos.y + ZONE_HEIGHT + GRID_MIN_V_GAP + stackIndex * (PUZZLE_HEIGHT + GRID_MIN_V_GAP),
+  };
+}
+
+function buildLinearSteps(zones: RoomZone[], puzzles: PuzzleInspectorSlice[]): LinearFlowStep[] {
+  const steps: LinearFlowStep[] = [];
+  let order = 1;
+  for (const zone of zones) {
+    steps.push({
+      order: order++,
+      kind: "zone",
+      id: zone.zone_id,
+      label: zone.name,
+      detail: zone.primary_player_action,
+    });
+  }
+  for (const puzzle of puzzles) {
+    steps.push({
+      order: order++,
+      kind: "puzzle",
+      id: puzzle.id,
+      label: puzzle.title,
+      detail: puzzle.objective,
+    });
+  }
+  return steps;
+}
+
+/** Grid placement by room order (Entry → … → Airlock); linear fallback when spacing cannot be guaranteed. */
 export function generationToFlowGraph(
   skeleton: RoomSkeleton | null,
   puzzles: PuzzleInspectorSlice[],
-): { nodes: Node<FlowNodeData>[]; edges: Edge[] } {
+): FlowGraphLayout {
   if (!skeleton?.zones?.length) {
-    return { nodes: [], edges: [] };
+    return { nodes: [], edges: [], layoutMode: "grid", linearSteps: [] };
   }
 
   const zones = skeleton.zones.filter((z: RoomZone) => z.zone_id.trim() && z.name.trim());
   const nodes: Node<FlowNodeData>[] = zones.map((zone: RoomZone, index: number) => {
-    const pos = zonePosition(index, zones.length, skeleton.flow_pattern);
+    const col = index;
+    const row = 0;
+    const position = zoneGridPosition(col, row);
     return {
       id: zone.zone_id,
       type: "blueprintZone",
-      position: pos,
-      draggable: true,
+      position,
+      draggable: false,
       data: {
         kind: "zone",
         zoneId: zone.zone_id,
         label: zone.name,
         action: zone.primary_player_action,
         hardware: zone.suggested_hardware_profile,
+        row,
+        col,
       },
     };
   });
@@ -128,30 +192,24 @@ export function generationToFlowGraph(
     }
   }
 
-  if (puzzles.length > 0) {
-    const zoneStackCounts = new Map<string, number>();
-
+  if (puzzles.length > 0 && zones.length > 0) {
+    const puzzlesPerZone = Math.max(1, Math.ceil(puzzles.length / zones.length));
     puzzles.forEach((puzzle, index) => {
-      const zoneIndex = index % zones.length;
+      const zoneIndex = Math.min(zones.length - 1, Math.floor(index / puzzlesPerZone));
       const zone = zones[zoneIndex];
       const zoneNode = nodes.find((n) => n.id === zone.zone_id);
       if (!zoneNode) return;
 
-      const stackIndex = zoneStackCounts.get(zone.zone_id) ?? 0;
-      zoneStackCounts.set(zone.zone_id, stackIndex + 1);
-
+      const stackIndex = index % puzzlesPerZone;
+      const zoneCol = zoneIndex;
       const puzzleNodeId = `puzzle-${puzzle.id}`;
+      const position = puzzleGridPosition(zoneCol, stackIndex, zoneNode.position);
+
       nodes.push({
         id: puzzleNodeId,
         type: "puzzleBeat",
-        position: {
-          x: zoneNode.position.x,
-          y:
-            zoneNode.position.y +
-            ZONE_PUZZLE_OFFSET +
-            stackIndex * (PUZZLE_NODE_ESTIMATED_HEIGHT + PUZZLE_STACK_GAP),
-        },
-        draggable: true,
+        position,
+        draggable: false,
         data: {
           kind: "puzzle",
           puzzleId: puzzle.id,
@@ -160,6 +218,8 @@ export function generationToFlowGraph(
           objective: puzzle.objective,
           zoneId: zone.zone_id,
           narrativeHook: puzzle.narrativeHook,
+          row: stackIndex + 1,
+          col: zoneCol,
         },
       });
 
@@ -175,7 +235,13 @@ export function generationToFlowGraph(
     });
   }
 
-  return { nodes: enforceMinimumSpacing(nodes), edges };
-}
+  const linearSteps = buildLinearSteps(zones, puzzles);
+  const layoutMode = layoutHasCollisionViolations(nodes) ? "linear" : "grid";
 
-export { BLUEPRINT_NODE_GAP_X, BLUEPRINT_NODE_GAP_Y, BLUEPRINT_ORIGIN_X, BLUEPRINT_ORIGIN_Y, zonePosition };
+  return {
+    nodes: layoutMode === "grid" ? nodes : [],
+    edges: layoutMode === "grid" ? edges : [],
+    layoutMode,
+    linearSteps,
+  };
+}
