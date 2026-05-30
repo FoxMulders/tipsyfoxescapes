@@ -10,7 +10,7 @@ export function StudioPage() {
     roomSkeleton,
     puzzles,
     hasBlueprint,
-    puzzlesGenerating,
+    isGenerating,
     selectedNodeId,
     onNodeSelect,
     layoutRevision,
@@ -22,10 +22,10 @@ export function StudioPage() {
   } = useExperienceDesigner();
 
   useEffect(() => {
-    if (!hasBlueprint && !puzzlesGenerating) {
+    if (!hasBlueprint && !isGenerating) {
       navigate("/builder/compose", { replace: true });
     }
-  }, [hasBlueprint, puzzlesGenerating, navigate]);
+  }, [hasBlueprint, isGenerating, navigate]);
 
   if (!roomSkeleton) {
     return (

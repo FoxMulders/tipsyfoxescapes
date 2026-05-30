@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { GenerationProgressIndicator } from "@/components/generation/GenerationProgressIndicator";
 import { PUZZLE_GENERATION_PHASES, useGenerationProgressPhases } from "@/components/generation/GenerationProgressPhases";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -13,8 +14,7 @@ import "./workspace.tokens.css";
 type ExperienceDesignerShellProps = {
   navMenu: WorkspaceNavMenuProps;
   hasBlueprint: boolean;
-  puzzlesGenerating: boolean;
-  showGeneratingBusy: boolean;
+  isGenerating: boolean;
   themeIdeasLoading: boolean;
   canReview: boolean;
   canGenerateRoom: boolean;
@@ -35,8 +35,7 @@ type ExperienceDesignerShellProps = {
 export function ExperienceDesignerShell({
   navMenu,
   hasBlueprint,
-  puzzlesGenerating,
-  showGeneratingBusy,
+  isGenerating,
   themeIdeasLoading,
   canReview,
   canGenerateRoom,
@@ -58,18 +57,17 @@ export function ExperienceDesignerShell({
   const activeStep = workspaceStepFromPath(location.pathname);
 
   const showStudioSegment = activeStep === "studio" || activeStep === "curate";
-  const generateBusy = showGeneratingBusy || puzzlesGenerating;
-  const generationPhase = useGenerationProgressPhases(PUZZLE_GENERATION_PHASES, generateBusy, 4000);
+  const generationPhase = useGenerationProgressPhases(PUZZLE_GENERATION_PHASES, isGenerating, 4000);
   const [showCancelAfter15s, setShowCancelAfter15s] = useState(false);
 
   useEffect(() => {
-    if (!generateBusy) {
+    if (!isGenerating) {
       setShowCancelAfter15s(false);
       return;
     }
     const timer = window.setTimeout(() => setShowCancelAfter15s(true), 15_000);
     return () => window.clearTimeout(timer);
-  }, [generateBusy]);
+  }, [isGenerating]);
 
   return (
     <div className="experience-designer builder-route--fullpage" data-testid="experience-designer">
@@ -80,7 +78,7 @@ export function ExperienceDesignerShell({
           activeStep={activeStep}
           onStepNavigate={onStepNavigate}
           hasBlueprint={hasBlueprint}
-          puzzlesGenerating={generateBusy}
+          puzzlesGenerating={isGenerating}
           canReview={canReview}
           canGenerateRoom={canGenerateRoom}
         />
@@ -93,7 +91,7 @@ export function ExperienceDesignerShell({
         ) : null}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {headerExtra}
-          {generateBusy ? (
+          {isGenerating ? (
             <span
               className="hidden max-w-[14rem] truncate text-xs text-cyan-400/90 sm:inline"
               role="status"
@@ -113,7 +111,7 @@ export function ExperienceDesignerShell({
                 type="button"
                 variant="secondary"
                 size="sm"
-                disabled={themeIdeasLoading || generateBusy}
+                disabled={themeIdeasLoading || isGenerating}
                 aria-busy={themeIdeasLoading}
                 onClick={onGenerateThemes}
               >
@@ -122,12 +120,12 @@ export function ExperienceDesignerShell({
               <Button
                 type="button"
                 size="sm"
-                disabled={!canGenerateRoom || generateBusy}
-                aria-busy={generateBusy}
-                title={!canGenerateRoom ? "Choose a theme first" : undefined}
+                disabled={!canGenerateRoom || isGenerating}
+                aria-busy={isGenerating}
+                title={!canGenerateRoom ? generateRoomDisabledReason ?? "Choose a theme first" : undefined}
                 onClick={onGenerateRoom}
               >
-                {generateBusy ? "Generating…" : "Generate room"}
+                {isGenerating ? "Generating…" : "Generate room"}
               </Button>
             </>
           ) : null}
@@ -138,6 +136,16 @@ export function ExperienceDesignerShell({
           ) : null}
         </div>
       </header>
+      {isGenerating && activeStep === "compose" ? (
+        <div className="experience-designer__generation-bar px-3 pb-2 pt-1 md:px-4">
+          <GenerationProgressIndicator
+            active={isGenerating}
+            phases={PUZZLE_GENERATION_PHASES}
+            phaseIntervalMs={4000}
+            className="generation-progress-indicator--surface w-full max-w-3xl mx-auto"
+          />
+        </div>
+      ) : null}
       {workspaceSessionExpired && onWorkspaceReauth ? (
         <WorkspaceSessionExpiredOverlay
           variant="inline"

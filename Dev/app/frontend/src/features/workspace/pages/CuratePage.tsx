@@ -4,13 +4,13 @@ import { useExperienceDesigner } from "../ExperienceDesignerContext";
 
 export function CuratePage() {
   const navigate = useNavigate();
-  const { curateContent, hasBlueprint, puzzlesGenerating } = useExperienceDesigner();
+  const { curateContent, hasBlueprint, isGenerating } = useExperienceDesigner();
 
   useEffect(() => {
-    if (!hasBlueprint && !puzzlesGenerating) {
+    if (!hasBlueprint && !isGenerating) {
       navigate("/builder/compose", { replace: true });
     }
-  }, [hasBlueprint, puzzlesGenerating, navigate]);
+  }, [hasBlueprint, isGenerating, navigate]);
 
   return (
     <div className="experience-step experience-step--scroll h-full">

@@ -45,12 +45,10 @@ export function ComposePage() {
     themeIdeasLoading,
     canGenerateNewThemes,
     themePath,
-    puzzlesGenerating,
-    showGeneratingBusy,
+    isGenerating,
   } = useExperienceDesigner();
 
   const themeSelected = Boolean(selectedThemeId.trim());
-  const generateBusy = showGeneratingBusy || puzzlesGenerating;
   const autoThemesRequestedRef = useRef(false);
   const prevThemePathRef = useRef(themePath);
 
@@ -136,11 +134,11 @@ export function ComposePage() {
                 type="button"
                 size="lg"
                 className="experience-compose-footer__cta"
-                disabled={!canGenerateRoom || generateBusy}
-                aria-busy={generateBusy}
+                disabled={!canGenerateRoom || isGenerating}
+                aria-busy={isGenerating}
                 onClick={onGenerateRoom}
               >
-                {generateBusy ? "Generating…" : "Generate room →"}
+                {isGenerating ? "Generating…" : "Generate room →"}
               </Button>
             </div>
           ) : null}

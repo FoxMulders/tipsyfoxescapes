@@ -95,7 +95,23 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
   const [layoutRevision] = useState(0);
   const [prevGenerating, setPrevGenerating] = useState(puzzlesGenerating);
   const [pendingGenerate, setPendingGenerate] = useState(false);
-  const showGeneratingBusy = puzzlesGenerating || pendingGenerate;
+  const isGenerating = puzzlesGenerating || pendingGenerate;
+
+  useEffect(() => {
+    if (!puzzlesGenerating) {
+      setPendingGenerate(false);
+    }
+  }, [puzzlesGenerating]);
+
+  useEffect(() => {
+    if (!isGenerating) return;
+    const timer = window.setTimeout(() => {
+      setPendingGenerate(false);
+      onResetGeneration();
+      toast.error("Generation timed out after 20 seconds. Please try again.");
+    }, 20_000);
+    return () => window.clearTimeout(timer);
+  }, [isGenerating, onResetGeneration]);
 
   const routeForStep = (step: WorkspaceStepId): string => {
     switch (step) {
@@ -209,9 +225,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     flushSync(() => {
       setPendingGenerate(true);
     });
-    void Promise.resolve(onGenerateRoom()).finally(() => {
-      setPendingGenerate(false);
-    });
+    void Promise.resolve(onGenerateRoom());
   }, [onTryGenerateRoom, onPlanningIncomplete, onGenerateRoom]);
 
   const handleStepNavigate = useCallback(
@@ -233,8 +247,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     () => ({
       roomSkeleton,
       generationTelemetry,
-      puzzlesGenerating,
-      showGeneratingBusy,
+      isGenerating,
       puzzles,
       hasBlueprint,
       canGenerateRoom,
@@ -272,8 +285,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     [
       roomSkeleton,
       generationTelemetry,
-      puzzlesGenerating,
-      showGeneratingBusy,
+      isGenerating,
       puzzles,
       hasBlueprint,
       canGenerateRoom,
@@ -313,8 +325,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       <ExperienceDesignerShell
         navMenu={navMenu}
         hasBlueprint={hasBlueprint}
-        puzzlesGenerating={puzzlesGenerating}
-        showGeneratingBusy={showGeneratingBusy}
+        isGenerating={isGenerating}
         themeIdeasLoading={themeIdeasLoading}
         canReview={canReview}
         canGenerateRoom={canGenerateRoom}

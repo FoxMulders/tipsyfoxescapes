@@ -10,8 +10,8 @@ export type ComposeActiveStep = "room-details" | "themes";
 export type ExperienceDesignerContextValue = {
   roomSkeleton: RoomSkeleton | null;
   generationTelemetry: GenerationTelemetry | null;
-  puzzlesGenerating: boolean;
-  showGeneratingBusy: boolean;
+  /** Single source of truth for room-generation UI (button, progress bar, header status). */
+  isGenerating: boolean;
   puzzles: PuzzleInspectorSlice[];
   hasBlueprint: boolean;
   canGenerateRoom: boolean;

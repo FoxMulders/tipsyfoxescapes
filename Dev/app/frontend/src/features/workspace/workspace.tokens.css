@@ -278,6 +278,11 @@ html.builder-route--fullpage #root {
   box-shadow: 0 16px 48px rgb(0 0 0 / 0.45);
 }
 
+.experience-designer__generation-bar {
+  flex-shrink: 0;
+  z-index: 3;
+}
+
 .experience-compose-hero {
   text-align: center;
   padding: 1.5rem 1rem 0.75rem;

@@ -1,7 +1,10 @@
 import { GenerationProgressIndicator } from "@/components/generation/GenerationProgressIndicator";
 import { PUZZLE_GENERATION_PHASES } from "@/components/generation/GenerationProgressPhases";
+import { useExperienceDesigner } from "../ExperienceDesignerContext";
 
 export function GeneratingPanel() {
+  const { isGenerating } = useExperienceDesigner();
+
   return (
     <div className="generating-hero-panel glass-panel w-full max-w-md text-center">
       <p className="m-0 text-xs font-bold uppercase tracking-widest text-cyan-400/80">Master generation</p>
@@ -12,7 +15,7 @@ export function GeneratingPanel() {
         Drafting physical zones, thematic puzzles, and running quality checks. This usually takes under a minute.
       </p>
       <GenerationProgressIndicator
-        active={true}
+        active={isGenerating}
         phases={PUZZLE_GENERATION_PHASES}
         phaseIntervalMs={4000}
         className="w-full"
@@ -22,12 +25,14 @@ export function GeneratingPanel() {
 }
 
 export function GeneratingPage() {
+  const { isGenerating } = useExperienceDesigner();
+
   return (
     <div
       className="experience-step experience-step--generating experience-step--scroll flex h-full min-h-full w-full flex-col items-center justify-start gap-6 p-8 pt-[8vh] md:pt-[10vh]"
       role="status"
       aria-live="polite"
-      aria-busy="true"
+      aria-busy={isGenerating}
     >
       <GeneratingPanel />
     </div>
