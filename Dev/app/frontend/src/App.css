@@ -851,10 +851,23 @@ pre.code-inline {
   min-height: calc(100vh - var(--app-top-nav-height, 0px));
 }
 
+.page-shell--room-cad-setup {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  padding: 0;
+}
+
 .builder-workspace-shell--persistent {
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
-  max-height: calc(100vh - var(--app-top-nav-height, 0px));
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
   background: transparent;
   border: none;
@@ -864,19 +877,38 @@ pre.code-inline {
 }
 
 .page-shell--room-cad-setup .builder-workspace--persistent {
-  min-height: calc(100vh - var(--app-top-nav-height, 0px));
-  max-height: calc(100vh - var(--app-top-nav-height, 0px));
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .page-shell--room-cad-setup .app-main-col {
+  max-width: none;
   min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.page-shell--room-cad-setup .builder-workspace .stage-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .flow-shell-scroll-region--persistent {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
   padding: 0;
 }
@@ -7839,27 +7871,6 @@ ul.auth-hero-para {
   width: 100%;
   min-height: 44px;
   max-height: none;
-}
-
-.page-shell--room-cad-setup {
-  grid-template-columns: minmax(0, 1fr);
-  min-height: 100vh;
-  max-height: 100vh;
-  overflow: hidden;
-  padding: 0;
-}
-
-.page-shell--room-cad-setup .app-main-col {
-  max-width: none;
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-}
-
-.page-shell--room-cad-setup .builder-workspace--persistent {
-  min-height: 100vh;
-  max-height: 100vh;
-  height: 100vh;
 }
 
 .builder-account-strip {

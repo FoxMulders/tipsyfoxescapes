@@ -126,6 +126,9 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
   }, [resolvedStep, navigate, location.pathname, puzzlesGenerating, hasBlueprint]);
 
   const stepContent = useMemo(() => {
+    if (puzzlesGenerating) {
+      return <GeneratingPage />;
+    }
     switch (activeStep) {
       case "generating":
         return <GeneratingPage />;
@@ -138,7 +141,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       default:
         return <ComposePage />;
     }
-  }, [activeStep]);
+  }, [activeStep, puzzlesGenerating]);
 
   useEffect(() => {
     if (prevGenerating && !puzzlesGenerating && hasBlueprint) {
