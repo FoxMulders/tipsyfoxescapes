@@ -7,7 +7,6 @@ import type { GenerationTelemetry } from "@/features/planning/domain/generationT
 import { ExperienceDesignerProvider } from "./ExperienceDesignerContext";
 import { ExperienceDesignerShell } from "./ExperienceDesignerShell";
 import { GeneratePlanningDialog } from "./GeneratePlanningDialog";
-import { WorkspaceSessionExpiredOverlay } from "./WorkspaceSessionExpiredOverlay";
 import type { FlowNodeData, PuzzleNodeData, ZoneNodeData } from "./generationFlowGraph";
 import { ComposePage, CuratePage, GeneratingPage, ReviewPage, StudioPage } from "./pages";
 import { resolveWorkspaceStep, workspaceStepFromPath, type WorkspaceStepId } from "./workspaceSteps";
@@ -280,14 +279,6 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
         onSubmit={() => void onGenerateRoom()}
         eventSuggestions={eventSuggestions}
       />
-      {workspaceSessionExpired ? (
-        <WorkspaceSessionExpiredOverlay
-          open
-          message={workspaceSessionExpiredMessage}
-          userName={navMenu.authName}
-          onSignIn={onWorkspaceReauth}
-        />
-      ) : null}
       <ExperienceDesignerShell
         navMenu={navMenu}
         hasBlueprint={hasBlueprint}
@@ -302,6 +293,10 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
         onOpenReview={() => void onOpenReview()}
         onResetGeneration={handleResetGeneration}
         onStepNavigate={handleStepNavigate}
+        workspaceSessionExpired={workspaceSessionExpired}
+        workspaceSessionExpiredMessage={workspaceSessionExpiredMessage}
+        workspaceSessionExpiredUserName={navMenu.authName}
+        onWorkspaceReauth={onWorkspaceReauth}
       >
         {stepContent}
       </ExperienceDesignerShell>

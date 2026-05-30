@@ -3,6 +3,8 @@ type WorkspaceSessionExpiredOverlayProps = {
   message: string;
   userName?: string;
   onSignIn: () => void;
+  /** inline = non-blocking banner (Experience Designer). overlay = legacy full-screen modal. */
+  variant?: "overlay" | "inline";
 };
 
 export function WorkspaceSessionExpiredOverlay({
@@ -10,8 +12,28 @@ export function WorkspaceSessionExpiredOverlay({
   message,
   userName,
   onSignIn,
+  variant = "overlay",
 }: WorkspaceSessionExpiredOverlayProps) {
   if (!open) return null;
+
+  if (variant === "inline") {
+    return (
+      <div className="workspace-session-expired-inline" role="alert">
+        <div className="workspace-session-expired-inline__copy">
+          <strong className="workspace-session-expired-inline__title">Session expired</strong>
+          {userName ? (
+            <span className="workspace-session-expired-inline__user muted">
+              Signed in as <strong>{userName}</strong>
+            </span>
+          ) : null}
+          <p className="workspace-session-expired-inline__message">{message}</p>
+        </div>
+        <button type="button" className="primary-btn workspace-session-expired-inline__action" onClick={onSignIn}>
+          Sign in again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div

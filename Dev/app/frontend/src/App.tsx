@@ -3936,6 +3936,7 @@ export default function App() {
   };
 
   const activateWorkspaceSessionExpired = useCallback((message: string): void => {
+    clearWizardBusyStateRef.current();
     themesAutoFetchInFlight.current = false;
     setThemeIdeasLoading(false);
     setThemeSessionExpiredNotice("");

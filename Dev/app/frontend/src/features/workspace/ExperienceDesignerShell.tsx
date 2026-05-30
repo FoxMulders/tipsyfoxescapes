@@ -7,6 +7,7 @@ import { WorkspaceNavMenu } from "./WorkspaceNavMenu";
 import { StudioSegmentToggle, WorkspaceStepper } from "./WorkspaceStepper";
 import { workspaceStepFromPath, type WorkspaceStepId } from "./workspaceSteps";
 import type { WorkspaceNavMenuProps } from "./WorkspaceNavMenu";
+import { WorkspaceSessionExpiredOverlay } from "./WorkspaceSessionExpiredOverlay";
 import "./workspace.tokens.css";
 
 type ExperienceDesignerShellProps = {
@@ -23,6 +24,10 @@ type ExperienceDesignerShellProps = {
   onOpenReview: () => void;
   onResetGeneration: () => void;
   onStepNavigate: (step: WorkspaceStepId) => void;
+  workspaceSessionExpired?: boolean;
+  workspaceSessionExpiredMessage?: string;
+  workspaceSessionExpiredUserName?: string;
+  onWorkspaceReauth?: () => void;
   headerExtra?: ReactNode;
   children: ReactNode;
 };
@@ -41,6 +46,10 @@ export function ExperienceDesignerShell({
   onOpenReview,
   onResetGeneration,
   onStepNavigate,
+  workspaceSessionExpired = false,
+  workspaceSessionExpiredMessage = "",
+  workspaceSessionExpiredUserName,
+  onWorkspaceReauth,
   headerExtra,
   children,
 }: ExperienceDesignerShellProps) {
@@ -129,6 +138,15 @@ export function ExperienceDesignerShell({
           ) : null}
         </div>
       </header>
+      {workspaceSessionExpired && onWorkspaceReauth ? (
+        <WorkspaceSessionExpiredOverlay
+          variant="inline"
+          open
+          message={workspaceSessionExpiredMessage}
+          userName={workspaceSessionExpiredUserName}
+          onSignIn={onWorkspaceReauth}
+        />
+      ) : null}
       <div className="experience-designer__body">{children}</div>
     </div>
   );

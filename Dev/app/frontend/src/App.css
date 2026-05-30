@@ -913,6 +913,13 @@ pre.code-inline {
   padding: 0;
 }
 
+.page-shell--room-cad-setup .flow-shell-scroll-region--persistent > .experience-designer,
+.page-shell--room-cad-setup .flow-shell-scroll-region--persistent > [data-testid="experience-designer"] {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
 .workspace-constraints-panel .room-config-panel {
   border: none;
   background: transparent;
