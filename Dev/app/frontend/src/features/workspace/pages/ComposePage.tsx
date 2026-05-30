@@ -52,9 +52,10 @@ export function ComposePage() {
             size="lg"
             className="experience-compose-footer__cta"
             disabled={!canGenerateRoom || puzzlesGenerating}
+            aria-busy={puzzlesGenerating}
             onClick={onGenerateRoom}
           >
-            {puzzlesGenerating ? "Generating…" : "Generate room →"}
+            {puzzlesGenerating ? "Please wait…" : "Generate room →"}
           </Button>
         </div>
       ) : null}

@@ -18,6 +18,7 @@ export type BuilderPersistentWorkspaceProps = {
   roomSkeleton: RoomSkeleton | null;
   generationTelemetry: GenerationTelemetry | null;
   puzzlesGenerating: boolean;
+  themeIdeasLoading: boolean;
   puzzles: PuzzleInspectorSlice[];
   eventSuggestions: string[];
   canGenerateRoom: boolean;
@@ -46,6 +47,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     roomSkeleton,
     generationTelemetry,
     puzzlesGenerating,
+    themeIdeasLoading,
     puzzles,
     eventSuggestions,
     canGenerateRoom,
@@ -269,6 +271,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
         navMenu={navMenu}
         hasBlueprint={hasBlueprint}
         puzzlesGenerating={puzzlesGenerating}
+        themeIdeasLoading={themeIdeasLoading}
         canReview={canReview}
         canGenerateRoom={canGenerateRoom}
         generateRoomDisabledReason={generateRoomDisabledReason}

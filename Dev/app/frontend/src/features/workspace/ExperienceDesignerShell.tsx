@@ -12,6 +12,7 @@ type ExperienceDesignerShellProps = {
   navMenu: WorkspaceNavMenuProps;
   hasBlueprint: boolean;
   puzzlesGenerating: boolean;
+  themeIdeasLoading: boolean;
   canReview: boolean;
   canGenerateRoom: boolean;
   generateRoomDisabledReason?: string;
@@ -27,6 +28,7 @@ export function ExperienceDesignerShell({
   navMenu,
   hasBlueprint,
   puzzlesGenerating,
+  themeIdeasLoading,
   canReview,
   canGenerateRoom,
   generateRoomDisabledReason,
@@ -67,17 +69,25 @@ export function ExperienceDesignerShell({
           {headerExtra}
           {activeStep === "compose" ? (
             <>
-              <Button type="button" variant="secondary" size="sm" onClick={onGenerateThemes}>
-                Refresh themes
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={themeIdeasLoading}
+                aria-busy={themeIdeasLoading}
+                onClick={onGenerateThemes}
+              >
+                {themeIdeasLoading ? "Please wait…" : "Refresh themes"}
               </Button>
               <Button
                 type="button"
                 size="sm"
                 disabled={!canGenerateRoom || puzzlesGenerating}
+                aria-busy={puzzlesGenerating}
                 title={!canGenerateRoom ? "Choose a theme first" : undefined}
                 onClick={onGenerateRoom}
               >
-                {puzzlesGenerating ? "Generating…" : "Generate room"}
+                {puzzlesGenerating ? "Please wait…" : "Generate room"}
               </Button>
             </>
           ) : null}

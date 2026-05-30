@@ -10,7 +10,7 @@ export type ZoneNodeData = {
 
 /** Horizontal left-to-right floor-plan spacing (px). */
 export const BLUEPRINT_NODE_GAP_X = 350;
-export const BLUEPRINT_NODE_GAP_Y = 130;
+export const BLUEPRINT_NODE_GAP_Y = 180;
 export const BLUEPRINT_ORIGIN_X = 48;
 export const BLUEPRINT_ORIGIN_Y = 96;
 

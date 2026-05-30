@@ -52,6 +52,9 @@ export function StudioInspectorSheet({
           {puzzle ? (
             <>
               <Badge variant="outline">{puzzle.category}</Badge>
+              {puzzle.narrativeHook?.trim() ? (
+                <p className="m-0 text-sm italic leading-relaxed text-violet-200/90">{puzzle.narrativeHook}</p>
+              ) : null}
               <p className="m-0 leading-relaxed">{puzzle.objective}</p>
               {puzzle.electronicDetails?.parts?.length ? (
                 <div>

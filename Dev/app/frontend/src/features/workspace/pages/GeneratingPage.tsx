@@ -3,14 +3,19 @@ import { PUZZLE_GENERATION_PHASES } from "@/components/generation/GenerationProg
 
 export function GeneratingPage() {
   return (
-    <div className="experience-step flex h-full flex-col items-center justify-center gap-6 p-8">
-      <div className="max-w-md w-full text-center">
+    <div className="experience-step experience-step--generating flex h-full flex-col items-center justify-start gap-6 p-8 pt-[8vh] md:pt-[10vh]">
+      <div className="generating-hero-panel glass-panel w-full max-w-md text-center">
         <p className="m-0 text-xs font-bold uppercase tracking-widest text-cyan-400/80">Master generation</p>
-        <h2 className="mt-2 mb-0 text-xl font-bold text-slate-50">Building your room</h2>
-        <p className="mt-2 mb-6 text-sm text-slate-400">
+        <h2 className="mb-0 mt-2 text-xl font-bold text-slate-50">Building your room</h2>
+        <p className="mb-6 mt-2 text-sm text-slate-400">
           Drafting physical zones, thematic puzzles, and running quality checks. This usually takes under a minute.
         </p>
-        <GenerationProgressIndicator active phases={PUZZLE_GENERATION_PHASES} className="w-full" />
+        <GenerationProgressIndicator
+          active={true}
+          phases={PUZZLE_GENERATION_PHASES}
+          phaseIntervalMs={4000}
+          className="w-full"
+        />
       </div>
     </div>
   );

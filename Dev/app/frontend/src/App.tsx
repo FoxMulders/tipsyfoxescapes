@@ -234,6 +234,17 @@ const isPuzzlePreviewLocked = (puzzle: Puzzle): boolean => Boolean(puzzle.locked
 const puzzleCardHeading = (puzzle: Puzzle, puzzleNumber: number): string =>
   puzzle.previewLabel?.trim() || `Puzzle ${puzzleNumber}: ${puzzle.title}`;
 
+function resolveNarrativeHook(
+  puzzle: Pick<Puzzle, "id" | "title" | "objective" | "narrative_justification">,
+  storyPlan: StoryPlan | null,
+): string {
+  const justification = puzzle.narrative_justification?.trim();
+  if (justification) return justification;
+  const storyRole = storyPlan?.puzzleLinks.find((link) => link.puzzleId === puzzle.id)?.storyRole.trim();
+  if (storyRole) return storyRole;
+  return `${puzzle.title}: ${puzzle.objective}`;
+}
+
 function TrialBlur({ active, label, children }: { active: boolean; label: string; children: ReactNode }) {
   if (!active) return <>{children}</>;
   return (
@@ -767,6 +778,7 @@ function PuzzleWindowsTrack({
   eligibleProps,
   onRebindProp,
   rebindBusyPuzzleId,
+  storyPlan,
 }: {
   puzzles: Puzzle[];
   refusedSlots: RefusedPuzzleSlot[];
@@ -783,6 +795,7 @@ function PuzzleWindowsTrack({
   eligibleProps?: InventoryItem[];
   onRebindProp?: (puzzleId: string, propId: string) => void;
   rebindBusyPuzzleId?: string | null;
+  storyPlan?: StoryPlan | null;
 }) {
   return (
     <div className="puzzle-windows-grid">
@@ -803,6 +816,7 @@ function PuzzleWindowsTrack({
           eligibleProps={eligibleProps}
           onRebindProp={onRebindProp}
           rebindBusy={rebindBusyPuzzleId === puzzle.id}
+          narrativeHook={resolveNarrativeHook(puzzle, storyPlan ?? null)}
         />
       ))}
       {refusedSlots.map((slot, index) => (
@@ -833,6 +847,7 @@ function PuzzleWindowCard({
   eligibleProps,
   onRebindProp,
   rebindBusy,
+  narrativeHook,
 }: {
   puzzle: Puzzle;
   puzzleNumber: number;
@@ -848,6 +863,7 @@ function PuzzleWindowCard({
   eligibleProps?: InventoryItem[];
   onRebindProp?: (puzzleId: string, propId: string) => void;
   rebindBusy?: boolean;
+  narrativeHook: string;
 }) {
   const previewLocked = isPuzzlePreviewLocked(puzzle);
   const maglock = isMaglockPuzzle(puzzle);
@@ -917,6 +933,9 @@ function PuzzleWindowCard({
         ) : null}
       </p>
       <p className="inline-space puzzle-objective-line">{puzzle.objective}</p>
+      <p className="inline-space puzzle-story-beat">
+        <strong>Story beat:</strong> {narrativeHook}
+      </p>
       <PropPuzzleBindingRow
         puzzle={puzzle}
         eligibleProps={eligibleProps ?? []}
@@ -2420,6 +2439,7 @@ export default function App() {
     ) => Promise<void>
   >(async () => {});
   const puzzlesRequestInFlight = useRef(false);
+  const puzzlesGeneratingInitRef = useRef(false);
   const wizardNavLastRef = useRef<{ at: number; index: number }>({ at: 0, index: -1 });
   const wizardNavigationBusyRef = useRef(false);
   const clearWizardBusyStateRef = useRef<() => void>(() => {});
@@ -3147,14 +3167,37 @@ export default function App() {
     rememberInput("environmentType", environmentType);
     rememberInput("availableItems", availableItems);
     rememberInput("eventType", eventType);
+    const needsGeneration = puzzles.length === 0;
+    if (needsGeneration) {
+      flushSync(() => {
+        puzzlesGeneratingInitRef.current = true;
+        setPuzzlesGenerating(true);
+        setWizardStep("themes-puzzles");
+        setActivePanel("themes");
+        navigate("/builder/generating");
+      });
+    } else {
+      setWizardStep("themes-puzzles");
+      setActivePanel("themes");
+      navigate("/builder/generating");
+    }
     const activeSessionId = await ensureSession();
-    if (!activeSessionId) return;
+    if (!activeSessionId) {
+      if (needsGeneration) {
+        puzzlesGeneratingInitRef.current = false;
+        setPuzzlesGenerating(false);
+      }
+      return;
+    }
     const synced = await syncPlanningInputToServer(activeSessionId, "strict");
-    if (!synced) return;
-    setWizardStep("themes-puzzles");
-    setActivePanel("themes");
-    navigate("/builder/generating");
-    if (puzzles.length === 0) {
+    if (!synced) {
+      if (needsGeneration) {
+        puzzlesGeneratingInitRef.current = false;
+        setPuzzlesGenerating(false);
+      }
+      return;
+    }
+    if (needsGeneration) {
       const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
       await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
     }
@@ -3782,6 +3825,7 @@ export default function App() {
     coachBrowserAiReady ||
     (Boolean(authUser) && isMobileLikeDevice()));
   const handleGenerateNewThemes = (): void => {
+    setThemeIdeasLoading(true);
     void loadThemes(themes.length > 0 ? "/api/themes/refresh" : "/api/themes/generate");
   };
   const themeGenerateDisabledTitle = canGenerateNewThemes
@@ -3846,8 +3890,9 @@ export default function App() {
         category: p.category,
         objective: p.objective,
         electronicDetails: p.electronicDetails,
+        narrativeHook: resolveNarrativeHook(p, storyPlan),
       })),
-    [puzzles],
+    [puzzles, storyPlan],
   );
   const canNavigateToOutputReview = Boolean(selectedThemeId.trim());
 
@@ -4748,11 +4793,15 @@ export default function App() {
   const requestPuzzles = async (activeSessionId: string, themeId: string, themeForEnhance?: Theme | null): Promise<boolean> => {
     if (puzzlesRequestInFlight.current) return false;
     puzzlesRequestInFlight.current = true;
-    setPuzzlesGenerating(true);
+    const preStarted = puzzlesGeneratingInitRef.current;
+    if (!preStarted) {
+      setPuzzlesGenerating(true);
+    }
     try {
       return await requestPuzzlesCore(activeSessionId, themeId, themeForEnhance);
     } finally {
       puzzlesRequestInFlight.current = false;
+      puzzlesGeneratingInitRef.current = false;
       setPuzzlesGenerating(false);
     }
   };
@@ -5264,9 +5313,16 @@ export default function App() {
   };
 
   const loadThemes = async (endpoint: "/api/themes/generate" | "/api/themes/refresh") => {
-    if (workspaceAuthBlocked) return;
+    if (workspaceAuthBlocked) {
+      setThemeIdeasLoading(false);
+      return;
+    }
+    setThemeIdeasLoading(true);
     const activeSessionId = await ensureSession();
-    if (!activeSessionId) return;
+    if (!activeSessionId) {
+      setThemeIdeasLoading(false);
+      return;
+    }
     await startThemeGeneration(activeSessionId, endpoint, themes);
   };
 
@@ -6878,6 +6934,7 @@ export default function App() {
           eligibleProps={puzzleEligibleProps}
           onRebindProp={(id, propId) => void rebindPuzzleProp(id, propId)}
           rebindBusyPuzzleId={puzzleWindowBusy?.action === "rebind" ? puzzleWindowBusy.target : null}
+          storyPlan={storyPlan}
         />
       ) : (
         <p className="muted">Generate a room first to curate puzzles.</p>
@@ -6891,6 +6948,7 @@ export default function App() {
       arduinoPreviewPuzzleId,
       puzzleWindowBusy,
       puzzleEligibleProps,
+      storyPlan,
     ],
   );
 
@@ -6929,6 +6987,7 @@ export default function App() {
                         onReplace={(id) => void replacePuzzle(id)}
                         onReject={(id) => void rejectPuzzle(id)}
                         onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+                        storyPlan={storyPlan}
                       />
                       <h4 className="puzzle-track-heading puzzle-track-heading--junior">Junior add-on track</h4>
                       <p className="muted puzzle-track-lead">
@@ -6961,6 +7020,7 @@ export default function App() {
                         onReplace={(id) => void replacePuzzle(id)}
                         onReject={(id) => void rejectPuzzle(id)}
                         onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+                        storyPlan={storyPlan}
                       />
                       <JuniorTrackEnvironmentIdeas
                         themeName={selectedThemeName}
@@ -6984,6 +7044,7 @@ export default function App() {
                       onReplace={(id) => void replacePuzzle(id)}
                       onReject={(id) => void rejectPuzzle(id)}
                       onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+                      storyPlan={storyPlan}
                     />
                   )}
                 </>
@@ -8124,6 +8185,7 @@ export default function App() {
                       roomSkeleton={lastRoomSkeleton}
                       generationTelemetry={generationTelemetry}
                       puzzlesGenerating={puzzlesGenerating}
+                      themeIdeasLoading={themeIdeasLoading}
                       puzzles={puzzleInspectorSlices}
                       eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
                       canGenerateRoom={canGenerateRoom}

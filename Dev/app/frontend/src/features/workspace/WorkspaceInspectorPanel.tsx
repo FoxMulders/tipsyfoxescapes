@@ -8,6 +8,7 @@ export type PuzzleInspectorSlice = {
   title: string;
   category: string;
   objective: string;
+  narrativeHook?: string;
   electronicDetails?: {
     parts?: string[];
     arduinoCode?: string;
@@ -83,6 +84,11 @@ function PuzzleInspectorBlock({ puzzle }: { puzzle: PuzzleInspectorSlice }) {
       <p className="m-0 text-[10px] font-bold uppercase tracking-widest text-violet-300/90">Linked puzzle</p>
       <h4 className="m-0 mt-1 text-base font-semibold text-slate-50">{puzzle.title}</h4>
       <p className="mt-1 mb-0 text-xs uppercase tracking-wide text-slate-500">{puzzle.category}</p>
+      {puzzle.narrativeHook?.trim() ? (
+        <p className="mt-2 mb-0 text-sm italic leading-relaxed text-violet-200/90">
+          <span className="not-italic font-semibold text-violet-300/90">Story beat:</span> {puzzle.narrativeHook}
+        </p>
+      ) : null}
       <p className="mt-2 mb-0 text-sm text-slate-300">{puzzle.objective}</p>
       {puzzle.electronicDetails?.parts?.length ? (
         <div className="mt-3">

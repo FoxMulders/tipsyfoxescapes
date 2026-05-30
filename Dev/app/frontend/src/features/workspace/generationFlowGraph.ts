@@ -18,12 +18,17 @@ export type PuzzleNodeData = {
   category: string;
   objective: string;
   zoneId: string;
+  narrativeHook?: string;
 };
 
 export type FlowNodeData = ZoneNodeData | PuzzleNodeData;
 
 const EDGE_STYLE = { stroke: "#5b8fd9", strokeWidth: 2 };
 const FLOW_EDGE_STYLE = { stroke: "#22d3ee", strokeWidth: 2.5 };
+
+const PUZZLE_NODE_ESTIMATED_HEIGHT = 120;
+const PUZZLE_STACK_GAP = 48;
+const ZONE_PUZZLE_OFFSET = 160;
 
 /** Post-generation logic tree: zones L→R with linked puzzle beats beneath each zone. */
 export function generationToFlowGraph(
@@ -81,20 +86,27 @@ export function generationToFlowGraph(
   }
 
   if (puzzles.length > 0) {
+    const zoneStackCounts = new Map<string, number>();
+
     puzzles.forEach((puzzle, index) => {
       const zoneIndex = index % zones.length;
       const zone = zones[zoneIndex];
       const zoneNode = nodes.find((n) => n.id === zone.zone_id);
       if (!zoneNode) return;
 
+      const stackIndex = zoneStackCounts.get(zone.zone_id) ?? 0;
+      zoneStackCounts.set(zone.zone_id, stackIndex + 1);
+
       const puzzleNodeId = `puzzle-${puzzle.id}`;
-      const colOffset = Math.floor(index / zones.length);
       nodes.push({
         id: puzzleNodeId,
         type: "puzzleBeat",
         position: {
-          x: zoneNode.position.x + colOffset * 24,
-          y: zoneNode.position.y + BLUEPRINT_NODE_GAP_Y * 0.85,
+          x: zoneNode.position.x,
+          y:
+            zoneNode.position.y +
+            ZONE_PUZZLE_OFFSET +
+            stackIndex * (PUZZLE_NODE_ESTIMATED_HEIGHT + PUZZLE_STACK_GAP),
         },
         draggable: true,
         data: {
@@ -104,6 +116,7 @@ export function generationToFlowGraph(
           category: puzzle.category,
           objective: puzzle.objective,
           zoneId: zone.zone_id,
+          narrativeHook: puzzle.narrativeHook,
         },
       });
 

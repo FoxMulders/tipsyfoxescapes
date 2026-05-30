@@ -24,7 +24,7 @@ export function ThemeGenerateButton({
       aria-busy={loading}
       onClick={onGenerate}
     >
-      {loading ? "Generating…" : themesCount > 0 ? "Generate new themes" : "Generate themes"}
+      {loading ? "Please wait…" : themesCount > 0 ? "Generate new themes" : "Generate themes"}
     </button>
   );
 }

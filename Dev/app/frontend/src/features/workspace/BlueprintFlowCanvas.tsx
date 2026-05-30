@@ -34,7 +34,7 @@ function FitViewOnGraphChange({ graphKey, layoutRevision }: { graphKey: string; 
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void fitView({ padding: 0.2, duration: 280, maxZoom: 1.25 });
+      void fitView({ padding: 0.15, duration: 280, maxZoom: 1.25 });
     }, 60);
     return () => window.clearTimeout(timer);
   }, [fitView, graphKey, layoutRevision]);
@@ -101,7 +101,7 @@ function BlueprintFlowCanvasInner({
         onEdgesChange={onEdgesChange}
         onSelectionChange={onSelectionChange}
         fitView
-        fitViewOptions={{ padding: 0.2, maxZoom: 1.25 }}
+        fitViewOptions={{ padding: 0.15, maxZoom: 1.25 }}
         minZoom={0.12}
         maxZoom={2}
         panOnScroll

@@ -332,7 +332,8 @@ const compilePuzzlePresentation = async (
     "Derive title, objective, solveSteps, and narrative_justification ONLY from the Step 1 physical layer below:",
     JSON.stringify(layer, null, 2),
     "",
-    "narrative_justification MUST explain why this exact mechanism exists in the room fiction using the theme and story context above.",
+    "narrative_justification MUST be player-facing fiction (1–2 sentences): why the team interacts with this prop in the story, not builder logistics.",
+    'Example: "The Curator hid the ledger weights inside the bronze busts—balance them to reveal the chronometer code."',
     "Do NOT use: represents, symbolizes, simulates, cipher chart, padlock.",
     "Set banned_word_check=true only when all strings avoid those tropes.",
     home

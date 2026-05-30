@@ -39,6 +39,7 @@ export type PuzzleForQa = {
   physical_anchor_prop?: string;
   bill_of_materials?: string[];
   required_parts_and_props?: string[];
+  narrative_justification?: string;
 };
 
 export type PuzzleQaIssue = {
@@ -370,6 +371,15 @@ const auditCopyFields = (puzzle: PuzzleForQa, ctx: PuzzleQaContext): PuzzleQaIss
       severity: si.severity,
       field: si.field,
       message: si.message,
+    });
+  }
+
+  if (!puzzle.isStaticCatalog && !(puzzle.narrative_justification ?? "").trim()) {
+    issues.push({
+      code: "NARRATIVE_JUSTIFICATION_MISSING",
+      severity: "warn",
+      field: "narrative_justification",
+      message: "Story beat is missing — add player-facing fiction explaining why the team interacts with this puzzle in the narrative.",
     });
   }
 

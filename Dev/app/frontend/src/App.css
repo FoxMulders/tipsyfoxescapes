@@ -115,6 +115,10 @@ body {
   background: linear-gradient(180deg, rgba(5, 7, 10, 0.12) 0%, rgba(4, 6, 9, 0.2) 55%, rgba(3, 5, 8, 0.28) 100%);
 }
 
+html.builder-route--fullpage .app-atmosphere[data-backdrop="art"] .app-atmosphere__veil {
+  background: linear-gradient(180deg, rgba(5, 7, 10, 0.28) 0%, rgba(4, 6, 9, 0.38) 55%, rgba(3, 5, 8, 0.48) 100%);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app-atmosphere[data-backdrop="art"] .app-atmosphere__image-layer {
     animation: none;
@@ -889,6 +893,12 @@ pre.code-inline {
   padding: 0;
 }
 
+.workspace-flow-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
 .workspace-flow-canvas__flow .react-flow__pane {
   cursor: grab;
 }
@@ -1060,6 +1070,18 @@ pre.code-inline {
   font-weight: 700;
   color: hsl(210 40% 96%);
   line-height: 1.25;
+}
+
+.blueprint-puzzle-node__hook {
+  margin: 0.3rem 0 0;
+  font-size: 0.62rem;
+  line-height: 1.35;
+  color: hsl(270 55% 78%);
+  font-style: italic;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .blueprint-puzzle-node__objective {
@@ -2375,6 +2397,18 @@ button:hover {
 .puzzle-objective-line {
   margin-top: 0.15rem;
   color: var(--text);
+}
+
+.puzzle-story-beat {
+  margin-top: 0.35rem;
+  color: #c4b5fd;
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.puzzle-story-beat strong {
+  font-style: normal;
+  color: #ddd6fe;
 }
 
 .theme-rec-row {

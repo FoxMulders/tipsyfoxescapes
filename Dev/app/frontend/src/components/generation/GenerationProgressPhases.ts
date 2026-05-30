@@ -32,15 +32,23 @@ export const THEME_GENERATION_PHASES: GenerationProgressPhase[] = [
 
 export const PUZZLE_GENERATION_PHASES: GenerationProgressPhase[] = [
   {
+    headline: "Stitching narrative threads…",
+    subtext: "Weaving your theme brief into room fiction.",
+  },
+  {
+    headline: "Calibrating room logic…",
+    subtext: "Balancing logic, physical, and electronic beats.",
+  },
+  {
+    headline: "Assembling prop interactions…",
+    subtext: "Binding inventory props to puzzle carriers.",
+  },
+  {
+    headline: "Finalizing escape sequence…",
+    subtext: "Running Council QA and quality checks.",
+  },
+  {
     headline: "Generating diegetic puzzles…",
-    subtext: "Compiling physical affordances embedded in your theme brief — usually 30–90 seconds.",
-  },
-  {
-    headline: "Compiling hardware profiles…",
-    subtext: "Mapping triggers, props, and maker-ready components for each puzzle slot.",
-  },
-  {
-    headline: "Running Council of Ten validation…",
-    subtext: "Scoring narrative integration, safety, and wow factor before shipping the set.",
+    subtext: "Compiling physical affordances — usually 30–90s.",
   },
 ];

@@ -76,7 +76,7 @@ export function RoomFlowchartPanel({ storyPlan, puzzles, themeName, fileBase = "
         startOnLoad: false,
         securityLevel: "loose",
         theme: "dark",
-        flowchart: { curve: "basis", padding: 16, htmlLabels: true, useMaxWidth: false },
+        flowchart: { curve: "basis", padding: 28, htmlLabels: true, useMaxWidth: false },
       });
       const renderId = `erb_flow_${reactId}_${renderKey}_${Date.now()}`;
       const { svg } = await mermaid.render(renderId, mermaidSource);
