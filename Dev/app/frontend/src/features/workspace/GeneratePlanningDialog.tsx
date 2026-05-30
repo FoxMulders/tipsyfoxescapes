@@ -34,11 +34,11 @@ function GeneratePlanningForm({ eventSuggestions }: { eventSuggestions: string[]
 export function GeneratePlanningDialog({ open, onOpenChange, onSubmit, eventSuggestions }: GeneratePlanningDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass-panel max-h-[min(90vh,640px)] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[min(90vh,640px)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Room details needed</DialogTitle>
+          <DialogTitle>Room details</DialogTitle>
           <DialogDescription>
-            Before we generate your room, confirm players, duration, and environment. Advanced options stay optional.
+            Confirm players, duration, and environment before we generate your room.
           </DialogDescription>
         </DialogHeader>
         <div className="py-2">
@@ -51,8 +51,8 @@ export function GeneratePlanningDialog({ open, onOpenChange, onSubmit, eventSugg
           <Button
             type="button"
             onClick={() => {
-              onSubmit();
               onOpenChange(false);
+              onSubmit();
             }}
           >
             Save and generate

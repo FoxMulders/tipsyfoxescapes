@@ -3042,35 +3042,12 @@ export default function App() {
     }
   };
 
-  const canGenerateRoom = useMemo(() => {
-    if (!buildPlanningBody("strict")) return false;
-    if (!selectedThemeId.trim()) return false;
-    return true;
-  }, [
-    playersConcurrent,
-    participantsTotal,
-    sessionDurationMinutes,
-    environmentType,
-    selectedThemeId,
-    targetInterface,
-  ]);
+  const canGenerateRoom = useMemo(() => Boolean(selectedThemeId.trim()), [selectedThemeId]);
 
   const generateRoomDisabledReason = useMemo((): string | undefined => {
-    if (!buildPlanningBody("strict")) {
-      return "Complete room details (players, duration, environment)";
-    }
-    if (!selectedThemeId.trim()) {
-      return "Choose a theme in The Brief";
-    }
+    if (!selectedThemeId.trim()) return "Choose a theme first";
     return undefined;
-  }, [
-    playersConcurrent,
-    participantsTotal,
-    sessionDurationMinutes,
-    environmentType,
-    selectedThemeId,
-    targetInterface,
-  ]);
+  }, [selectedThemeId]);
 
   const tryGenerateRoom = useCallback((): boolean => {
     if (!buildPlanningBody("strict")) {

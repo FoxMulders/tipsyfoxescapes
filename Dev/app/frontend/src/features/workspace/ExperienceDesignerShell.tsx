@@ -74,7 +74,7 @@ export function ExperienceDesignerShell({
                 type="button"
                 size="sm"
                 disabled={!canGenerateRoom || puzzlesGenerating}
-                title={generateRoomDisabledReason}
+                title={!canGenerateRoom ? "Choose a theme first" : undefined}
                 onClick={onGenerateRoom}
               >
                 {puzzlesGenerating ? "Generating…" : "Generate room"}
