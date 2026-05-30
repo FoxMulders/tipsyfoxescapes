@@ -8218,6 +8218,9 @@ export default function App() {
                       generationTelemetry={generationTelemetry}
                       puzzlesGenerating={puzzlesGenerating}
                       themeIdeasLoading={themeIdeasLoading}
+                      themesCount={themes.length}
+                      canGenerateNewThemes={canGenerateNewThemes}
+                      themePath={themePath}
                       puzzles={puzzleInspectorSlices}
                       eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
                       canGenerateRoom={canGenerateRoom}

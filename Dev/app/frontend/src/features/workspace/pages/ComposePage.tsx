@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useExperienceDesigner } from "../ExperienceDesignerContext";
@@ -10,12 +11,38 @@ export function ComposePage() {
     selectedThemeId,
     canGenerateRoom,
     onGenerateRoom,
+    onGenerateThemes,
+    themesCount,
+    themeIdeasLoading,
+    canGenerateNewThemes,
+    themePath,
     puzzlesGenerating,
     showGeneratingBusy,
   } = useExperienceDesigner();
 
   const themeSelected = Boolean(selectedThemeId.trim());
   const generateBusy = showGeneratingBusy || puzzlesGenerating;
+  const autoThemesRequestedRef = useRef(false);
+  const prevThemePathRef = useRef(themePath);
+
+  const handleGenerateThemes = onGenerateThemes;
+
+  useEffect(() => {
+    if (prevThemePathRef.current !== themePath) {
+      autoThemesRequestedRef.current = false;
+      prevThemePathRef.current = themePath;
+    }
+  }, [themePath]);
+
+  useEffect(() => {
+    if (themesCount > 0) return;
+    if (themePath === "custom") return;
+    if (themeIdeasLoading || !canGenerateNewThemes) return;
+    if (autoThemesRequestedRef.current) return;
+
+    autoThemesRequestedRef.current = true;
+    handleGenerateThemes();
+  }, [themesCount, themePath, themeIdeasLoading, canGenerateNewThemes, handleGenerateThemes]);
 
   return (
     <div className="experience-step experience-step--scroll experience-step--compose h-full">

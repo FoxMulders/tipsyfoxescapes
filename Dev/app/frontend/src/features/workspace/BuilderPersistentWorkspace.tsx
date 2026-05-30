@@ -19,6 +19,9 @@ export type BuilderPersistentWorkspaceProps = {
   generationTelemetry: GenerationTelemetry | null;
   puzzlesGenerating: boolean;
   themeIdeasLoading: boolean;
+  themesCount: number;
+  canGenerateNewThemes: boolean;
+  themePath: "generated" | "custom" | null;
   puzzles: PuzzleInspectorSlice[];
   eventSuggestions: string[];
   canGenerateRoom: boolean;
@@ -50,6 +53,9 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     generationTelemetry,
     puzzlesGenerating,
     themeIdeasLoading,
+    themesCount,
+    canGenerateNewThemes,
+    themePath,
     puzzles,
     eventSuggestions,
     canGenerateRoom,
@@ -235,6 +241,10 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       setSimpleThemeView,
       onGenerateRoom: handleGenerateClick,
       onGenerateThemes,
+      themesCount,
+      themeIdeasLoading,
+      canGenerateNewThemes,
+      themePath,
       onOpenReview: () => void onOpenReview(),
       onReplacePuzzle,
       composeThemeContent,
@@ -264,6 +274,10 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       setSimpleThemeView,
       handleGenerateClick,
       onGenerateThemes,
+      themesCount,
+      themeIdeasLoading,
+      canGenerateNewThemes,
+      themePath,
       onOpenReview,
       onReplacePuzzle,
       composeThemeContent,

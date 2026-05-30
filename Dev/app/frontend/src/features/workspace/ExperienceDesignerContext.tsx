@@ -19,6 +19,10 @@ export type ExperienceDesignerContextValue = {
   setSimpleThemeView: (v: boolean) => void;
   onGenerateRoom: () => void;
   onGenerateThemes: () => void;
+  themesCount: number;
+  themeIdeasLoading: boolean;
+  canGenerateNewThemes: boolean;
+  themePath: "generated" | "custom" | null;
   onOpenReview: () => void;
   onReplacePuzzle: (id: string) => void;
   composeThemeContent: ReactNode;
