@@ -5018,28 +5018,28 @@ export default function App() {
       if (typeof puzzlePayload.openAiConfigured === "boolean") {
         setServerOpenAiConfigured(puzzlePayload.openAiConfigured);
       }
-      if (planningRef.current) {
-        const commercialVenue = planningRef.current.state.targetInterface === "commercial_venue";
-        const themeName = selectedTheme?.name ?? "your theme";
-        let skeletonToPlot: RoomSkeleton | undefined = puzzlePayload.roomSkeleton?.zones?.length
-          ? puzzlePayload.roomSkeleton
-          : undefined;
-        if (!skeletonToPlot && layoutHasOnlyPresetShell(planningRef.current.state.roomLayout)) {
-          skeletonToPlot = buildHeuristicRoomSkeleton(themeName, commercialVenue);
-        }
-        if (skeletonToPlot?.zones?.length) {
-          setLastRoomSkeleton(skeletonToPlot);
+      const commercialVenue = planningRef.current?.state.targetInterface === "commercial_venue";
+      const themeName = selectedTheme?.name ?? "your theme";
+      let skeletonToPlot: RoomSkeleton | undefined = puzzlePayload.roomSkeleton?.zones?.length
+        ? puzzlePayload.roomSkeleton
+        : undefined;
+      if (!skeletonToPlot?.zones?.length) {
+        skeletonToPlot = buildHeuristicRoomSkeleton(themeName, commercialVenue);
+      }
+      if (skeletonToPlot?.zones?.length) {
+        setLastRoomSkeleton(skeletonToPlot);
+        if (planningRef.current) {
           const nextLayout = applyRoomSkeletonToLayout(planningRef.current.state.roomLayout, skeletonToPlot);
           planningRef.current.dispatch({ type: "SET_ROOM_LAYOUT", layout: nextLayout });
           planningRef.current.dispatch({
             type: "LAYOUT_ANNOUNCE",
             message: `Plotted ${skeletonToPlot.zones.length} zones on the blueprint (${puzzlePayload.roomSkeleton ? "AI skeleton" : "estimated layout"}).`,
           });
-          toastMessageOnce(
-            `Blueprint updated — ${skeletonToPlot.zones.length} zones plotted.`,
-            TOAST_ID.blueprintSkeleton,
-          );
         }
+        toastMessageOnce(
+          `Blueprint updated — ${skeletonToPlot.zones.length} zones plotted.`,
+          TOAST_ID.blueprintSkeleton,
+        );
       }
       return true;
     } catch (err) {
@@ -6517,6 +6517,12 @@ export default function App() {
       setThemes(payload.themes.map(normalizeImportedTheme));
       setSelectedThemeId(payload.selectedThemeId);
       setPuzzles(payload.puzzles);
+      if (payload.puzzles.length > 0) {
+        const loadedTheme = payload.themes.find((theme) => theme.id === payload.selectedThemeId);
+        const themeName = loadedTheme?.name ?? "Your escape room";
+        const commercialVenue = payload.planningInput.targetInterface === "commercial_venue";
+        setLastRoomSkeleton(buildHeuristicRoomSkeleton(themeName, commercialVenue));
+      }
       setRefusedPuzzleSlots([]);
       setSuggestedAdditions(payload.suggestedAdditions);
       setSuggestedAdditionsRequired(payload.suggestedAdditionsRequired ?? []);

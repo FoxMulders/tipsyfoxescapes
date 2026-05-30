@@ -104,29 +104,37 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
   };
 
   useEffect(() => {
-    if (location.pathname === "/builder" || location.pathname === "/builder/") {
+    const path = location.pathname;
+    const active = workspaceStepFromPath(path);
+
+    if (path === "/builder" || path === "/builder/") {
       navigate("/builder/compose", { replace: true });
       return;
     }
-    // Stay on compose during generation — progress banner is non-blocking inline UI.
-    if (location.pathname.startsWith("/builder/compose")) {
+    if (!path.startsWith("/builder/")) {
+      navigate(routeForStep(resolvedStep), { replace: true });
       return;
     }
-    if (location.pathname.includes("/builder/generating")) {
+    // Legacy generating route — redirect once generation finishes or blueprint exists.
+    if (active === "generating") {
       if (puzzlesGenerating) return;
-      if (hasBlueprint) return;
+      navigate(hasBlueprint ? "/builder/studio" : "/builder/compose", { replace: true });
+      return;
+    }
+    // Compose stays reachable during inline generation progress.
+    if (active === "compose") return;
+    if (active === "studio" && !hasBlueprint && !puzzlesGenerating) {
       navigate("/builder/compose", { replace: true });
       return;
     }
-    const target = routeForStep(resolvedStep);
-    if (!location.pathname.startsWith("/builder/")) {
-      navigate(target, { replace: true });
+    if (active === "curate" && !hasBlueprint && !puzzlesGenerating) {
+      navigate("/builder/compose", { replace: true });
       return;
     }
-    if (location.pathname !== target && resolvedStep !== "curate") {
-      navigate(target, { replace: true });
+    if (active === "review" && !canReview) {
+      navigate(hasBlueprint ? "/builder/studio" : "/builder/compose", { replace: true });
     }
-  }, [resolvedStep, navigate, location.pathname, puzzlesGenerating, hasBlueprint]);
+  }, [resolvedStep, navigate, location.pathname, puzzlesGenerating, hasBlueprint, canReview]);
 
   const stepContent = useMemo(() => {
     switch (activeStep) {

@@ -855,10 +855,18 @@ pre.code-inline {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
   max-height: 100vh;
+  max-height: 100dvh;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   padding: 0;
+}
+
+.page-shell--room-cad-setup.page-shell--cols {
+  align-items: stretch;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .builder-workspace-shell--persistent {
@@ -893,6 +901,16 @@ pre.code-inline {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  gap: 0;
+}
+
+.page-shell--room-cad-setup .builder-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .page-shell--room-cad-setup .builder-workspace .stage-main {
@@ -900,6 +918,12 @@ pre.code-inline {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.page-shell--room-cad-setup .builder-workspace--persistent {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
 }
 
