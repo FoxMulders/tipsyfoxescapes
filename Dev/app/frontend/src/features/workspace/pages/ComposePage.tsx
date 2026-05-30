@@ -11,11 +11,11 @@ export function ComposePage() {
     canGenerateRoom,
     onGenerateRoom,
     puzzlesGenerating,
-    showGeneratingOverlay,
+    showGeneratingBusy,
   } = useExperienceDesigner();
 
   const themeSelected = Boolean(selectedThemeId.trim());
-  const generateBusy = showGeneratingOverlay || puzzlesGenerating;
+  const generateBusy = showGeneratingBusy || puzzlesGenerating;
 
   return (
     <div className="experience-step experience-step--scroll experience-step--compose h-full">

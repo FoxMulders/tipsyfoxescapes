@@ -3168,40 +3168,40 @@ export default function App() {
     rememberInput("availableItems", availableItems);
     rememberInput("eventType", eventType);
     const needsGeneration = puzzles.length === 0;
-    if (needsGeneration) {
-      flushSync(() => {
-        puzzlesGeneratingInitRef.current = true;
-        setPuzzlesGenerating(true);
-        setWizardStep("themes-puzzles");
-        setActivePanel("themes");
-      });
-    } else {
+    if (!needsGeneration) {
       setWizardStep("themes-puzzles");
       setActivePanel("themes");
       navigate("/builder/curate", { replace: true });
       return;
     }
-    const activeSessionId = await ensureSession();
-    if (!activeSessionId) {
-      if (needsGeneration) {
-        puzzlesGeneratingInitRef.current = false;
-        setPuzzlesGenerating(false);
+
+    let startedGeneration = false;
+    try {
+      flushSync(() => {
+        startedGeneration = true;
+        puzzlesGeneratingInitRef.current = true;
+        setPuzzlesGenerating(true);
+        setWizardStep("themes-puzzles");
+        setActivePanel("themes");
+      });
+
+      const activeSessionId = await ensureSession();
+      if (!activeSessionId) {
         navigate("/builder/compose", { replace: true });
+        return;
       }
-      return;
-    }
-    const synced = await syncPlanningInputToServer(activeSessionId, "strict");
-    if (!synced) {
-      if (needsGeneration) {
-        puzzlesGeneratingInitRef.current = false;
-        setPuzzlesGenerating(false);
+      const synced = await syncPlanningInputToServer(activeSessionId, "strict");
+      if (!synced) {
         navigate("/builder/compose", { replace: true });
+        return;
       }
-      return;
-    }
-    if (needsGeneration) {
       const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
       await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
+    } finally {
+      if (startedGeneration && !puzzlesRequestInFlight.current) {
+        puzzlesGeneratingInitRef.current = false;
+        setPuzzlesGenerating(false);
+      }
     }
   };
 
@@ -6611,8 +6611,13 @@ export default function App() {
     setCustomThemeCoachBusy(false);
     setPuzzleWindowBusy(null);
     puzzlesRequestInFlight.current = false;
+    puzzlesGeneratingInitRef.current = false;
     themesAutoFetchInFlight.current = false;
   };
+
+  const resetRoomGeneration = useCallback((): void => {
+    clearWizardBusyStateRef.current();
+  }, []);
 
   useEffect(() => {
     if (!authUser) return;
@@ -8200,6 +8205,7 @@ export default function App() {
                       onOpenReview={() => void proceedToOutputReview()}
                       onReplacePuzzle={(id) => void replacePuzzle(id)}
                       onTryGenerateRoom={tryGenerateRoom}
+                      onResetGeneration={resetRoomGeneration}
                       composeThemeContent={experienceComposeTheme}
                       curateContent={experienceCurateContent}
                       reviewContent={experienceReviewContent}

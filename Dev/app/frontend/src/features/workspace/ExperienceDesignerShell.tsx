@@ -1,7 +1,6 @@
-import { type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { GenerationProgressIndicator } from "@/components/generation/GenerationProgressIndicator";
-import { PUZZLE_GENERATION_PHASES } from "@/components/generation/GenerationProgressPhases";
+import { PUZZLE_GENERATION_PHASES, useGenerationProgressPhases } from "@/components/generation/GenerationProgressPhases";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { WorkspaceNavMenu } from "./WorkspaceNavMenu";
@@ -14,7 +13,7 @@ type ExperienceDesignerShellProps = {
   navMenu: WorkspaceNavMenuProps;
   hasBlueprint: boolean;
   puzzlesGenerating: boolean;
-  showGeneratingOverlay: boolean;
+  showGeneratingBusy: boolean;
   themeIdeasLoading: boolean;
   canReview: boolean;
   canGenerateRoom: boolean;
@@ -22,6 +21,7 @@ type ExperienceDesignerShellProps = {
   onGenerateRoom: () => void;
   onGenerateThemes: () => void;
   onOpenReview: () => void;
+  onResetGeneration: () => void;
   onStepNavigate: (step: WorkspaceStepId) => void;
   headerExtra?: ReactNode;
   children: ReactNode;
@@ -31,7 +31,7 @@ export function ExperienceDesignerShell({
   navMenu,
   hasBlueprint,
   puzzlesGenerating,
-  showGeneratingOverlay,
+  showGeneratingBusy,
   themeIdeasLoading,
   canReview,
   canGenerateRoom,
@@ -39,6 +39,7 @@ export function ExperienceDesignerShell({
   onGenerateRoom,
   onGenerateThemes,
   onOpenReview,
+  onResetGeneration,
   onStepNavigate,
   headerExtra,
   children,
@@ -48,7 +49,18 @@ export function ExperienceDesignerShell({
   const activeStep = workspaceStepFromPath(location.pathname);
 
   const showStudioSegment = activeStep === "studio" || activeStep === "curate";
-  const generateBusy = showGeneratingOverlay || puzzlesGenerating;
+  const generateBusy = showGeneratingBusy || puzzlesGenerating;
+  const generationPhase = useGenerationProgressPhases(PUZZLE_GENERATION_PHASES, generateBusy, 4000);
+  const [showCancelAfter15s, setShowCancelAfter15s] = useState(false);
+
+  useEffect(() => {
+    if (!generateBusy) {
+      setShowCancelAfter15s(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowCancelAfter15s(true), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [generateBusy]);
 
   return (
     <div className="experience-designer builder-route--fullpage" data-testid="experience-designer">
@@ -72,6 +84,20 @@ export function ExperienceDesignerShell({
         ) : null}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {headerExtra}
+          {generateBusy ? (
+            <span
+              className="hidden max-w-[14rem] truncate text-xs text-cyan-400/90 sm:inline"
+              role="status"
+              aria-live="polite"
+            >
+              {generationPhase.headline}
+            </span>
+          ) : null}
+          {showCancelAfter15s ? (
+            <Button type="button" variant="ghost" size="sm" onClick={onResetGeneration}>
+              Cancel
+            </Button>
+          ) : null}
           {activeStep === "compose" ? (
             <>
               <Button
@@ -103,19 +129,7 @@ export function ExperienceDesignerShell({
           ) : null}
         </div>
       </header>
-      <div className="experience-designer__body">
-        {generateBusy ? (
-          <div className="experience-generating-banner" role="status" aria-live="polite" aria-busy="true">
-            <GenerationProgressIndicator
-              active
-              phases={PUZZLE_GENERATION_PHASES}
-              phaseIntervalMs={4000}
-              className="generation-progress-indicator--compact experience-generating-banner__indicator"
-            />
-          </div>
-        ) : null}
-        {children}
-      </div>
+      <div className="experience-designer__body">{children}</div>
     </div>
   );
 }

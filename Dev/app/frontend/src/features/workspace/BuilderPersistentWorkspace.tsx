@@ -40,6 +40,7 @@ export type BuilderPersistentWorkspaceProps = {
   workspaceSessionExpiredMessage: string;
   onWorkspaceReauth: () => void;
   onTryGenerateRoom: () => boolean;
+  onResetGeneration: () => void;
 };
 
 export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProps) {
@@ -69,6 +70,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     workspaceSessionExpiredMessage,
     onWorkspaceReauth,
     onTryGenerateRoom,
+    onResetGeneration,
   } = props;
   const navigate = useNavigate();
   const location = useLocation();
@@ -83,7 +85,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
   const [layoutRevision] = useState(0);
   const [prevGenerating, setPrevGenerating] = useState(puzzlesGenerating);
   const [pendingGenerate, setPendingGenerate] = useState(false);
-  const showGeneratingOverlay = puzzlesGenerating || pendingGenerate;
+  const showGeneratingBusy = puzzlesGenerating || pendingGenerate;
 
   const routeForStep = (step: WorkspaceStepId): string => {
     switch (step) {
@@ -171,6 +173,12 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     [puzzles],
   );
 
+  const handleResetGeneration = useCallback((): void => {
+    setPendingGenerate(false);
+    onResetGeneration();
+    toast.info("Generation reset — you can try again.");
+  }, [onResetGeneration]);
+
   const handleGenerateClick = useCallback(() => {
     if (!onTryGenerateRoom()) {
       setPlanningDialogOpen(true);
@@ -204,7 +212,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       roomSkeleton,
       generationTelemetry,
       puzzlesGenerating,
-      showGeneratingOverlay,
+      showGeneratingBusy,
       puzzles,
       hasBlueprint,
       canGenerateRoom,
@@ -236,7 +244,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       roomSkeleton,
       generationTelemetry,
       puzzlesGenerating,
-      showGeneratingOverlay,
+      showGeneratingBusy,
       puzzles,
       hasBlueprint,
       canGenerateRoom,
@@ -284,7 +292,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
         navMenu={navMenu}
         hasBlueprint={hasBlueprint}
         puzzlesGenerating={puzzlesGenerating}
-        showGeneratingOverlay={showGeneratingOverlay}
+        showGeneratingBusy={showGeneratingBusy}
         themeIdeasLoading={themeIdeasLoading}
         canReview={canReview}
         canGenerateRoom={canGenerateRoom}
@@ -292,6 +300,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
         onGenerateRoom={handleGenerateClick}
         onGenerateThemes={onGenerateThemes}
         onOpenReview={() => void onOpenReview()}
+        onResetGeneration={handleResetGeneration}
         onStepNavigate={handleStepNavigate}
       >
         {stepContent}

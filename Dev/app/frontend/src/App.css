@@ -119,10 +119,6 @@ html.builder-route--fullpage .app-atmosphere[data-backdrop="art"] .app-atmospher
   background: linear-gradient(180deg, rgba(5, 7, 10, 0.12) 0%, rgba(4, 6, 9, 0.2) 55%, rgba(3, 5, 8, 0.28) 100%);
 }
 
-html.builder-route--generating .app-atmosphere[data-backdrop="art"] .app-atmosphere__veil {
-  background: linear-gradient(180deg, rgba(5, 7, 10, 0.45) 0%, rgba(4, 6, 9, 0.55) 55%, rgba(3, 5, 8, 0.65) 100%);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .app-atmosphere[data-backdrop="art"] .app-atmosphere__image-layer {
     animation: none;

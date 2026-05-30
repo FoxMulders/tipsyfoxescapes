@@ -9,7 +9,7 @@ export type ExperienceDesignerContextValue = {
   roomSkeleton: RoomSkeleton | null;
   generationTelemetry: GenerationTelemetry | null;
   puzzlesGenerating: boolean;
-  showGeneratingOverlay: boolean;
+  showGeneratingBusy: boolean;
   puzzles: PuzzleInspectorSlice[];
   hasBlueprint: boolean;
   canGenerateRoom: boolean;
