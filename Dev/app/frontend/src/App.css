@@ -1342,6 +1342,18 @@ pre.code-inline {
   text-align: center;
 }
 
+.generation-progress-indicator--surface {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  background: hsl(222 47% 8% / 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
 .theme-generating-spinner,
 .generation-progress-indicator__spinner {
   display: flex;
@@ -1381,9 +1393,17 @@ pre.code-inline {
 .theme-generating-sub,
 .generation-progress-indicator__sub {
   margin: 0;
-  font-size: 0.85rem;
-  max-width: 30rem;
-  line-height: 1.5;
+  font-size: 0.9rem;
+  max-width: 32rem;
+  line-height: 1.55;
+  color: hsl(210 30% 92%);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.theme-ideas-list--refreshing {
+  opacity: 0.5;
+  pointer-events: none;
+  filter: saturate(0.85);
 }
 
 .theme-generating-bar,

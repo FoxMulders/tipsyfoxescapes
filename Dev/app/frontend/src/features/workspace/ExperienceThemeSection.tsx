@@ -87,7 +87,11 @@ export function ExperienceThemeSection(props: ExperienceThemeSectionProps) {
   if (themeIdeasLoading && themes.length === 0) {
     return (
       <div className="col-span-full space-y-3">
-        <GenerationProgressIndicator active phases={THEME_GENERATION_PHASES} />
+        <GenerationProgressIndicator
+          active
+          phases={THEME_GENERATION_PHASES}
+          className="generation-progress-indicator--surface"
+        />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-44 w-full rounded-lg bg-slate-800/60" />
@@ -97,8 +101,13 @@ export function ExperienceThemeSection(props: ExperienceThemeSectionProps) {
     );
   }
 
+  const themeListLoading = themeIdeasLoading && themes.length > 0;
+
   return (
     <div className="col-span-full space-y-4">
+      {themeIdeasLoading ? (
+        <GenerationProgressIndicator active phases={THEME_GENERATION_PHASES} className="generation-progress-indicator--surface" />
+      ) : null}
       <OpenAiOpsBanner configured={serverOpenAiConfigured} browserAiReady={browserAiReady} />
       {hasFullCatalogAccess ? (
         <div className="flex flex-wrap gap-2">
@@ -168,7 +177,9 @@ export function ExperienceThemeSection(props: ExperienceThemeSectionProps) {
                 disabledTitle={themeGenerateDisabledTitle}
                 onGenerate={onGenerateThemes}
               />
-              <ul className={`theme-ideas-list ${validationFlagsSelectedTheme ? "invalid-list" : ""}`}>
+              <ul
+                className={`theme-ideas-list${validationFlagsSelectedTheme ? " invalid-list" : ""}${themeListLoading ? " theme-ideas-list--refreshing" : ""}`}
+              >
                 {themes.map((theme) => (
                   <ThemeCuratedCard
                     key={theme.id}

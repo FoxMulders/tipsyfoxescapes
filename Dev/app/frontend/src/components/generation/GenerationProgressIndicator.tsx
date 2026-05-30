@@ -34,7 +34,7 @@ export function GenerationProgressIndicator({
         <span />
       </div>
       <p className="generation-progress-indicator__headline">{displayHeadline}</p>
-      {displaySubtext ? <p className="generation-progress-indicator__sub muted">{displaySubtext}</p> : null}
+      {displaySubtext ? <p className="generation-progress-indicator__sub">{displaySubtext}</p> : null}
       <div className="generation-progress-indicator__bar" aria-hidden="true">
         <div className="generation-progress-indicator__bar-fill" />
       </div>
