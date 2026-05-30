@@ -12,6 +12,11 @@ html.builder-route--fullpage #root {
   --workspace-surface-border: rgba(255, 255, 255, 0.1);
 }
 
+.experience-designer .generation-progress-indicator.glass-panel {
+  --studio-window-blur: 12px;
+  --studio-glass-specular-opacity: 0.14;
+}
+
 .experience-designer {
   display: flex;
   flex-direction: column;

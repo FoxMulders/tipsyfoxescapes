@@ -27,7 +27,12 @@ export function GenerationProgressIndicator({
   const displaySubtext = subtext ?? rotating.subtext;
 
   return (
-    <div className={cn("generation-progress-indicator", className)} role="status" aria-live="polite" aria-busy="true">
+    <div
+      className={cn("generation-progress-indicator glass-panel rounded-xl", className)}
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
       <div className="generation-progress-indicator__spinner" aria-hidden="true">
         <span />
         <span />
