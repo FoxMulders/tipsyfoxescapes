@@ -81,6 +81,8 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
   const [selectedPuzzle, setSelectedPuzzle] = useState<PuzzleInspectorSlice | null>(null);
   const [layoutRevision] = useState(0);
   const [prevGenerating, setPrevGenerating] = useState(puzzlesGenerating);
+  const [pendingGenerate, setPendingGenerate] = useState(false);
+  const showGeneratingOverlay = puzzlesGenerating || pendingGenerate;
 
   const routeForStep = (step: WorkspaceStepId): string => {
     switch (step) {
@@ -126,9 +128,6 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
   }, [resolvedStep, navigate, location.pathname, puzzlesGenerating, hasBlueprint]);
 
   const stepContent = useMemo(() => {
-    if (puzzlesGenerating) {
-      return <GeneratingPage />;
-    }
     switch (activeStep) {
       case "generating":
         return <GeneratingPage />;
@@ -141,7 +140,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       default:
         return <ComposePage />;
     }
-  }, [activeStep, puzzlesGenerating]);
+  }, [activeStep]);
 
   useEffect(() => {
     if (prevGenerating && !puzzlesGenerating && hasBlueprint) {
@@ -179,7 +178,10 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       setPlanningDialogOpen(true);
       return;
     }
-    void onGenerateRoom();
+    setPendingGenerate(true);
+    void Promise.resolve(onGenerateRoom()).finally(() => {
+      setPendingGenerate(false);
+    });
   }, [onTryGenerateRoom, onGenerateRoom]);
 
   const handleStepNavigate = useCallback(
@@ -202,6 +204,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       roomSkeleton,
       generationTelemetry,
       puzzlesGenerating,
+      showGeneratingOverlay,
       puzzles,
       hasBlueprint,
       canGenerateRoom,
@@ -220,7 +223,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       navMenu,
       planningDialogOpen,
       setPlanningDialogOpen,
-      onPlanningDialogSubmit: () => void onGenerateRoom(),
+      onPlanningDialogSubmit: handleGenerateClick,
       studioInspectorOpen,
       setStudioInspectorOpen,
       selectedZone,
@@ -233,6 +236,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       roomSkeleton,
       generationTelemetry,
       puzzlesGenerating,
+      showGeneratingOverlay,
       puzzles,
       hasBlueprint,
       canGenerateRoom,
@@ -280,6 +284,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
         navMenu={navMenu}
         hasBlueprint={hasBlueprint}
         puzzlesGenerating={puzzlesGenerating}
+        showGeneratingOverlay={showGeneratingOverlay}
         themeIdeasLoading={themeIdeasLoading}
         canReview={canReview}
         canGenerateRoom={canGenerateRoom}

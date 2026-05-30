@@ -47,6 +47,24 @@ html.builder-route--fullpage #root {
   position: relative;
 }
 
+.experience-generating-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 8vh 1.25rem 2rem;
+  overflow-y: auto;
+  background: rgba(5, 8, 14, 0.96);
+}
+
+.experience-generating-overlay .generating-hero-panel {
+  background: rgba(12, 20, 36, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 20px 56px rgb(0 0 0 / 0.55);
+}
+
 .experience-step {
   height: 100%;
   min-height: 0;

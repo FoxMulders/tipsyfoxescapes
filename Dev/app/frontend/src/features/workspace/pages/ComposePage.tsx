@@ -11,9 +11,11 @@ export function ComposePage() {
     canGenerateRoom,
     onGenerateRoom,
     puzzlesGenerating,
+    showGeneratingOverlay,
   } = useExperienceDesigner();
 
   const themeSelected = Boolean(selectedThemeId.trim());
+  const generateBusy = showGeneratingOverlay || puzzlesGenerating;
 
   return (
     <div className="experience-step experience-step--scroll experience-step--compose h-full">
@@ -51,11 +53,11 @@ export function ComposePage() {
             type="button"
             size="lg"
             className="experience-compose-footer__cta"
-            disabled={!canGenerateRoom || puzzlesGenerating}
-            aria-busy={puzzlesGenerating}
+            disabled={!canGenerateRoom || generateBusy}
+            aria-busy={generateBusy}
             onClick={onGenerateRoom}
           >
-            {puzzlesGenerating ? "Please wait…" : "Generate room →"}
+            {generateBusy ? "Please wait…" : "Generate room →"}
           </Button>
         </div>
       ) : null}

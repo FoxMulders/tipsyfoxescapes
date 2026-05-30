@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -6,12 +6,14 @@ import { WorkspaceNavMenu } from "./WorkspaceNavMenu";
 import { StudioSegmentToggle, WorkspaceStepper } from "./WorkspaceStepper";
 import { workspaceStepFromPath, type WorkspaceStepId } from "./workspaceSteps";
 import type { WorkspaceNavMenuProps } from "./WorkspaceNavMenu";
+import { GeneratingPanel } from "./pages/GeneratingPage";
 import "./workspace.tokens.css";
 
 type ExperienceDesignerShellProps = {
   navMenu: WorkspaceNavMenuProps;
   hasBlueprint: boolean;
   puzzlesGenerating: boolean;
+  showGeneratingOverlay: boolean;
   themeIdeasLoading: boolean;
   canReview: boolean;
   canGenerateRoom: boolean;
@@ -28,6 +30,7 @@ export function ExperienceDesignerShell({
   navMenu,
   hasBlueprint,
   puzzlesGenerating,
+  showGeneratingOverlay,
   themeIdeasLoading,
   canReview,
   canGenerateRoom,
@@ -44,6 +47,14 @@ export function ExperienceDesignerShell({
   const activeStep = workspaceStepFromPath(location.pathname);
 
   const showStudioSegment = activeStep === "studio" || activeStep === "curate";
+  const generateBusy = showGeneratingOverlay || puzzlesGenerating;
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("builder-route--generating", showGeneratingOverlay);
+    return () => {
+      document.documentElement.classList.remove("builder-route--generating");
+    };
+  }, [showGeneratingOverlay]);
 
   return (
     <div className="experience-designer builder-route--fullpage" data-testid="experience-designer">
@@ -54,7 +65,7 @@ export function ExperienceDesignerShell({
           activeStep={activeStep}
           onStepNavigate={onStepNavigate}
           hasBlueprint={hasBlueprint}
-          puzzlesGenerating={puzzlesGenerating}
+          puzzlesGenerating={generateBusy}
           canReview={canReview}
           canGenerateRoom={canGenerateRoom}
         />
@@ -73,7 +84,7 @@ export function ExperienceDesignerShell({
                 type="button"
                 variant="secondary"
                 size="sm"
-                disabled={themeIdeasLoading}
+                disabled={themeIdeasLoading || generateBusy}
                 aria-busy={themeIdeasLoading}
                 onClick={onGenerateThemes}
               >
@@ -82,12 +93,12 @@ export function ExperienceDesignerShell({
               <Button
                 type="button"
                 size="sm"
-                disabled={!canGenerateRoom || puzzlesGenerating}
-                aria-busy={puzzlesGenerating}
+                disabled={!canGenerateRoom || generateBusy}
+                aria-busy={generateBusy}
                 title={!canGenerateRoom ? "Choose a theme first" : undefined}
                 onClick={onGenerateRoom}
               >
-                {puzzlesGenerating ? "Please wait…" : "Generate room"}
+                {generateBusy ? "Please wait…" : "Generate room"}
               </Button>
             </>
           ) : null}
@@ -100,6 +111,17 @@ export function ExperienceDesignerShell({
       </header>
       <div className="experience-designer__body">
         {children}
+        {showGeneratingOverlay ? (
+          <div
+            className="experience-generating-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="experience-generating-title"
+            aria-busy="true"
+          >
+            <GeneratingPanel />
+          </div>
+        ) : null}
       </div>
     </div>
   );
