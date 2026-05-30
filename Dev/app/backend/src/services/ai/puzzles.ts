@@ -13,6 +13,12 @@ import {
   isHomePartyTarget,
 } from "../../generationPolicy.js";
 import { PUZZLE_GENERATION_INVENTORY_POLICY } from "../../puzzleManufacturingSchema.js";
+import {
+  buildDesignConstraintsBlock,
+  buildInventoryPromptBlock,
+  inferThemeLogicStyle,
+} from "../../inventoryPlanning.js";
+import type { InventoryItem, PropPuzzleLink } from "../../../../shared/inventory.js";
 import { assembleDiegeticPuzzle, validateDiegeticFields } from "./diegeticValidation.js";
 import { STEP2_FIRMWARE_SYSTEM } from "./firmwarePreviewPrompt.js";
 import { callOpenAiStructured } from "./openaiStructured.js";
@@ -42,6 +48,8 @@ export type AiGeneratedPuzzle = {
   narrative_justification?: string;
   bill_of_materials?: string[];
   required_parts_and_props?: string[];
+  physical_anchor_prop?: string;
+  propPuzzleLink?: PropPuzzleLink;
   electronicDetails?: {
     parts: string[];
     wiringDiagram: string[];
@@ -55,9 +63,19 @@ export type AiGeneratedPuzzle = {
 export type AiPuzzlePlanningContext = {
   environmentType: string;
   availableItems: string[];
+  inventoryItems?: InventoryItem[];
+  designConstraints?: string;
+  noGoItems?: string[];
+  techLevel?: string;
   playersConcurrent: number;
   sessionDurationMinutes: number;
   eventType?: string;
+  /** Logic kernels already used in this session — avoid duplicate mechanics. */
+  existingLogicKernels?: string[];
+  /** Prop carrier to anchor this slot (compileSingleSlot / rebindProp). */
+  assignedProp?: InventoryItem;
+  /** Preserve abstract mechanic across rebind. */
+  preserveLogicKernel?: string;
 };
 
 export type AiPuzzleThemeContext = {
@@ -134,13 +152,40 @@ const buildPlanningBlock = (
   planning: AiPuzzlePlanningContext,
   difficulty: string,
   targetInterface?: TargetInterface,
+  theme?: AiPuzzleThemeContext,
 ): string => {
-  const items =
-    planning.availableItems.length > 0 ? planning.availableItems.join(", ") : "common household items";
+  const inventoryBlock =
+    planning.inventoryItems && planning.inventoryItems.length > 0
+      ? buildInventoryPromptBlock(planning.inventoryItems)
+      : planning.availableItems.length > 0
+        ? `Props available: ${planning.availableItems.join(", ")}`
+        : "Props available: common household items";
+  const constraintsBlock = buildDesignConstraintsBlock(planning);
+  const logicStyle =
+    theme && (theme.description || theme.name)
+      ? inferThemeLogicStyle(theme.name, theme.description ?? theme.tldr, planning.designConstraints)
+      : "";
+  const assigned =
+    planning.assignedProp != null
+      ? `\nASSIGNED PROP CARRIER (must anchor this puzzle): ${planning.assignedProp.name}`
+      : "";
+  const preserve =
+    planning.preserveLogicKernel?.trim()
+      ? `\nPRESERVE LOGIC KERNEL (re-skin presentation only): ${planning.preserveLogicKernel.trim()}`
+      : "";
+  const kernels =
+    planning.existingLogicKernels && planning.existingLogicKernels.length > 0
+      ? `\nOther puzzles in this room already use these logic kernels — invent a different mechanic:\n${planning.existingLogicKernels.map((k) => `- ${k}`).join("\n")}`
+      : "";
   return [
     `Environment: ${planning.environmentType || "home living room"}`,
     `Target interface: ${targetInterface ?? "home_party"}`,
-    `Props available: ${items}`,
+    inventoryBlock,
+    constraintsBlock,
+    logicStyle,
+    assigned,
+    preserve,
+    kernels,
     `Players: ${planning.playersConcurrent} concurrent`,
     `Session length: ${planning.sessionDurationMinutes} min`,
     `Difficulty: ${difficulty}`,
@@ -167,36 +212,55 @@ const mapToPuzzle = (
   presentation: PuzzlePresentation,
   id: string,
   difficulty: "easy" | "medium" | "hard",
-): AiGeneratedPuzzle => ({
-  id,
-  category: presentation.category,
-  themeTags: presentation.themeTags,
-  title: presentation.title.trim(),
-  objective: presentation.objective.trim(),
-  howItWorks: buildHowItWorks(layer),
-  narrative_justification: presentation.narrative_justification.trim(),
-  bill_of_materials: [...layer.hardware_and_electronics.required_components],
-  required_parts_and_props: [...layer.hardware_and_electronics.required_components],
-  solveSteps: presentation.solveSteps.map((s) => s.trim()),
-  referenceLinks: [],
-  difficulty,
-  audienceTrack: "main",
-  isStaticCatalog: false,
-  hardware_profile: layer.hardware_profile,
-  electronicDetails:
-    presentation.category === "electronic" && presentation.electronicDetails
+  planning?: AiPuzzlePlanningContext,
+): AiGeneratedPuzzle => {
+  const propLabel =
+    planning?.assignedProp?.name ??
+    layer.physical_prop_translation.prop_design.split(/[.,]/)[0]?.trim().slice(0, 80);
+  const propPuzzleLink: PropPuzzleLink | undefined =
+    planning?.assignedProp && propLabel
       ? {
-          hardware_profile: presentation.electronicDetails.hardware_profile,
-          parts: presentation.electronicDetails.parts,
-          wiringDiagram: presentation.electronicDetails.wiringDiagram,
-          wiringDiagramSvg: presentation.electronicDetails.wiringDiagramSvg,
-          buildSteps: presentation.electronicDetails.buildSteps,
-          arduinoCode:
-            formatPinoutMapComment(presentation.electronicDetails.hardware_pinout_map) +
-            presentation.electronicDetails.arduinoCode,
+          propId: planning.assignedProp.id,
+          propLabel,
+          logicKernel:
+            planning.preserveLogicKernel?.trim() ??
+            `${layer.hardware_and_electronics.trigger_mechanism.trim()} via ${propLabel}`,
+          clueDelivers: presentation.objective.trim(),
         }
-      : undefined,
-});
+      : undefined;
+  return {
+    id,
+    category: presentation.category,
+    themeTags: presentation.themeTags,
+    title: presentation.title.trim(),
+    objective: presentation.objective.trim(),
+    howItWorks: buildHowItWorks(layer),
+    narrative_justification: presentation.narrative_justification.trim(),
+    bill_of_materials: [...layer.hardware_and_electronics.required_components],
+    required_parts_and_props: [...layer.hardware_and_electronics.required_components],
+    physical_anchor_prop: propLabel,
+    propPuzzleLink,
+    solveSteps: presentation.solveSteps.map((s) => s.trim()),
+    referenceLinks: [],
+    difficulty,
+    audienceTrack: "main",
+    isStaticCatalog: false,
+    hardware_profile: layer.hardware_profile,
+    electronicDetails:
+      presentation.category === "electronic" && presentation.electronicDetails
+        ? {
+            hardware_profile: presentation.electronicDetails.hardware_profile,
+            parts: presentation.electronicDetails.parts,
+            wiringDiagram: presentation.electronicDetails.wiringDiagram,
+            wiringDiagramSvg: presentation.electronicDetails.wiringDiagramSvg,
+            buildSteps: presentation.electronicDetails.buildSteps,
+            arduinoCode:
+              formatPinoutMapComment(presentation.electronicDetails.hardware_pinout_map) +
+              presentation.electronicDetails.arduinoCode,
+          }
+        : undefined,
+  };
+};
 
 type CompilerContext = {
   targetInterface?: TargetInterface;
@@ -219,7 +283,7 @@ const compileDiegeticLayer = async (
     `Theme: "${theme.name}"`,
     `Theme premise: ${theme.tldr}`,
     theme.description?.trim() ? `Story context (full theme brief):\n${theme.description.trim()}` : "",
-    buildPlanningBlock(planning, difficulty, ctx.targetInterface),
+    buildPlanningBlock(planning, difficulty, ctx.targetInterface, theme),
     ctx.roomSkeleton ? `\nApproved room skeleton:\n${JSON.stringify(ctx.roomSkeleton, null, 2)}` : "",
     "",
     `Compile STEP 1 — diegetic hardware/physical layer for ONE ${category} puzzle.`,
@@ -261,7 +325,7 @@ const compilePuzzlePresentation = async (
   const diegeticBlock = buildDiegeticNarrativeBlock(theme, layer);
   const userPrompt = [
     diegeticBlock,
-    buildPlanningBlock(planning, difficulty, ctx.targetInterface),
+    buildPlanningBlock(planning, difficulty, ctx.targetInterface, theme),
     ctx.roomSkeleton ? `\nApproved room skeleton:\n${JSON.stringify(ctx.roomSkeleton, null, 2)}` : "",
     "",
     `Compile STEP 2 — host-facing presentation for ONE ${category} puzzle.`,
@@ -400,7 +464,7 @@ const compileSinglePuzzle = async (
           continue;
         }
 
-        const puzzle = mapToPuzzle(layer, presentation, allocateId(), targetDifficulty);
+        const puzzle = mapToPuzzle(layer, presentation, allocateId(), targetDifficulty, planning);
         const qaReport = auditPuzzleQa(puzzle as PuzzleForQa, {
           themeName: theme.name,
           strict: true,
@@ -452,4 +516,79 @@ export const callOpenAiPuzzles = async (input: CallOpenAiPuzzlesInput): Promise<
   }
 
   return puzzles;
+};
+
+export type CompileSingleSlotInput = CallOpenAiPuzzlesInput & {
+  category: "logic" | "physical" | "electronic";
+};
+
+/** Compile one puzzle slot with optional assigned prop and logic-kernel preservation. */
+export const compileSingleSlot = async (input: CompileSingleSlotInput): Promise<AiGeneratedPuzzle | null> =>
+  compileSinglePuzzle(input, input.category);
+
+/** Rebind a puzzle to a new prop carrier while preserving logic kernel. */
+export const rebindProp = async (
+  input: CompileSingleSlotInput,
+  existingLink: PropPuzzleLink,
+  newProp: InventoryItem,
+): Promise<AiGeneratedPuzzle | null> =>
+  compileSinglePuzzle(
+    {
+      ...input,
+      planning: {
+        ...input.planning,
+        assignedProp: newProp,
+        preserveLogicKernel: existingLink.logicKernel,
+      },
+    },
+    input.category,
+  );
+
+export type RebindAfterInventoryChangeInput = {
+  apiKey: string;
+  theme: AiPuzzleThemeContext;
+  planning: AiPuzzlePlanningContext;
+  targetDifficulty: "easy" | "medium" | "hard";
+  targetInterface?: TargetInterface;
+  roomSkeleton?: RoomSkeleton;
+  allocateId: () => string;
+  slots: Array<{
+    puzzleId: string;
+    category: "logic" | "physical" | "electronic";
+    existingLink?: PropPuzzleLink;
+    fallbackProp?: InventoryItem;
+  }>;
+};
+
+/** Batch recompile affected slots after inventory changes. */
+export const rebindAfterInventoryChange = async (
+  input: RebindAfterInventoryChangeInput,
+): Promise<Array<{ puzzleId: string; puzzle: AiGeneratedPuzzle | null }>> => {
+  const kernels = input.slots
+    .map((s) => s.existingLink?.logicKernel)
+    .filter(Boolean) as string[];
+  const results: Array<{ puzzleId: string; puzzle: AiGeneratedPuzzle | null }> = [];
+  for (const slot of input.slots) {
+    const prop = slot.fallbackProp ?? input.planning.assignedProp;
+    const compiled = await compileSinglePuzzle(
+      {
+        apiKey: input.apiKey,
+        theme: input.theme,
+        planning: {
+          ...input.planning,
+          assignedProp: prop,
+          preserveLogicKernel: slot.existingLink?.logicKernel,
+          existingLogicKernels: kernels,
+        },
+        categoryCounts: { logic: 0, physical: 0, electronic: 0 },
+        targetDifficulty: input.targetDifficulty,
+        targetInterface: input.targetInterface,
+        roomSkeleton: input.roomSkeleton,
+        allocateId: input.allocateId,
+      },
+      slot.category,
+    );
+    results.push({ puzzleId: slot.puzzleId, puzzle: compiled });
+  }
+  return results;
 };

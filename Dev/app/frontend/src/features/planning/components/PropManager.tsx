@@ -1,6 +1,6 @@
-import { AvailableItemsChips } from "@/components/planning/AvailableItemsChips";
 import { FieldHint } from "@/components/planning/FieldHint";
 import { usePlanning } from "../context/PlanningProvider";
+import { LivingInventoryPanel, RoomConstraintsFields } from "./LivingInventoryPanel";
 
 type PropManagerProps = {
   itemHistory: string[];
@@ -13,28 +13,33 @@ export function PropManager({ itemHistory }: PropManagerProps) {
   const envReady = state.environmentType.trim().length > 0;
 
   return (
-    <div className="form-field-panel">
+    <div className="form-field-panel space-y-4">
       <FieldHint
-        label={isCommercial ? "Planned installs & props" : "Available items & props"}
+        label={isCommercial ? "Living inventory — installs & props" : "Living inventory — props on hand"}
         invalid={invalid("availableItems")}
-        tooltip={
-          isCommercial
-            ? "Optional list of fixtures and props you plan to order or install."
-            : "Optional props on hand. Click suggested chips or add custom theatrical props."
-        }
+        tooltip="Use / Don't Use columns. Mark puzzle props, set dressing, or red herrings. Not every Use item needs a puzzle slot."
       >
-        <AvailableItemsChips
-          value={state.availableItems}
+        <LivingInventoryPanel
+          items={state.inventoryItems}
           presetLabels={propPresetLabels}
           historyOptions={itemHistory}
           disabled={!envReady}
           invalid={invalid("availableItems")}
-          onChange={(next) => {
-            dispatch({ type: "SET_AVAILABLE_ITEMS", value: next });
+          onChange={(items) => {
+            dispatch({ type: "SET_INVENTORY_ITEMS", items });
             clearValidation("availableItems");
           }}
         />
       </FieldHint>
+      <RoomConstraintsFields
+        designConstraints={state.designConstraints}
+        noGoItems={state.noGoItems}
+        techLevel={state.techLevel}
+        disabled={!envReady}
+        onDesignConstraintsChange={(value) => dispatch({ type: "SET_DESIGN_CONSTRAINTS", value })}
+        onNoGoItemsChange={(value) => dispatch({ type: "SET_NO_GO_ITEMS", value })}
+        onTechLevelChange={(value) => dispatch({ type: "SET_TECH_LEVEL", value })}
+      />
     </div>
   );
 }

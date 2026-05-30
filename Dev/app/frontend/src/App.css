@@ -3503,6 +3503,24 @@ label.checkbox-field {
   border-left: 3px solid rgba(80, 200, 150, 0.35);
 }
 
+.living-inventory-columns {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 640px) {
+  .living-inventory-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.prop-link-review-table th,
+.prop-link-review-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .puzzle-windows-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));

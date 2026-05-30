@@ -1,4 +1,7 @@
+import type { InventoryItem, PropPuzzleLink, TechLevel } from "./inventory.js";
 import type { RoomLayoutDocument } from "./roomLayout.js";
+
+export type { InventoryItem, InventoryItemRole, PropAffordances, PropPuzzleLink, TechLevel } from "./inventory.js";
 
 export type Difficulty = "easy" | "medium" | "hard";
 export type PuzzleCategory = "logic" | "physical" | "electronic";
@@ -25,7 +28,16 @@ export interface PlanningInput {
   playersConcurrent: number;
   participantsTotal: number;
   environmentType: string;
+  /** Legacy string list — kept in sync with inventoryItems for backward compat. */
   availableItems: string[];
+  /** Living inventory with Use/Exclude columns and prop roles. */
+  inventoryItems?: InventoryItem[];
+  /** Free-text host brief for theme + puzzle synthesis. */
+  designConstraints?: string;
+  /** Hard exclusions — never appear in puzzles or BOM. */
+  noGoItems?: string[];
+  /** Filters electronic count and compiler tone. */
+  techLevel?: TechLevel;
   /** When present, biases generated and suggested puzzles toward this challenge level. */
   roomDifficulty?: RoomDifficulty;
   /** Parallel junior add-on (same fiction), generator uses easy–medium puzzles only. */
@@ -68,6 +80,8 @@ export interface Puzzle {
   build_documentation_url?: string;
   isStaticCatalog?: boolean;
   hardware_profile?: HardwareProfile;
+  /** Prop carrier bound to this puzzle's logic and clue outcome. */
+  propPuzzleLink?: PropPuzzleLink;
 }
 
 export interface CreateSessionResponse {

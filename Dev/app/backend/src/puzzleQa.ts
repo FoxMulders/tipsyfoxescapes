@@ -5,6 +5,8 @@
  */
 
 import { auditThemeFitNarrative } from "../../shared/qa/storyEditorRules.js";
+import type { InventoryItem, PropPuzzleLink } from "../../shared/inventory.js";
+import { isStaticCatalogTitle } from "./staticCatalogTitles.js";
 import { auditArduinoPreviewFirmware } from "./firmwarePreviewValidation.js";
 
 export type PuzzleReferenceLink = {
@@ -32,6 +34,11 @@ export type PuzzleForQa = {
     buildSteps: string[];
     arduinoCode: string;
   };
+  isStaticCatalog?: boolean;
+  propPuzzleLink?: PropPuzzleLink;
+  physical_anchor_prop?: string;
+  bill_of_materials?: string[];
+  required_parts_and_props?: string[];
 };
 
 export type PuzzleQaIssue = {
@@ -52,6 +59,9 @@ export type PuzzleQaContext = {
   themeName: string;
   /** CI / catalog audit: treat stripped bad links as errors, not silent warns. */
   strict?: boolean;
+  inventoryItems?: InventoryItem[];
+  /** When true, puzzles must not use generic-only BOM if puzzle-eligible props exist. */
+  hasPuzzleEligibleInventory?: boolean;
 };
 
 const STOPWORDS = new Set([
@@ -263,6 +273,64 @@ export const filterReferenceLinksForPuzzle = (puzzle: PuzzleForQa): PuzzleRefere
     if (out.length >= 5) break;
   }
   return out;
+};
+
+const GENERIC_BOM_ONLY = /^(printed clue set|cipher index|clue tokens?|paper clues?)$/i;
+
+const auditPropPuzzleBinding = (puzzle: PuzzleForQa, ctx: PuzzleQaContext): PuzzleQaIssue[] => {
+  const issues: PuzzleQaIssue[] = [];
+  if (puzzle.isStaticCatalog) return issues;
+  if (isStaticCatalogTitle(puzzle.title)) {
+    issues.push({
+      code: "STATIC_CATALOG_TITLE",
+      severity: "error",
+      field: "title",
+      message: `Title "${puzzle.title}" matches the static catalog — regenerate with AI synthesis.`,
+    });
+  }
+  const items = ctx.inventoryItems ?? [];
+  const link = puzzle.propPuzzleLink;
+  if (link && items.length > 0) {
+    const bound = items.find((i) => i.id === link.propId);
+    if (!bound) {
+      issues.push({
+        code: "PROP_LINK_MISSING",
+        severity: "error",
+        field: "propPuzzleLink",
+        message: `Puzzle binds to unknown prop id "${link.propId}".`,
+      });
+    } else if (bound.status === "exclude") {
+      issues.push({
+        code: "PROP_LINK_EXCLUDED",
+        severity: "error",
+        field: "propPuzzleLink",
+        message: `Puzzle binds to excluded prop "${bound.name}".`,
+      });
+    } else if (bound.role === "set_dressing" || bound.role === "red_herring") {
+      issues.push({
+        code: "PROP_LINK_STAGING_ONLY",
+        severity: "error",
+        field: "propPuzzleLink",
+        message: `Puzzle binds to staging-only prop "${bound.name}" (${bound.role}).`,
+      });
+    }
+  }
+  if (ctx.hasPuzzleEligibleInventory && !puzzle.isStaticCatalog) {
+    const bom = [...(puzzle.bill_of_materials ?? []), ...(puzzle.required_parts_and_props ?? [])];
+    const onlyGeneric =
+      bom.length > 0 &&
+      bom.every((line) => GENERIC_BOM_ONLY.test(line.trim()) || /printed clue/i.test(line));
+    if (onlyGeneric && !link?.propLabel && !puzzle.physical_anchor_prop?.trim()) {
+      issues.push({
+        code: "GENERIC_BOM_WITH_INVENTORY",
+        severity: "error",
+        field: "bill_of_materials",
+        message:
+          "Puzzle uses generic printed-clue BOM only while puzzle-eligible inventory props exist — anchor to a specific prop.",
+      });
+    }
+  }
+  return issues;
 };
 
 const auditCopyFields = (puzzle: PuzzleForQa, ctx: PuzzleQaContext): PuzzleQaIssue[] => {
@@ -626,6 +694,7 @@ export const auditPuzzleQa = (
   const originals = rawLinks ?? puzzle.referenceLinks ?? [];
   const issues: PuzzleQaIssue[] = [
     ...auditCopyFields(puzzle, ctx),
+    ...auditPropPuzzleBinding(puzzle, ctx),
     ...auditElectronic(puzzle),
     ...auditReferences(puzzle, puzzle.referenceLinks.length, originals, Boolean(ctx.strict)),
   ];

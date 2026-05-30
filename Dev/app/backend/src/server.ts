@@ -78,6 +78,8 @@ import {
   EXPORT_PDF_PRINT_GUIDE,
   buildConsolidatedBomTable,
   buildGmLiveOpsBriefing,
+  buildPropPuzzleLinkTable,
+  buildStagingInventorySection,
   buildTechnicalPuzzleSections,
   sanitizeExportPuzzlesForBilling,
   type ExportPuzzleRef,
@@ -118,6 +120,23 @@ import {
   normalizeBrowserThemeDrafts,
   sliceBrowserPuzzlesForCounts,
 } from "./browserGenerationImport.js";
+import type { InventoryItem, PropPuzzleLink, TechLevel } from "../../shared/inventory.js";
+import {
+  findPuzzlesUsingProp,
+  inferAffordancesFromName,
+  inventoryItemNames,
+  migrateAvailableItemsToInventory,
+  normalizeInventoryItems,
+  puzzleEligibleInventory,
+  resolveInventoryFromPlanning,
+  stagingOnlyInventory,
+} from "./inventoryPlanning.js";
+import {
+  compileSingleSlot,
+  rebindProp,
+  rebindAfterInventoryChange,
+  type AiPuzzlePlanningContext,
+} from "./services/ai/puzzles.js";
 
 type PuzzleReferenceLink = {
   title: string;
@@ -157,6 +176,8 @@ type Puzzle = {
   isStaticCatalog?: boolean;
   /** Production firmware template key — set by AI Step 1 and export router for generated puzzles. */
   hardware_profile?: HardwareProfile;
+  /** Prop carrier bound to logic kernel and clue outcome. */
+  propPuzzleLink?: PropPuzzleLink;
   electronicDetails?: {
     parts: string[];
     wiringDiagram: string[];
@@ -258,6 +279,10 @@ type SessionState = {
     sessionDurationMinutes: number;
     environmentType: string;
     availableItems: string[];
+    inventoryItems: InventoryItem[];
+    designConstraints: string;
+    noGoItems: string[];
+    techLevel?: TechLevel;
     existingPuzzles: { name: string; link: string; roomPart: string }[];
     /** Target challenge for generated and suggested puzzles. */
     roomDifficulty: "easy" | "medium" | "hard";
@@ -352,6 +377,10 @@ const normalizeSessionPlanningInput = (
       sessionDurationMinutes: 45,
       environmentType: "",
       availableItems: [],
+      inventoryItems: [],
+      designConstraints: "",
+      noGoItems: [],
+      techLevel: undefined,
       existingPuzzles: [],
       roomDifficulty: "medium",
       youthAddOnEnabled: false,
@@ -372,7 +401,131 @@ const normalizeSessionPlanningInput = (
     venueBuildType: parseVenueBuildType(raw.venueBuildType),
     themeMustMatchEnvironment: Boolean(raw.themeMustMatchEnvironment),
     targetInterface: parseTargetInterface(raw.targetInterface),
+    ...syncPlanningInventoryFields(raw),
+    designConstraints: String(raw.designConstraints ?? "").trim().slice(0, 1200),
+    noGoItems: Array.isArray(raw.noGoItems)
+      ? raw.noGoItems.map((s) => String(s).trim()).filter(Boolean).slice(0, 24)
+      : [],
+    techLevel: parseTechLevel(raw.techLevel),
   };
+};
+
+const parseTechLevel = (value: unknown): TechLevel | undefined =>
+  value === "low_tech" || value === "mixed" || value === "maker_heavy" ? value : undefined;
+
+const parseInventoryItemFromBody = (raw: unknown): InventoryItem | null => {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const name = typeof o.name === "string" ? o.name.trim() : "";
+  if (!name) return null;
+  const status = o.status === "exclude" ? "exclude" : "use";
+  const roleRaw = o.role;
+  const role =
+    roleRaw === "puzzle_carrier" ||
+    roleRaw === "set_dressing" ||
+    roleRaw === "red_herring" ||
+    roleRaw === "unassigned"
+      ? roleRaw
+      : "unassigned";
+  const affordances =
+    o.affordances && typeof o.affordances === "object"
+      ? (o.affordances as InventoryItem["affordances"])
+      : undefined;
+  return {
+    id: typeof o.id === "string" && o.id.trim() ? o.id.trim() : `inv_${Date.now()}`,
+    name: name.length > 80 ? `${name.slice(0, 77)}…` : name,
+    status,
+    role,
+    affordances,
+    stagingNotes: typeof o.stagingNotes === "string" ? o.stagingNotes.trim().slice(0, 400) : undefined,
+  };
+};
+
+const syncPlanningInventoryFields = (
+  input: {
+    availableItems?: string[];
+    inventoryItems?: InventoryItem[];
+  },
+): { availableItems: string[]; inventoryItems: InventoryItem[] } => {
+  if (Array.isArray(input.inventoryItems) && input.inventoryItems.length > 0) {
+    const inventoryItems = normalizeInventoryItems(
+      input.inventoryItems.map((i) => parseInventoryItemFromBody(i) ?? i).filter(Boolean) as InventoryItem[],
+    );
+    return { inventoryItems, availableItems: inventoryItemNames(inventoryItems) };
+  }
+  const availableItems = normalizePlanningInventory(input.availableItems ?? []);
+  return { availableItems, inventoryItems: migrateAvailableItemsToInventory(availableItems) };
+};
+
+const buildAiPlanningContext = (
+  session: SessionState,
+  extra?: Partial<AiPuzzlePlanningContext>,
+): AiPuzzlePlanningContext => {
+  const inventoryItems = session.planningInput.inventoryItems ?? [];
+  const eligible = puzzleEligibleInventory(inventoryItems);
+  const existingLogicKernels = session.currentPuzzles
+    .map((p) => p.propPuzzleLink?.logicKernel)
+    .filter(Boolean) as string[];
+  return {
+    environmentType: session.planningInput.environmentType,
+    availableItems: session.planningInput.availableItems,
+    inventoryItems,
+    designConstraints: session.planningInput.designConstraints,
+    noGoItems: session.planningInput.noGoItems,
+    techLevel: session.planningInput.techLevel,
+    playersConcurrent: session.planningInput.playersConcurrent,
+    sessionDurationMinutes: session.planningInput.sessionDurationMinutes,
+    eventType: session.planningInput.eventType,
+    existingLogicKernels,
+    ...extra,
+  };
+};
+
+const pickPropForCompile = (session: SessionState, excludePropId?: string): InventoryItem | undefined => {
+  const eligible = puzzleEligibleInventory(session.planningInput.inventoryItems).filter(
+    (i) => i.id !== excludePropId,
+  );
+  const carriers = eligible.filter((i) => i.role === "puzzle_carrier");
+  if (carriers.length > 0) return carriers[0];
+  return eligible[0];
+};
+
+const mergeAiPuzzleIntoSession = (target: Puzzle, compiled: Puzzle, puzzleId: string): Puzzle => ({
+  ...compiled,
+  id: puzzleId,
+  audienceTrack: target.audienceTrack ?? "main",
+  gatesAdultProgression: target.gatesAdultProgression,
+  stageHint: target.stageHint ?? compiled.stageHint,
+  isStaticCatalog: false,
+});
+
+const tryAiReplacePuzzle = async (
+  session: SessionState,
+  target: Puzzle,
+  billingUser: StoredUser | undefined,
+): Promise<Puzzle | null> => {
+  if (!billingUser || !hasFullCatalogAccessUser(billingUser) || !isOpenAiConfigured()) return null;
+  const prop =
+    (target.propPuzzleLink?.propId
+      ? session.planningInput.inventoryItems.find((i) => i.id === target.propPuzzleLink!.propId)
+      : undefined) ?? pickPropForCompile(session);
+  const compiled = await compileSingleSlot({
+    apiKey: String(process.env.OPENAI_API_KEY ?? "").trim(),
+    theme: {
+      name: session.selectedTheme!.name,
+      tldr: session.selectedTheme!.tldr,
+      description: session.selectedTheme!.description,
+    },
+    planning: buildAiPlanningContext(session, { assignedProp: prop }),
+    categoryCounts: { logic: 0, physical: 0, electronic: 0 },
+    targetDifficulty: normalizeRoomDifficulty(session.planningInput.roomDifficulty),
+    targetInterface: session.planningInput.targetInterface,
+    roomSkeleton: session.roomSkeleton,
+    allocateId: () => `pz_ai_${nextAiPuzzleId++}`,
+    category: target.category,
+  });
+  if (!compiled) return null;
+  return mergeAiPuzzleIntoSession(target, compiled as Puzzle, target.id);
 };
 
 const buildEmptyRoomInstallChecklistLines = (environmentType: string): string[] => {
@@ -1398,11 +1551,18 @@ const withThemeFitReasons = (puzzles: Puzzle[], theme?: Theme, session?: Session
   }));
 
 /** Puzzle QA gate: scrub reference links and attach per-puzzle QA report (see QA/departments/puzzle_qa.md). */
-const withPuzzleQaForTheme = (puzzles: Puzzle[], themeName: string): Puzzle[] =>
-  applyPuzzleQaGate(puzzles, { themeName: themeName.trim() || "Selected theme" });
+const withPuzzleQaForTheme = (puzzles: Puzzle[], themeName: string, session?: SessionState): Puzzle[] => {
+  const inventoryItems = session?.planningInput.inventoryItems ?? [];
+  const hasPuzzleEligibleInventory = puzzleEligibleInventory(inventoryItems).length > 0;
+  return applyPuzzleQaGate(puzzles, {
+    themeName: themeName.trim() || "Selected theme",
+    inventoryItems,
+    hasPuzzleEligibleInventory,
+  });
+};
 
 const withPuzzleQaForSession = (session: SessionState, puzzles: Puzzle[]): Puzzle[] =>
-  withPuzzleQaForTheme(puzzles, session.selectedTheme?.name ?? "Selected theme");
+  withPuzzleQaForTheme(puzzles, session.selectedTheme?.name ?? "Selected theme", session);
 
 const applyTrialExportRedaction = (lines: string[], redact: boolean): string[] => {
   if (!redact) return lines;
@@ -4872,6 +5032,13 @@ app.post("/api/planning/session", async (req, res) => {
   const bodyMode = (req.body as { operatingMode?: unknown })?.operatingMode;
   const initialOperatingMode: OperatingMode | undefined =
     bodyMode === "home" || bodyMode === "venue" ? bodyMode : undefined;
+  const bodyRaw = req.body as Record<string, unknown>;
+  const inventorySync = syncPlanningInventoryFields({
+    availableItems: availableItems.map((item: unknown) => String(item)),
+    inventoryItems: Array.isArray(bodyRaw.inventoryItems)
+      ? bodyRaw.inventoryItems.map(parseInventoryItemFromBody).filter(Boolean) as InventoryItem[]
+      : undefined,
+  });
   sessions.set(newSessionId, {
     operatingMode: initialOperatingMode,
     planningInput: {
@@ -4879,7 +5046,12 @@ app.post("/api/planning/session", async (req, res) => {
       participantsTotal: Number(participantsTotal),
       sessionDurationMinutes: Number(sessionDurationMinutes),
       environmentType: String(environmentType),
-      availableItems: availableItems.map((item: unknown) => String(item)),
+      ...inventorySync,
+      designConstraints: parsePlanningNote(bodyRaw.designConstraints, 1200),
+      noGoItems: Array.isArray(bodyRaw.noGoItems)
+        ? bodyRaw.noGoItems.map((s) => String(s).trim()).filter(Boolean).slice(0, 24)
+        : [],
+      techLevel: parseTechLevel(bodyRaw.techLevel),
       existingPuzzles: Array.isArray(existingPuzzles)
         ? existingPuzzles
             .filter(
@@ -5032,7 +5204,21 @@ app.patch("/api/planning/session/:sessionId/planning-input", (req, res) => {
     participantsTotal: Number(participantsTotal),
     sessionDurationMinutes: Number(sessionDurationMinutes),
     environmentType: String(environmentType),
-    availableItems: availableItems.map((item: unknown) => String(item)),
+    ...syncPlanningInventoryFields({
+      availableItems: availableItems.map((item: unknown) => String(item)),
+      inventoryItems: Array.isArray(bodyRaw.inventoryItems)
+        ? bodyRaw.inventoryItems.map(parseInventoryItemFromBody).filter(Boolean) as InventoryItem[]
+        : session.planningInput.inventoryItems,
+    }),
+    designConstraints:
+      "designConstraints" in bodyRaw
+        ? parsePlanningNote(bodyRaw.designConstraints, 1200)
+        : session.planningInput.designConstraints,
+    noGoItems:
+      "noGoItems" in bodyRaw && Array.isArray(bodyRaw.noGoItems)
+        ? bodyRaw.noGoItems.map((s) => String(s).trim()).filter(Boolean).slice(0, 24)
+        : session.planningInput.noGoItems,
+    techLevel: "techLevel" in bodyRaw ? parseTechLevel(bodyRaw.techLevel) : session.planningInput.techLevel,
     existingPuzzles: session.planningInput.existingPuzzles,
     roomDifficulty: normalizeRoomDifficulty(
       roomDifficulty !== undefined && roomDifficulty !== null
@@ -5081,6 +5267,217 @@ app.patch("/api/planning/session/:sessionId/planning-input", (req, res) => {
   };
   session.operatingMode = deriveSessionOperatingMode(session, req);
   res.json({ ok: true, operatingMode: session.operatingMode });
+});
+
+app.patch("/api/planning/session/:sessionId/inventory", async (req, res) => {
+  const sessionId = req.params.sessionId;
+  const session = resolvePlanningSession(sessionId);
+  if (!session) {
+    respondInvalidPlanningSession(res, sessionId);
+    return;
+  }
+  const itemsRaw = req.body?.inventoryItems;
+  if (!Array.isArray(itemsRaw)) {
+    res.status(400).json({
+      error: { code: "VALIDATION_ERROR", message: "inventoryItems array is required.", details: [] },
+    });
+    return;
+  }
+  const prevItems = session.planningInput.inventoryItems;
+  const synced = syncPlanningInventoryFields({
+    inventoryItems: itemsRaw.map(parseInventoryItemFromBody).filter(Boolean) as InventoryItem[],
+  });
+  session.planningInput.inventoryItems = synced.inventoryItems;
+  session.planningInput.availableItems = synced.availableItems;
+
+  const affectedPuzzleIds: string[] = [];
+  for (const prev of prevItems) {
+    if (prev.status === "use" && prev.role !== "set_dressing" && prev.role !== "red_herring") {
+      const next = synced.inventoryItems.find((i) => i.id === prev.id);
+      if (!next || next.status === "exclude") {
+        affectedPuzzleIds.push(...findPuzzlesUsingProp(session.currentPuzzles, prev.id));
+      }
+    }
+  }
+  const uniqueAffected = [...new Set(affectedPuzzleIds)];
+  res.json({
+    inventoryItems: session.planningInput.inventoryItems,
+    availableItems: session.planningInput.availableItems,
+    affectedPuzzleIds: uniqueAffected,
+    regenRecommended: uniqueAffected.length > 0,
+  });
+});
+
+app.post("/api/planning/session/:sessionId/inventory/infer-affordances", async (req, res) => {
+  const session = resolvePlanningSession(req.params.sessionId);
+  if (!session) {
+    respondInvalidPlanningSession(res, req.params.sessionId);
+    return;
+  }
+  const name = String(req.body?.name ?? "").trim();
+  if (!name) {
+    res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "name is required.", details: [] } });
+    return;
+  }
+  res.json({
+    affordances: inferAffordancesFromName(name),
+    environmentType: session.planningInput.environmentType,
+  });
+});
+
+app.post("/api/puzzles/regenerate-affected", async (req, res) => {
+  const { sessionId, puzzleIds } = req.body ?? {};
+  const session = resolvePlanningSession(String(sessionId));
+  if (!session) {
+    respondInvalidPlanningSession(res, sessionId);
+    return;
+  }
+  const billingUser = await claimSessionForAuth(String(sessionId), req);
+  const denied = puzzleMutationAccessError(session, billingUser);
+  if (denied) {
+    res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
+    return;
+  }
+  if (!session.selectedTheme) {
+    res.status(400).json({ error: { code: "THEME_NOT_SELECTED", message: "Select a theme first.", details: [] } });
+    return;
+  }
+  if (!Array.isArray(puzzleIds) || puzzleIds.length === 0) {
+    res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "puzzleIds array required.", details: [] } });
+    return;
+  }
+  const slots = puzzleIds
+    .map((id: string) => {
+      const puzzle = session.currentPuzzles.find((p) => p.id === id);
+      if (!puzzle) return null;
+      return {
+        puzzleId: puzzle.id,
+        category: puzzle.category,
+        existingLink: puzzle.propPuzzleLink,
+        fallbackProp: pickPropForCompile(session),
+      };
+    })
+    .filter(Boolean) as Array<{
+    puzzleId: string;
+    category: "logic" | "physical" | "electronic";
+    existingLink?: PropPuzzleLink;
+    fallbackProp?: InventoryItem;
+  }>;
+  const results = await rebindAfterInventoryChange({
+    apiKey: String(process.env.OPENAI_API_KEY ?? "").trim(),
+    theme: {
+      name: session.selectedTheme.name,
+      tldr: session.selectedTheme.tldr,
+      description: session.selectedTheme.description,
+    },
+    planning: buildAiPlanningContext(session),
+    targetDifficulty: normalizeRoomDifficulty(session.planningInput.roomDifficulty),
+    targetInterface: session.planningInput.targetInterface,
+    roomSkeleton: session.roomSkeleton,
+    allocateId: () => `pz_ai_${nextAiPuzzleId++}`,
+    slots,
+  });
+  for (const row of results) {
+    if (!row.puzzle) continue;
+    const target = session.currentPuzzles.find((p) => p.id === row.puzzleId);
+    if (!target) continue;
+    session.currentPuzzles = session.currentPuzzles.map((p) =>
+      p.id === row.puzzleId ? mergeAiPuzzleIntoSession(target, row.puzzle as Puzzle, row.puzzleId) : p,
+    );
+  }
+  session.currentPuzzles = withThemeFitReasons(session.currentPuzzles, session.selectedTheme, session);
+  session.currentPuzzles = withPuzzleQaForSession(session, session.currentPuzzles);
+  const regenFinal = finalizePuzzlesAndStoryPlan(session, session.currentPuzzles);
+  session.currentPuzzles = regenFinal.puzzles;
+  session.suggestedAdditionsRequired = regenFinal.lists.required;
+  session.suggestedAdditions = regenFinal.lists.optional;
+  session.suggestedSafetyProtocols = regenFinal.lists.safety;
+  session.currentStoryPlan = regenFinal.storyPlan;
+  res.json({
+    regenerated: results.filter((r) => r.puzzle).map((r) => r.puzzleId),
+    puzzles: puzzlesForClientResponse(session.currentPuzzles, sessionHasFullPuzzleAccess(session.roomManifest), billingUser),
+    puzzleQaPassed: allPuzzlesPassedPuzzleQa(session.currentPuzzles),
+  });
+});
+
+app.post("/api/puzzles/:puzzleId/rebind-prop", async (req, res) => {
+  const { sessionId, propId } = req.body ?? {};
+  const puzzleId = req.params.puzzleId;
+  const session = resolvePlanningSession(String(sessionId));
+  if (!session) {
+    respondInvalidPlanningSession(res, sessionId);
+    return;
+  }
+  const billingUser = await claimSessionForAuth(String(sessionId), req);
+  const denied = puzzleMutationAccessError(session, billingUser);
+  if (denied) {
+    res.status(403).json({ error: { code: denied.code, message: denied.message, details: [] } });
+    return;
+  }
+  const target = session.currentPuzzles.find((p) => p.id === puzzleId);
+  if (!target) {
+    res.status(404).json({ error: { code: "PUZZLE_NOT_FOUND", message: "Puzzle not found.", details: [] } });
+    return;
+  }
+  const prop = session.planningInput.inventoryItems.find((i) => i.id === propId);
+  if (!prop || prop.status !== "use" || prop.role === "set_dressing" || prop.role === "red_herring") {
+    res.status(400).json({
+      error: { code: "PROP_NOT_ELIGIBLE", message: "Prop must be a puzzle-eligible Use item.", details: [] },
+    });
+    return;
+  }
+  if (!session.selectedTheme) {
+    res.status(400).json({ error: { code: "THEME_NOT_SELECTED", message: "Select a theme first.", details: [] } });
+    return;
+  }
+  const existingLink = target.propPuzzleLink ?? {
+    propId: prop.id,
+    propLabel: prop.name,
+    logicKernel: `Players interact with ${prop.name} to advance: ${target.objective}`,
+    clueDelivers: target.objective,
+  };
+  let merged: Puzzle | null = null;
+  if (hasFullCatalogAccessUser(billingUser) && isOpenAiConfigured()) {
+    const compiled = await rebindProp(
+      {
+        apiKey: String(process.env.OPENAI_API_KEY ?? "").trim(),
+        theme: {
+          name: session.selectedTheme.name,
+          tldr: session.selectedTheme.tldr,
+          description: session.selectedTheme.description,
+        },
+        planning: buildAiPlanningContext(session, { assignedProp: prop }),
+        categoryCounts: { logic: 0, physical: 0, electronic: 0 },
+        targetDifficulty: normalizeRoomDifficulty(session.planningInput.roomDifficulty),
+        targetInterface: session.planningInput.targetInterface,
+        roomSkeleton: session.roomSkeleton,
+        allocateId: () => `pz_ai_${nextAiPuzzleId++}`,
+        category: target.category,
+      },
+      existingLink,
+      prop,
+    );
+    if (compiled) merged = mergeAiPuzzleIntoSession(target, compiled as Puzzle, puzzleId);
+  }
+  if (!merged) {
+    merged = {
+      ...target,
+      physical_anchor_prop: prop.name,
+      propPuzzleLink: {
+        ...existingLink,
+        propId: prop.id,
+        propLabel: prop.name,
+      },
+    };
+  }
+  session.currentPuzzles = session.currentPuzzles.map((p) => (p.id === puzzleId ? merged! : p));
+  session.currentPuzzles = withThemeFitReasons(session.currentPuzzles, session.selectedTheme, session);
+  session.currentPuzzles = withPuzzleQaForSession(session, session.currentPuzzles);
+  const fullAccess = sessionHasFullPuzzleAccess(session.roomManifest);
+  res.json({
+    puzzle: puzzlesForClientResponse([merged], fullAccess, billingUser)[0],
+    puzzleQaPassed: allPuzzlesPassedPuzzleQa(session.currentPuzzles),
+  });
 });
 
 app.get("/api/planning/session/:sessionId/theme-coach", async (req, res) => {
@@ -5535,13 +5932,7 @@ app.post("/api/puzzles/generate", async (req, res) => {
       tldr: session.selectedTheme!.tldr,
       description: session.selectedTheme!.description,
     },
-    planning: {
-      environmentType: session.planningInput.environmentType,
-      availableItems: session.planningInput.availableItems,
-      playersConcurrent: session.planningInput.playersConcurrent,
-      sessionDurationMinutes: session.planningInput.sessionDurationMinutes,
-      eventType: session.planningInput.eventType,
-    },
+    planning: buildAiPlanningContext(session),
     categoryCounts: { logic: logicCount, physical: physicalCount, electronic: electronicCount },
     targetDifficulty,
     targetInterface: session.planningInput.targetInterface,
@@ -5900,6 +6291,11 @@ app.post("/api/puzzles/:puzzleId/replace", async (req, res) => {
   }
   const isYouthSlot = target.audienceTrack === "youth_addon";
   const targetDifficulty = normalizeRoomDifficulty(session.planningInput.roomDifficulty);
+  let mergedReplacement: Puzzle | null = null;
+  if (!isYouthSlot) {
+    mergedReplacement = await tryAiReplacePuzzle(session, target, billingUser);
+  }
+  if (!mergedReplacement) {
   const replacementPool = puzzlePoolByCategory[target.category].filter(
     (puzzle) =>
       isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme) &&
@@ -5929,7 +6325,7 @@ app.post("/api/puzzles/:puzzleId/replace", async (req, res) => {
   markSkipped("puzzle", puzzleId);
   void persistSkipHistory();
   session.seenPuzzleIds.add(replacement.id);
-  const mergedReplacement: Puzzle = isYouthSlot
+  mergedReplacement = isYouthSlot
     ? {
         ...markStaticCatalogPuzzle(replacement),
         difficulty: replacement.difficulty === "hard" ? "medium" : replacement.difficulty,
@@ -5939,7 +6335,10 @@ app.post("/api/puzzles/:puzzleId/replace", async (req, res) => {
         objective: `Youth-friendly parallel track: ${replacement.objective}`,
       }
     : { ...markStaticCatalogPuzzle(replacement), audienceTrack: target.audienceTrack ?? "main" };
-  session.currentPuzzles = session.currentPuzzles.map((puzzle) => (puzzle.id === puzzleId ? mergedReplacement : puzzle));
+  }
+  session.currentPuzzles = session.currentPuzzles.map((puzzle) =>
+    puzzle.id === puzzleId ? mergedReplacement! : puzzle,
+  );
   if (session.selectedTheme) {
     session.currentPuzzles = breakDuplicateSavedRoomPuzzleSet(
       session.selectedTheme.id,
@@ -5960,11 +6359,12 @@ app.post("/api/puzzles/:puzzleId/replace", async (req, res) => {
     isPuzzleCompatibleWithTheme(puzzle, session.selectedTheme),
   );
   const fullAccess = sessionHasFullPuzzleAccess(session.roomManifest);
-  const clientReplacement = puzzlesForClientResponse([mergedReplacement], fullAccess, billingUser)[0];
+  const clientReplacement = puzzlesForClientResponse([mergedReplacement!], fullAccess, billingUser)[0];
   res.json({
     replacedPuzzleId: puzzleId,
     puzzleQaPassed: allPuzzlesPassedPuzzleQa(session.currentPuzzles),
     newPuzzle: clientReplacement,
+    generationEngine: mergedReplacement!.isStaticCatalog ? "static_fallback" : "ai_generated",
     compatibilityPassed,
     storyPlan: fullAccess ? session.currentStoryPlan : redactStoryPlanForClient(
       session.currentStoryPlan as unknown as Record<string, unknown>,
@@ -6189,6 +6589,7 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
     sessionDurationMinutes: session.planningInput.sessionDurationMinutes,
     playersConcurrent: session.planningInput.playersConcurrent,
     operatingMode: operatingModeForExport,
+    generationEngine: session.lastGenerationEngine,
   };
   const exportPuzzles: ExportPuzzleRef[] = sanitizeExportPuzzlesForBilling(
     session.currentPuzzles.map((puzzle) => ({
@@ -6209,9 +6610,19 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
       narrative_justification: puzzle.narrative_justification,
       bill_of_materials: puzzle.bill_of_materials,
       build_documentation_url: puzzle.build_documentation_url,
+      propPuzzleLink: puzzle.propPuzzleLink,
+      isStaticCatalog: puzzle.isStaticCatalog,
     })),
     billingUser,
   );
+  const stagingProps = stagingOnlyInventory(session.planningInput.inventoryItems).map((i) => ({
+    name: i.name,
+    role: i.role as "set_dressing" | "red_herring",
+    stagingNotes: i.stagingNotes,
+  }));
+  const unassignedStaging = session.planningInput.inventoryItems
+    .filter((i) => i.status === "use" && i.role === "unassigned")
+    .map((i) => ({ name: i.name, role: "unassigned" as const, stagingNotes: i.stagingNotes }));
   const lines = [
     "# Escape Room Plan",
     "",
@@ -6220,6 +6631,8 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
     `- ID: ${sessionId}`,
     "",
     ...buildExecutiveSummaryExportLines(session),
+    ...buildPropPuzzleLinkTable(exportPuzzles),
+    ...buildStagingInventorySection([...stagingProps, ...unassignedStaging]),
     ...buildConsolidatedBomTable(exportPuzzles, redactElectronicBuild),
     ...buildMasterBlueprintExportLines(session),
     ...buildMermaidFlowchartExportLines(session),
@@ -6249,6 +6662,18 @@ app.post("/api/plans/:sessionId/export", async (req, res) => {
     `- Environment (physical room / fiction setting): ${session.planningInput.environmentType}`,
     `- Theme ideas should match this environment: ${session.planningInput.themeMustMatchEnvironment ? "Yes (generator ranks venue-aligned picks)" : "No (fantasy may diverge from the room)"}`,
     `- Available items: ${session.planningInput.availableItems.join(", ")}`,
+    ...(session.planningInput.designConstraints?.trim()
+      ? [`- Room design constraints: ${session.planningInput.designConstraints.trim()}`]
+      : []),
+    ...(session.planningInput.noGoItems?.length
+      ? [`- Hard exclusions: ${session.planningInput.noGoItems.join(", ")}`]
+      : []),
+    ...(session.planningInput.techLevel
+      ? [`- Tech level: ${session.planningInput.techLevel.replace(/_/g, " ")}`]
+      : []),
+    ...(session.lastGenerationEngine
+      ? [`- Puzzle generation engine: ${session.lastGenerationEngine.replace(/_/g, " ")}`]
+      : []),
     `- Existing user puzzles: ${session.planningInput.existingPuzzles.length}`,
     ...session.planningInput.existingPuzzles.map(
       (puzzle) => `  - ${puzzle.name} [${puzzle.roomPart}]: ${puzzle.link}`,
@@ -6567,30 +6992,7 @@ app.get("/api/plans/saved", async (req, res) => {
 const rehydrateLiveSessionFromSavedPlan = (plan: SavedPlan, ownerUserId: string): void => {
   const d = plan.data;
   const raw = d.planningInput;
-  const planningInput: SessionState["planningInput"] = {
-    playersConcurrent: Number.isFinite(Number(raw.playersConcurrent)) ? Number(raw.playersConcurrent) : 4,
-    participantsTotal: Number.isFinite(Number(raw.participantsTotal)) ? Number(raw.participantsTotal) : 6,
-    sessionDurationMinutes: Number.isFinite(Number(raw.sessionDurationMinutes)) ? Number(raw.sessionDurationMinutes) : 45,
-    environmentType: String(raw.environmentType ?? ""),
-    availableItems: Array.isArray(raw.availableItems) ? raw.availableItems.map((item) => String(item)) : [],
-    existingPuzzles: Array.isArray(raw.existingPuzzles) ? raw.existingPuzzles : [],
-    roomDifficulty: normalizeRoomDifficulty(raw.roomDifficulty),
-    youthAddOnEnabled: Boolean(raw.youthAddOnEnabled),
-    youthAddOnGatesAdultFlow: Boolean(raw.youthAddOnGatesAdultFlow),
-    youthAddOnAgeNote: typeof raw.youthAddOnAgeNote === "string" ? raw.youthAddOnAgeNote.slice(0, 400) : "",
-    eventType: typeof raw.eventType === "string" ? raw.eventType.slice(0, 200) : "",
-    mainTrackPuzzleCountOverride:
-      typeof raw.mainTrackPuzzleCountOverride === "number" && Number.isFinite(raw.mainTrackPuzzleCountOverride)
-        ? raw.mainTrackPuzzleCountOverride
-        : null,
-    puzzleMixLogic: typeof raw.puzzleMixLogic === "number" && Number.isFinite(raw.puzzleMixLogic) ? raw.puzzleMixLogic : null,
-    puzzleMixPhysical: typeof raw.puzzleMixPhysical === "number" && Number.isFinite(raw.puzzleMixPhysical) ? raw.puzzleMixPhysical : null,
-    puzzleMixElectronic:
-      typeof raw.puzzleMixElectronic === "number" && Number.isFinite(raw.puzzleMixElectronic) ? raw.puzzleMixElectronic : null,
-    themeMustMatchEnvironment: Boolean(raw.themeMustMatchEnvironment),
-    venueBuildType: parseVenueBuildType(raw.venueBuildType),
-    targetInterface: parseTargetInterface(raw.targetInterface),
-  };
+  const planningInput = normalizeSessionPlanningInput(raw as SessionState["planningInput"]);
   const selectedTheme = d.themes.find((t) => t.id === d.selectedThemeId);
   const session: SessionState = {
     planningInput,

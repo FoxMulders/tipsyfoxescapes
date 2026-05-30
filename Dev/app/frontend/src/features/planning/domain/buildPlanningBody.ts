@@ -1,3 +1,5 @@
+import type { InventoryItem } from "../../../../../shared/inventory";
+import { migrateAvailableItemsToInventory } from "../../../../../shared/inventory";
 import type { PlanningApiBody, PlanningFormState } from "./planningTypes";
 
 export function buildPlanningBody(state: PlanningFormState, mode: "draft" | "strict"): PlanningApiBody | null {
@@ -5,6 +7,13 @@ export function buildPlanningBody(state: PlanningFormState, mode: "draft" | "str
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+  const inventoryItems: InventoryItem[] =
+    state.inventoryItems.length > 0 ? state.inventoryItems : migrateAvailableItemsToInventory(parsedItems);
+  const noGoParsed = state.noGoItems
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 24);
   const pc = Number(state.playersConcurrent);
   const pt = Number(state.participantsTotal);
   const sd = Number(state.sessionDurationMinutes);
@@ -39,6 +48,10 @@ export function buildPlanningBody(state: PlanningFormState, mode: "draft" | "str
       sessionDurationMinutes: sd,
       environmentType: env,
       availableItems: parsedItems,
+      inventoryItems,
+      designConstraints: state.designConstraints.trim().slice(0, 1200) || undefined,
+      noGoItems: noGoParsed.length ? noGoParsed : undefined,
+      techLevel: state.techLevel || undefined,
       roomDifficulty: state.roomDifficulty,
       youthAddOnEnabled: state.youthAddOnEnabled,
       youthAddOnGatesAdultFlow: state.youthAddOnGatesAdultFlow,
@@ -65,6 +78,10 @@ export function buildPlanningBody(state: PlanningFormState, mode: "draft" | "str
     sessionDurationMinutes: duration,
     environmentType: env || "Not specified yet",
     availableItems: parsedItems,
+    inventoryItems,
+    designConstraints: state.designConstraints.trim().slice(0, 1200) || undefined,
+    noGoItems: noGoParsed.length ? noGoParsed : undefined,
+    techLevel: state.techLevel || undefined,
     roomDifficulty: state.roomDifficulty,
     youthAddOnEnabled: state.youthAddOnEnabled,
     youthAddOnGatesAdultFlow: state.youthAddOnGatesAdultFlow,

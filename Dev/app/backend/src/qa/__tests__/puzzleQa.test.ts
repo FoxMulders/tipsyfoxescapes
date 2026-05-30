@@ -9,10 +9,10 @@ describe("Puzzle QA (migrated)", () => {
           id: "qa_good",
           category: "logic",
           themeTags: ["library"],
-          title: "Cipher Index",
+          title: "Mis-shelved index card",
           objective: "Decode the archive index card.",
           howItWorks:
-            "Players find a cipher key on the Cipher Index card and decode a short message that unlocks the next compartment.",
+            "Players find a cipher key on the index card and decode a short message that unlocks the next compartment.",
           themeFitReason: 'For "Haunted Library", this cipher uses mis-shelved index cards as diegetic clues.',
           referenceLinks: [
             {

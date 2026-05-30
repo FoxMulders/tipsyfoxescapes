@@ -33,6 +33,13 @@ export type ExportPuzzleRef = {
   narrative_justification?: string;
   bill_of_materials?: string[];
   build_documentation_url?: string;
+  propPuzzleLink?: {
+    propId: string;
+    propLabel: string;
+    logicKernel: string;
+    clueDelivers: string;
+  };
+  isStaticCatalog?: boolean;
   electronicDetails?: {
     parts: string[];
     wiringDiagram: string[];
@@ -80,6 +87,59 @@ export type ExportSessionContext = {
   sessionDurationMinutes: number;
   playersConcurrent: number;
   operatingMode: "home" | "venue";
+  generationEngine?: string;
+};
+
+export type ExportStagingProp = {
+  name: string;
+  role: "set_dressing" | "red_herring" | "unassigned";
+  stagingNotes?: string;
+};
+
+export const buildPropPuzzleLinkTable = (puzzles: ExportPuzzleRef[]): string[] => {
+  const rows = puzzles
+    .filter((p) => p.propPuzzleLink && p.audienceTrack !== "youth_addon")
+    .map((p) => {
+      const link = p.propPuzzleLink!;
+      return `| ${p.title.replace(/\|/g, "\\|")} | ${link.propLabel.replace(/\|/g, "\\|")} | ${link.logicKernel.replace(/\|/g, "\\|")} | ${link.clueDelivers.replace(/\|/g, "\\|")} |`;
+    });
+  if (rows.length === 0) {
+    return [
+      "## Prop → puzzle links",
+      "",
+      "_No prop-puzzle bindings recorded — regenerate puzzles after marking puzzle props in Room details._",
+      "",
+    ];
+  }
+  return [
+    "## Prop → puzzle links",
+    "",
+    "_Each puzzle carrier is bound to abstract logic and a clue outcome. Rebind props in Curate without restarting the room._",
+    "",
+    "| Puzzle | Prop carrier | Logic kernel | Delivers |",
+    "| --- | --- | --- | --- |",
+    ...rows,
+    "",
+    "<!-- pdf-page-break -->",
+    "",
+  ];
+};
+
+export const buildStagingInventorySection = (props: ExportStagingProp[]): string[] => {
+  if (props.length === 0) return [];
+  return [
+    "## Set dressing & staging props",
+    "",
+    "_These Use-column props support atmosphere and fiction but are not required puzzle carriers._",
+    "",
+    "| Prop | Role | Staging notes |",
+    "| --- | --- | --- |",
+    ...props.map(
+      (p) =>
+        `| ${p.name.replace(/\|/g, "\\|")} | ${p.role.replace(/_/g, " ")} | ${(p.stagingNotes ?? "—").replace(/\|/g, "\\|")} |`,
+    ),
+    "",
+  ];
 };
 
 const PLAYFUL_TECH_URL = "https://www.youtube.com/@playfultechnology";

@@ -1,3 +1,4 @@
+import type { InventoryItem, TechLevel } from "../../../../../shared/contracts";
 import type { PropFabricationKind } from "@/components/planning/PropFabricationSection";
 import { DEFAULT_ROOM_LAYOUT, type RoomLayoutDocument } from "../../../../../shared/roomLayout";
 import type { TargetInterface, VenueBuildType } from "../../../../../shared/contracts";
@@ -18,6 +19,10 @@ export type PlanningFormState = {
   propFabrication3dEnabled: boolean;
   propFabricationKinds: PropFabricationKind[];
   availableItems: string;
+  inventoryItems: InventoryItem[];
+  designConstraints: string;
+  noGoItems: string;
+  techLevel: TechLevel | "";
   useCustomMainPuzzleCount: boolean;
   customMainPuzzleCountStr: string;
   useCustomMix: boolean;
@@ -36,6 +41,10 @@ export type PlanningApiBody = {
   sessionDurationMinutes: number;
   environmentType: string;
   availableItems: string[];
+  inventoryItems?: InventoryItem[];
+  designConstraints?: string;
+  noGoItems?: string[];
+  techLevel?: TechLevel;
   roomDifficulty: "easy" | "medium" | "hard";
   youthAddOnEnabled: boolean;
   youthAddOnGatesAdultFlow: boolean;
@@ -69,6 +78,10 @@ export const DEFAULT_PLANNING_FORM_STATE: PlanningFormState = {
   propFabrication3dEnabled: false,
   propFabricationKinds: [],
   availableItems: "",
+  inventoryItems: [],
+  designConstraints: "",
+  noGoItems: "",
+  techLevel: "",
   useCustomMainPuzzleCount: false,
   customMainPuzzleCountStr: "",
   useCustomMix: false,

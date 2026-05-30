@@ -28,6 +28,8 @@ import { BuilderLegalDisclaimer } from "@/components/layout/BuilderLegalDisclaim
 import { OutputReviewActionBar } from "@/components/builder/OutputReviewActionBar";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { StagingPropListItem } from "@/components/builder/StagingPropListItem";
+import type { InventoryItem, PropPuzzleLink } from "../../shared/inventory";
+import { migrateAvailableItemsToInventory, puzzleEligibleInventory } from "../../shared/inventory";
 import { PuzzleCategoryBadge } from "@/components/puzzle/PuzzleCategoryBadge";
 import { PuzzleRequiredPartsBlock } from "@/components/puzzle/PuzzleRequiredPartsBlock";
 import { PuzzleSolveStepsBlock } from "@/components/puzzle/PuzzleSolveStepsBlock";
@@ -206,6 +208,8 @@ type Puzzle = {
   };
   stageHint?: string;
   physical_anchor_prop?: string;
+  propPuzzleLink?: PropPuzzleLink;
+  isStaticCatalog?: boolean;
   narrative_justification?: string;
   bill_of_materials?: string[];
   required_parts_and_props?: string[];
@@ -619,7 +623,7 @@ type RefusedPuzzleSlot = {
   gatesAdultProgression?: boolean;
 };
 
-type PuzzleWindowBusy = { target: string; action: "replace" | "reject" | "fill" };
+type PuzzleWindowBusy = { target: string; action: "replace" | "reject" | "fill" | "rebind" };
 
 function PuzzleRefusedWindow({
   slot,
@@ -661,6 +665,92 @@ function PuzzleRefusedWindow({
   );
 }
 
+function PropPuzzleBindingRow({
+  puzzle,
+  eligibleProps,
+  busy,
+  onRebindProp,
+}: {
+  puzzle: Puzzle;
+  eligibleProps: InventoryItem[];
+  busy?: boolean;
+  onRebindProp?: (puzzleId: string, propId: string) => void;
+}) {
+  const link = puzzle.propPuzzleLink;
+  const delivers = link?.clueDelivers ?? puzzle.objective;
+  if (eligibleProps.length === 0 && !link?.propLabel) return null;
+  return (
+    <div className="prop-puzzle-binding glass-panel mt-2 rounded-md border border-white/10 p-3">
+      <p className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Prop → clue</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="text-sm text-slate-200">
+          <span className="mb-1 block text-xs text-slate-400">Prop carrier</span>
+          {onRebindProp && eligibleProps.length > 0 ? (
+            <select
+              className="h-9 w-full rounded border border-slate-600 bg-slate-950 px-2 text-sm"
+              disabled={busy}
+              value={link?.propId ?? ""}
+              onChange={(e) => {
+                const propId = e.target.value;
+                if (propId) onRebindProp(puzzle.id, propId);
+              }}
+            >
+              <option value="">Select prop…</option>
+              {eligibleProps.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span>{link?.propLabel ?? puzzle.physical_anchor_prop ?? "—"}</span>
+          )}
+        </label>
+        <div className="text-sm text-slate-200">
+          <span className="mb-1 block text-xs text-slate-400">Delivers</span>
+          <span>{delivers}</span>
+        </div>
+      </div>
+      {link?.logicKernel ? (
+        <p className="muted mt-2 mb-0 text-xs">
+          <strong>Logic:</strong> {link.logicKernel}
+        </p>
+      ) : null}
+      {puzzle.isStaticCatalog ? (
+        <p className="mt-2 mb-0 text-xs text-amber-300">Catalog fallback — use Generate another for AI synthesis.</p>
+      ) : null}
+    </div>
+  );
+}
+
+function PropPuzzleLinkReviewTable({ puzzles }: { puzzles: Puzzle[] }) {
+  const rows = puzzles.filter((p) => p.propPuzzleLink && p.audienceTrack !== "youth_addon");
+  if (rows.length === 0) return null;
+  return (
+    <section className="output-review-glass-surface mt-4 rounded-lg p-4">
+      <h3 className="output-review-section-title">Prop → puzzle links</h3>
+      <table className="prop-link-review-table w-full text-sm">
+        <thead>
+          <tr>
+            <th className="text-left">Puzzle</th>
+            <th className="text-left">Prop</th>
+            <th className="text-left">Delivers</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((p) => (
+            <tr key={p.id}>
+              <td>{p.title}</td>
+              <td>{p.propPuzzleLink!.propLabel}</td>
+              <td>{p.propPuzzleLink!.clueDelivers}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 function PuzzleWindowsTrack({
   puzzles,
   refusedSlots,
@@ -674,6 +764,9 @@ function PuzzleWindowsTrack({
   onReplace,
   onReject,
   onFillSlot,
+  eligibleProps,
+  onRebindProp,
+  rebindBusyPuzzleId,
 }: {
   puzzles: Puzzle[];
   refusedSlots: RefusedPuzzleSlot[];
@@ -687,6 +780,9 @@ function PuzzleWindowsTrack({
   onReplace: (puzzleId: string) => void;
   onReject: (puzzleId: string) => void;
   onFillSlot: (slotId: string) => void;
+  eligibleProps?: InventoryItem[];
+  onRebindProp?: (puzzleId: string, propId: string) => void;
+  rebindBusyPuzzleId?: string | null;
 }) {
   return (
     <div className="puzzle-windows-grid">
@@ -704,6 +800,9 @@ function PuzzleWindowsTrack({
           onReject={onReject}
           replaceBusy={puzzleWindowBusy?.action === "replace" && puzzleWindowBusy.target === puzzle.id}
           rejectBusy={puzzleWindowBusy?.action === "reject" && puzzleWindowBusy.target === puzzle.id}
+          eligibleProps={eligibleProps}
+          onRebindProp={onRebindProp}
+          rebindBusy={rebindBusyPuzzleId === puzzle.id}
         />
       ))}
       {refusedSlots.map((slot, index) => (
@@ -731,6 +830,9 @@ function PuzzleWindowCard({
   onReject,
   replaceBusy,
   rejectBusy,
+  eligibleProps,
+  onRebindProp,
+  rebindBusy,
 }: {
   puzzle: Puzzle;
   puzzleNumber: number;
@@ -743,6 +845,9 @@ function PuzzleWindowCard({
   onReject: (puzzleId: string) => void;
   replaceBusy: boolean;
   rejectBusy: boolean;
+  eligibleProps?: InventoryItem[];
+  onRebindProp?: (puzzleId: string, propId: string) => void;
+  rebindBusy?: boolean;
 }) {
   const previewLocked = isPuzzlePreviewLocked(puzzle);
   const maglock = isMaglockPuzzle(puzzle);
@@ -812,6 +917,12 @@ function PuzzleWindowCard({
         ) : null}
       </p>
       <p className="inline-space puzzle-objective-line">{puzzle.objective}</p>
+      <PropPuzzleBindingRow
+        puzzle={puzzle}
+        eligibleProps={eligibleProps ?? []}
+        busy={rebindBusy || replaceBusy}
+        onRebindProp={onRebindProp}
+      />
       <p className="inline-space">
         <strong>How it works:</strong> {puzzle.howItWorks}
       </p>
@@ -2165,6 +2276,13 @@ export default function App() {
   const [propFabrication3dEnabled, setPropFabrication3dEnabled] = useState(false);
   const [propFabricationKinds, setPropFabricationKinds] = useState<PropFabricationKind[]>([]);
   const [availableItems, setAvailableItems] = useState<string>("");
+  const puzzleEligibleProps = useMemo(() => {
+    const chips = availableItems
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return puzzleEligibleInventory(migrateAvailableItemsToInventory(chips));
+  }, [availableItems]);
   const [useCustomMainPuzzleCount, setUseCustomMainPuzzleCount] = useState(false);
   const [customMainPuzzleCountStr, setCustomMainPuzzleCountStr] = useState("");
   const [useCustomMix, setUseCustomMix] = useState(false);
@@ -5812,6 +5930,41 @@ export default function App() {
     }
   };
 
+  const rebindPuzzleProp = async (puzzleId: string, propId: string) => {
+    setError("");
+    setPuzzleWindowBusy({ target: puzzleId, action: "rebind" });
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) {
+      setPuzzleWindowBusy(null);
+      return;
+    }
+    try {
+      const response = await apiFetch(`/api/puzzles/${encodeURIComponent(puzzleId)}/rebind-prop`, {
+        method: "POST",
+        headers: hasAuthToken() ? withAuthHeaders() : anonJsonHeaders(),
+        body: JSON.stringify({ sessionId: activeSessionId, propId }),
+      });
+      const data = (await response.json()) as {
+        puzzle?: Puzzle;
+        error?: { message?: string; code?: string };
+      };
+      if (!response.ok) {
+        if (handleBillingGate(data.error?.code, data.error?.message)) return;
+        setError(data.error?.message ?? "Could not rebind prop for this puzzle.");
+        return;
+      }
+      if (!data.puzzle) {
+        setError("Rebind response was incomplete.");
+        return;
+      }
+      setPuzzles((prev) => prev.map((p) => (p.id === puzzleId ? data.puzzle! : p)));
+    } catch (err) {
+      setError(classifyApiCatchError(err));
+    } finally {
+      setPuzzleWindowBusy(null);
+    }
+  };
+
   const rejectPuzzle = async (puzzleId: string) => {
     setError("");
     setPuzzleWindowBusy({ target: puzzleId, action: "reject" });
@@ -6722,6 +6875,9 @@ export default function App() {
           onReplace={(id) => void replacePuzzle(id)}
           onReject={(id) => void rejectPuzzle(id)}
           onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+          eligibleProps={puzzleEligibleProps}
+          onRebindProp={(id, propId) => void rebindPuzzleProp(id, propId)}
+          rebindBusyPuzzleId={puzzleWindowBusy?.action === "rebind" ? puzzleWindowBusy.target : null}
         />
       ) : (
         <p className="muted">Generate a room first to curate puzzles.</p>
@@ -6734,6 +6890,7 @@ export default function App() {
       authUser,
       arduinoPreviewPuzzleId,
       puzzleWindowBusy,
+      puzzleEligibleProps,
     ],
   );
 
@@ -7145,6 +7302,7 @@ export default function App() {
           Story, puzzles, staging props, and flow — then approve and export when you are ready.
         </p>
         <div className="output-review-body">{outputReviewBodyElement}</div>
+        <PropPuzzleLinkReviewTable puzzles={puzzles} />
         <BuilderLegalDisclaimer compact />
         <section id="builder-export-anchor" className="output-review-glass-surface mt-6 rounded-lg p-4">
           <h3 className="output-review-section-title">Export &amp; save</h3>

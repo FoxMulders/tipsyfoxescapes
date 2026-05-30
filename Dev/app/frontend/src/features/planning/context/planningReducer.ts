@@ -2,6 +2,8 @@ import type { PropFabricationKind } from "@/components/planning/PropFabricationS
 import type { RoomLayoutDocument, RoomLayoutElement, RoomLayoutElementKind } from "../../../../../shared/roomLayout";
 import { DEFAULT_ROOM_LAYOUT } from "../../../../../shared/roomLayout";
 import type { TargetInterface, VenueBuildType } from "../../../../../shared/contracts";
+import type { InventoryItem, TechLevel } from "../../../../../shared/contracts";
+import { inventoryItemNames, migrateAvailableItemsToInventory } from "../../../../../shared/inventory";
 import { parseItemChips } from "../domain/parseItems";
 import type { PlanningFormState } from "../domain/planningTypes";
 import { DEFAULT_PLANNING_FORM_STATE } from "../domain/planningTypes";
@@ -15,6 +17,10 @@ export type PlanningAction =
   | { type: "SET_ENVIRONMENT"; value: string; clearItems?: boolean }
   | { type: "SET_EVENT_TYPE"; value: string }
   | { type: "SET_AVAILABLE_ITEMS"; value: string }
+  | { type: "SET_INVENTORY_ITEMS"; items: InventoryItem[] }
+  | { type: "SET_DESIGN_CONSTRAINTS"; value: string }
+  | { type: "SET_NO_GO_ITEMS"; value: string }
+  | { type: "SET_TECH_LEVEL"; value: TechLevel | "" }
   | { type: "ADD_AVAILABLE_ITEM"; label: string }
   | { type: "SET_ROOM_DIFFICULTY"; value: "easy" | "medium" | "hard" }
   | { type: "SET_THEME_MUST_MATCH_ENV"; value: boolean }
@@ -108,13 +114,33 @@ export function planningReducer(state: PlanningFormState, action: PlanningAction
       const removed = prev.filter((p) => !next.some((n) => n.toLowerCase() === p.toLowerCase()));
       let roomLayout = state.roomLayout;
       for (const r of removed) roomLayout = removeLayoutElementsForPropKey(roomLayout, r);
+      const inventoryItems =
+        state.inventoryItems.length > 0
+          ? state.inventoryItems.filter((i) => next.some((n) => n.toLowerCase() === i.name.toLowerCase()) || i.status === "exclude")
+          : migrateAvailableItemsToInventory(next);
       return {
         ...state,
         availableItems: action.value,
+        inventoryItems,
         roomLayout,
         validationFlags: { ...state.validationFlags, availableItems: false },
       };
     }
+    case "SET_INVENTORY_ITEMS": {
+      const useNames = inventoryItemNames(action.items);
+      return {
+        ...state,
+        inventoryItems: action.items,
+        availableItems: useNames.join(", "),
+        validationFlags: { ...state.validationFlags, availableItems: false },
+      };
+    }
+    case "SET_DESIGN_CONSTRAINTS":
+      return { ...state, designConstraints: action.value };
+    case "SET_NO_GO_ITEMS":
+      return { ...state, noGoItems: action.value };
+    case "SET_TECH_LEVEL":
+      return { ...state, techLevel: action.value };
     case "ADD_AVAILABLE_ITEM": {
       const chips = parseItemChips(state.availableItems);
       const k = action.label.trim().toLowerCase();
