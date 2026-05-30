@@ -100,6 +100,7 @@ import { EVENT_CONTEXT_PRESETS, ENVIRONMENT_CUSTOM_OPTION, ENVIRONMENT_PRESETS, 
 import { dedupeStringsPreserveOrder } from "@/features/planning/domain/parseItems";
 import { PlanningStateSync } from "@/features/planning/context/PlanningStateSync";
 import { PlanningAppHydrate } from "@/features/planning/context/PlanningAppHydrate";
+import { RoomConfigurationPanel } from "@/features/planning/components/RoomConfigurationPanel";
 import type { PlanningFormState } from "@/features/planning/domain/planningTypes";
 import { isCreativeEnginesEnabled } from "@/features/creative-engines/featureFlag.ts";
 import { ThemeCuratedCard } from "@/components/planning/ThemeCuratedCard";
@@ -2347,6 +2348,9 @@ export default function App() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const isExperienceDesignerRoute =
+    location.pathname.startsWith("/builder") ||
+    location.pathname.startsWith("/coordinator/experience-designer");
 
   const selectedTheme = useMemo(
     () => themes.find((theme) => theme.id === selectedThemeId),
@@ -2626,11 +2630,12 @@ export default function App() {
   const prevWizardStepsRef = useRef(wizardSteps);
   const flowWizardStep: WizardStep = wizardSteps.includes(wizardStep) ? wizardStep : (wizardSteps[0] ?? "setup");
   const persistentCanvasSteps =
-    flowWizardStep === "setup" ||
-    flowWizardStep === "themes" ||
-    flowWizardStep === "themes-puzzles" ||
-    flowWizardStep === "output-review" ||
-    flowWizardStep === "output-export";
+    isExperienceDesignerRoute &&
+    (flowWizardStep === "setup" ||
+      flowWizardStep === "themes" ||
+      flowWizardStep === "themes-puzzles" ||
+      flowWizardStep === "output-review" ||
+      flowWizardStep === "output-export");
   persistentCanvasStepsRef.current = persistentCanvasSteps;
   const wizardIndex = wizardSteps.indexOf(flowWizardStep);
   const missionStepLabels = useMemo(() => wizardSteps.map(wizardStepLabel), [wizardSteps]);
@@ -2952,6 +2957,9 @@ export default function App() {
       void startThemeGenerationRef.current(activeSessionId, "/api/themes/generate", []);
     }
     setWizardStep("themes");
+    if (!location.pathname.startsWith("/builder")) {
+      navigate("/builder/compose", { replace: true });
+    }
   };
 
   const proceedFromThemesToPuzzles = async (): Promise<void> => {
@@ -3697,19 +3705,18 @@ export default function App() {
 
 
   useEffect(() => {
-    if (appView !== "builder" || !persistentCanvasSteps) return;
-    document.documentElement.classList.add("builder-route--fullpage");
-    if (location.pathname.startsWith("/coordinator/experience-designer")) {
-      navigate("/builder/compose", { replace: true });
+    if (appView !== "builder" || !isExperienceDesignerRoute) {
+      document.documentElement.classList.remove("builder-route--fullpage");
       return;
     }
-    if (!location.pathname.startsWith("/builder")) {
+    document.documentElement.classList.add("builder-route--fullpage");
+    if (location.pathname.startsWith("/coordinator/experience-designer")) {
       navigate("/builder/compose", { replace: true });
     }
     return () => {
       document.documentElement.classList.remove("builder-route--fullpage");
     };
-  }, [appView, persistentCanvasSteps, location.pathname, navigate]);
+  }, [appView, isExperienceDesignerRoute, location.pathname, navigate]);
 
   const handleGenerateArchitecturalSkeleton = useCallback((): void => {
     const planning = planningRef.current;
@@ -7817,7 +7824,14 @@ export default function App() {
             )}
           </section>
           <div className="button-row">
-            <button type="button" className="primary-btn" onClick={() => setAppView("builder")}>
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => {
+                setAppView("builder");
+                navigate("/builder/compose");
+              }}
+            >
               Open room builder
             </button>
           </div>
@@ -7877,7 +7891,7 @@ export default function App() {
                 />
             </div>
             ) : null}
-            {persistentCanvasSteps && location.pathname.startsWith("/builder") ? (
+            {persistentCanvasSteps ? (
                     <BuilderPersistentWorkspace
                       flowWizardStep={flowWizardStep}
                       roomSkeleton={lastRoomSkeleton}
@@ -7927,6 +7941,23 @@ export default function App() {
                         puzzleCount: puzzles.length,
                       }}
                     />
+            ) : null}
+            {!isExperienceDesignerRoute && flowWizardStep === "setup" ? (
+              <div className="builder-home-setup max-w-3xl">
+                <RoomConfigurationPanel
+                  eventSuggestions={dedupeStringsPreserveOrder([
+                    ...EVENT_CONTEXT_PRESETS,
+                    ...(inputHistory.eventType ?? []),
+                  ])}
+                  itemHistory={inputHistory.availableItems ?? []}
+                  onOpenInspiration={() => setInspirationOpen(true)}
+                />
+                <div className="button-row mt-4">
+                  <button type="button" className="primary-btn" onClick={() => void proceedFromSetupToThemes()}>
+                    Continue to theme selection →
+                  </button>
+                </div>
+              </div>
             ) : null}
           {flowWizardStep === "saved" && hasSavedPlans && showPlanPicker ? (
         <section className="card mission-panel">
