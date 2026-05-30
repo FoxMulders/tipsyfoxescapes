@@ -1344,6 +1344,13 @@ pre.code-inline {
 
 .generation-progress-indicator.glass-panel {
   overflow: hidden;
+  background: rgba(12, 22, 38, 0.28) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  backdrop-filter: blur(var(--studio-window-blur, 16px)) saturate(1.15);
+  -webkit-backdrop-filter: blur(var(--studio-window-blur, 16px)) saturate(1.15);
+  box-shadow:
+    0 10px 36px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 .generation-progress-indicator--surface {

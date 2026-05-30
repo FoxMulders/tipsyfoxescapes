@@ -94,7 +94,7 @@ export function ExperienceThemeSection(props: ExperienceThemeSectionProps) {
         />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-44 w-full rounded-lg bg-slate-800/60" />
+            <Skeleton key={i} className="theme-loading-skeleton glass-panel h-44 w-full rounded-lg bg-transparent" />
           ))}
         </div>
       </div>

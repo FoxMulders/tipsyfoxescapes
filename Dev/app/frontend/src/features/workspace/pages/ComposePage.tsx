@@ -66,7 +66,7 @@ function ComposeThemeSkeleton() {
   return (
     <>
       {[1, 2, 3].map((i) => (
-        <Skeleton key={i} className="h-48 w-full rounded-lg bg-slate-800/60" />
+        <Skeleton key={i} className="theme-loading-skeleton glass-panel h-48 w-full rounded-lg bg-transparent" />
       ))}
     </>
   );

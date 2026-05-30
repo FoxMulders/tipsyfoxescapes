@@ -28,7 +28,10 @@ export function GenerationProgressIndicator({
 
   return (
     <div
-      className={cn("generation-progress-indicator glass-panel rounded-xl", className)}
+      className={cn(
+        "generation-progress-indicator glass-panel output-review-glass-surface rounded-xl",
+        className,
+      )}
       role="status"
       aria-live="polite"
       aria-busy="true"
