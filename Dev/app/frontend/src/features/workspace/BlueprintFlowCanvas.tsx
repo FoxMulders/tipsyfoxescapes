@@ -115,9 +115,9 @@ function BlueprintFlowCanvasInner({
       >
         <FitViewOnGraphChange graphKey={graphKey} layoutRevision={layoutRevision} />
         <Background variant={BackgroundVariant.Lines} gap={24} size={1} color="hsl(215 35% 28% / 0.45)" />
-        <Controls className="workspace-flow-controls !border-slate-700 !bg-slate-900/90 !shadow-lg" position="bottom-left" />
+        <Controls className="workspace-flow-controls glass-panel !border-white/12 !bg-transparent !shadow-lg" position="bottom-left" />
         <MiniMap
-          className="!border-slate-700 !bg-slate-900/80 hidden md:block"
+          className="glass-panel !border-white/12 !bg-transparent hidden md:block"
           nodeColor={(node) => (node.type === "puzzleBeat" ? "#a78bfa" : "#22d3ee")}
           maskColor="rgb(15 23 42 / 0.75)"
           position="bottom-right"

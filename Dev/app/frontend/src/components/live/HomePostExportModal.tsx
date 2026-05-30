@@ -34,7 +34,7 @@ export function HomePostExportModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="live-glass-panel max-w-lg border-slate-700/60 bg-slate-950/90 backdrop-blur-xl">
+      <DialogContent className="live-glass-panel glass-panel max-w-lg border-white/12 bg-transparent">
         <DialogHeader>
           <DialogTitle>How to run your game</DialogTitle>
           <DialogDescription>

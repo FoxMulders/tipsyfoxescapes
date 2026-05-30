@@ -210,7 +210,7 @@ function PlanningSidebarEdit(props: PlanningSidebarProps) {
         <FieldHint label="Enforce environmental fit" htmlFor="sidebar-enforce-env-fit" />
       </div>
 
-      <Accordion type="single" collapsible className="rounded-md border border-slate-800/50 bg-card/30 px-3 backdrop-blur-md">
+      <Accordion type="single" collapsible className="form-field-panel rounded-md border border-white/12 px-3">
         <AccordionItem value="advanced">
           <AccordionTrigger className="py-2 text-xs">Advanced</AccordionTrigger>
           <AccordionContent className="space-y-3 pb-3">

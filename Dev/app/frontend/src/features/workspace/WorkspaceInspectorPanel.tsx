@@ -79,7 +79,7 @@ export function WorkspaceInspectorPanel({
 
 function PuzzleInspectorBlock({ puzzle }: { puzzle: PuzzleInspectorSlice }) {
   return (
-    <div className="rounded-lg border border-slate-700/80 bg-slate-900/60 p-3">
+    <div className="glass-panel rounded-lg border border-white/12 bg-transparent p-3">
       <p className="m-0 text-[10px] font-bold uppercase tracking-widest text-violet-300/90">Linked puzzle</p>
       <h4 className="m-0 mt-1 text-base font-semibold text-slate-50">{puzzle.title}</h4>
       <p className="mt-1 mb-0 text-xs uppercase tracking-wide text-slate-500">{puzzle.category}</p>
@@ -120,7 +120,7 @@ export function WorkspaceInspectorMobile({
   return (
     <div className="workspace-inspector-mobile fixed inset-0 z-[70] lg:hidden" role="dialog" aria-modal="true">
       <button type="button" className="absolute inset-0 bg-black/55 backdrop-blur-sm" aria-label="Close inspector" onClick={onClose} />
-      <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-slate-700/80 bg-slate-950/98 shadow-2xl animate-in slide-in-from-right duration-200">
+      <div className="glass-panel absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-white/12 bg-transparent shadow-2xl animate-in slide-in-from-right duration-200">
         <header className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-3">
           <h2 className="m-0 text-sm font-bold text-slate-100">Inspector</h2>
           <button

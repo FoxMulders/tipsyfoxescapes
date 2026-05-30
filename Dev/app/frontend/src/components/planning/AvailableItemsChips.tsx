@@ -91,7 +91,7 @@ export function AvailableItemsChips({
   return (
     <div
       className={cn(
-        "space-y-3 rounded-md border border-slate-800/50 bg-card/40 p-4 backdrop-blur-md",
+        "form-field-panel space-y-3 rounded-md border border-white/12 p-4",
         invalid && "border-destructive/60",
         disabled && "opacity-60",
       )}

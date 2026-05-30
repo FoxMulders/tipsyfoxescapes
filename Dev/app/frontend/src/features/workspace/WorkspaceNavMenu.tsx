@@ -69,7 +69,7 @@ export function WorkspaceNavMenu({
       </button>
       {open ? (
         <div
-          className="workspace-nav-menu__panel absolute left-0 top-[calc(100%+0.35rem)] z-[80] w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-slate-700/90 bg-slate-950/98 p-3 shadow-2xl"
+          className="workspace-nav-menu__panel glass-panel absolute left-0 top-[calc(100%+0.35rem)] z-[80] w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-white/12 bg-transparent p-3 shadow-2xl"
           role="menu"
         >
           <p className="m-0 text-[10px] font-bold uppercase tracking-widest text-slate-500">Workspace</p>

@@ -42,7 +42,7 @@ export function ResetChecklistModal({ open, onClose, sessionId }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="live-glass-panel max-w-md border-slate-700/60 bg-slate-950/90 backdrop-blur-xl">
+      <DialogContent className="live-glass-panel glass-panel max-w-md border-white/12 bg-transparent">
         <DialogHeader>
           <DialogTitle>Interactive reset checklist</DialogTitle>
           <DialogDescription>Step through teardown before the next group.</DialogDescription>

@@ -49,7 +49,7 @@ export function AdvancedFeatureSections() {
 /** @deprecated Use AdvancedFeatureSections inside RoomConfigurationPanel accordion. */
 export function AdvancedFeatureToggle() {
   return (
-    <Accordion type="single" collapsible className="form-field-panel advanced-config-panel rounded-md border border-slate-600 bg-slate-900 px-4">
+    <Accordion type="single" collapsible className="form-field-panel advanced-config-panel rounded-md border border-white/12 px-4">
       <AccordionItem value="advanced">
         <AccordionTrigger>Advanced options</AccordionTrigger>
         <AccordionContent>

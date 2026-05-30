@@ -46,7 +46,7 @@ export function RoomConfigurationPanel({
         <Accordion
           type="single"
           collapsible
-          className="form-field-panel advanced-config-panel rounded-md border border-slate-600 bg-slate-900 px-4"
+          className="form-field-panel advanced-config-panel rounded-md border border-white/12 px-4"
         >
           <AccordionItem value="advanced-configuration">
             <AccordionTrigger>Advanced Configuration</AccordionTrigger>
