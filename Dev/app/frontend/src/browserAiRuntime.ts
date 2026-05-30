@@ -44,6 +44,17 @@ export const normalizeModelText = (raw: unknown): string => {
   return String(raw ?? "");
 };
 
+/** Phones and small tablets — Prompt API theme drafting is desktop-first today. */
+export const isMobileLikeDevice = (): boolean => {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  if (/Android|iPhone|iPod|Mobile/i.test(ua)) return true;
+  if (typeof window !== "undefined" && window.matchMedia?.("(max-width: 900px)").matches && /iPad|Tablet/i.test(ua)) {
+    return true;
+  }
+  return false;
+};
+
 /** Best-effort detection for Chromium Prompt API and legacy `window.ai.languageModel`. */
 export const isBrowserAiAvailable = (): boolean => {
   if (typeof globalThis === "undefined") return false;

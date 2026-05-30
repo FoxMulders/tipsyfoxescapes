@@ -123,10 +123,12 @@ import {
 import {
   enhancePlanInBrowser,
   isBrowserAiAvailable,
+  isMobileLikeDevice,
   polishThemeBriefInBrowser,
   probeBrowserLanguageModel,
   refineThemeFitReasonInBrowser,
 } from "./browserAi.ts";
+import { ThemeGenerateButton } from "@/components/themes/ThemeGenerateButton";
 import { generateThemesInBrowser } from "./browserAiThemes.ts";
 import { generatePuzzlesInBrowser } from "./browserAiPuzzles.ts";
 import { estimateBrowserCategoryCounts } from "./browserGenerationPlanning.ts";
@@ -3546,7 +3548,18 @@ export default function App() {
     hasFullCatalogAccess ||
     serverOpenAiConfigured === true ||
     browserAiReady ||
-    coachBrowserAiReady;
+    coachBrowserAiReady ||
+    (Boolean(authUser) && isMobileLikeDevice());
+  const handleGenerateNewThemes = (): void => {
+    void loadThemes(themes.length > 0 ? "/api/themes/refresh" : "/api/themes/generate");
+  };
+  const themeGenerateDisabledTitle = canGenerateNewThemes
+    ? undefined
+    : hasFullCatalogAccess
+      ? undefined
+      : isMobileLikeDevice()
+        ? "Sign in to generate themes for your room"
+        : "Use Chrome on-device AI or upgrade to a room pack for rotating theme ideas";
   const canNavigateToOutputReview = Boolean(selectedThemeId.trim());
 
   const planCompletionPercent = useMemo(
@@ -4303,11 +4316,15 @@ export default function App() {
     };
 
     if (serverOpenAiConfigured !== true) {
-      try {
-        const browserThemes = await importBrowserThemes();
-        if (browserThemes) return browserThemes;
-      } catch {
-        // fall through to server catalog
+      const tryBrowserThemes =
+        !isMobileLikeDevice() || browserAiReady || coachBrowserAiReady || isBrowserAiAvailable();
+      if (tryBrowserThemes) {
+        try {
+          const browserThemes = await importBrowserThemes();
+          if (browserThemes) return browserThemes;
+        } catch {
+          // fall through to server catalog
+        }
       }
     }
     if (themeGenerationStale()) return undefined;
@@ -6295,24 +6312,6 @@ export default function App() {
                 : null;
 
   const showBackInFlowHeader = !(flowWizardStep === "themes" && themePath !== "custom");
-  const themeRefreshButton = (
-    <button
-      type="button"
-      className="secondary-btn theme-generate-new-btn"
-      disabled={!canGenerateNewThemes || themeIdeasLoading}
-      title={
-        canGenerateNewThemes
-          ? "Draft a fresh set of theme concepts from your room details"
-          : hasFullCatalogAccess
-            ? undefined
-            : "Use Chrome on-device AI or upgrade to a room pack for rotating theme ideas"
-      }
-      aria-busy={themeIdeasLoading}
-      onClick={() => void loadThemes(themes.length > 0 ? "/api/themes/refresh" : "/api/themes/generate")}
-    >
-      {themeIdeasLoading ? "Generating…" : themes.length > 0 ? "Generate new themes" : "Generate themes"}
-    </button>
-  );
 
   const themeHeaderActions =
     flowWizardStep === "themes" && themePath !== "custom" ? (
@@ -6322,7 +6321,14 @@ export default function App() {
             ← Back
           </button>
         ) : null}
-        {themeRefreshButton}
+        <ThemeGenerateButton
+          className="theme-generate-new-btn--header"
+          themesCount={themes.length}
+          loading={themeIdeasLoading}
+          disabled={!canGenerateNewThemes}
+          disabledTitle={themeGenerateDisabledTitle}
+          onGenerate={handleGenerateNewThemes}
+        />
       </div>
     ) : null;
 
@@ -7313,7 +7319,13 @@ export default function App() {
                           <p className="muted theme-ideas-generate-lead">
                             Want different concepts? Generate a fresh set — your room details stay the same.
                           </p>
-                          {themeRefreshButton}
+                          <ThemeGenerateButton
+                            themesCount={themes.length}
+                            loading={themeIdeasLoading}
+                            disabled={!canGenerateNewThemes}
+                            disabledTitle={themeGenerateDisabledTitle}
+                            onGenerate={handleGenerateNewThemes}
+                          />
                         </div>
                       ) : null}
                       {themeSessionExpiredNotice ? (
@@ -7339,7 +7351,13 @@ export default function App() {
                       {themes.length === 0 && !themeIdeasLoading && !themeSessionExpiredNotice ? (
                         <div className="theme-ideas-actions theme-ideas-actions--generate">
                           <p className="muted">Theme ideas did not load yet.</p>
-                          {themeRefreshButton}
+                          <ThemeGenerateButton
+                            themesCount={themes.length}
+                            loading={themeIdeasLoading}
+                            disabled={!canGenerateNewThemes}
+                            disabledTitle={themeGenerateDisabledTitle}
+                            onGenerate={handleGenerateNewThemes}
+                          />
                         </div>
                       ) : null}
                       {themes.length > 0 ? (

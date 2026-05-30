@@ -1,6 +1,6 @@
-import { createLanguageModel, extractJson, isBrowserAiAvailable, probeBrowserLanguageModel, promptWithTimeout } from "./browserAiRuntime.ts";
+import { createLanguageModel, extractJson, isBrowserAiAvailable, isMobileLikeDevice, probeBrowserLanguageModel, promptWithTimeout } from "./browserAiRuntime.ts";
 
-export { isBrowserAiAvailable, probeBrowserLanguageModel };
+export { isBrowserAiAvailable, isMobileLikeDevice, probeBrowserLanguageModel };
 export type { CustomThemeCoachContext, CustomThemeCoachMessage } from "./browserAiCoach.ts";
 export type { ContextualInspirationResult, InspirationCatalogEntry } from "./browserAiInspiration.ts";
 export { INSPIRATION_CATALOG, generateContextualInspirationInBrowser } from "./browserAiInspiration.ts";

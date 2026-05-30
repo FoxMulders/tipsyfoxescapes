@@ -7656,9 +7656,16 @@ ul.auth-hero-para {
 }
 
 @media (max-width: 900px) {
+  .room-builder-cad {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
   .room-builder-cad__grid {
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
+    overflow: visible;
   }
 
   .room-config-panel {
@@ -7668,6 +7675,74 @@ ul.auth-hero-para {
   .sticky-dashboard {
     position: static;
   }
+
+  .theme-header-actions .theme-generate-new-btn--header {
+    display: none;
+  }
+}
+
+.room-builder-cad--mobile {
+  gap: 0.65rem;
+}
+
+.room-mobile-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border-radius: 10px;
+  border: var(--cad-panel-border, 1px solid hsl(187 70% 42% / 0.22));
+  background: hsl(217 32% 10% / 0.72);
+}
+
+.room-mobile-tabs__btn {
+  min-height: 2.75rem;
+  padding: 0.45rem 0.35rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.room-mobile-tabs__btn--active {
+  border-color: var(--cad-neon-cyan, #22d3ee);
+  background: hsl(187 85% 43% / 0.14);
+  color: #f0fdff;
+}
+
+.room-mobile-panel {
+  min-width: 0;
+}
+
+.room-mobile-panel--layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-height: min(72vh, 640px);
+}
+
+.room-mobile-panel--layout .blueprint-workspace {
+  flex: 1 1 auto;
+  min-height: min(68vh, 600px);
+  display: flex;
+  flex-direction: column;
+}
+
+.room-mobile-panel--layout .blueprint-workspace__stage {
+  flex: 1 1 auto;
+  min-height: min(60vh, 520px);
+}
+
+.room-mobile-panel--layout .blueprint-canvas-host.layout-designer-canvas-host {
+  min-height: min(56vh, 480px);
+}
+
+.room-mobile-panel--setup .room-config-panel,
+.room-mobile-panel--plan .sticky-dashboard {
+  max-height: none;
 }
 
 @media (min-width: 1025px) {
