@@ -1,3 +1,5 @@
+import { GenerationProgressIndicator } from "@/components/generation/GenerationProgressIndicator";
+import { PUZZLE_GENERATION_PHASES } from "@/components/generation/GenerationProgressPhases";
 import type { CouncilReportClient, CouncilVerdictClient, GenerationEngine, GenerationTelemetry } from "../domain/generationTelemetry";
 import { generationEngineLabel } from "../domain/generationTelemetry";
 
@@ -45,9 +47,7 @@ export function CouncilTelemetryPanel({ loading, telemetry, compact }: CouncilTe
           <h4 className="council-telemetry__title">Generation engine</h4>
           <GenerationEngineBadge engine="static_catalog" loading={true} />
         </header>
-        <p className="council-telemetry__lead muted text-sm">
-          Building your puzzle set and room layout preview…
-        </p>
+        <GenerationProgressIndicator active phases={PUZZLE_GENERATION_PHASES} className="generation-progress-indicator--compact" />
       </section>
     );
   }

@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { RoomConfigurationPanel } from "@/features/planning/components/RoomConfigurationPanel";
+import { GenerationProgressIndicator } from "@/components/generation/GenerationProgressIndicator";
+import { PUZZLE_GENERATION_PHASES } from "@/components/generation/GenerationProgressPhases";
 import type { WorkspaceStepId } from "./workspaceSteps";
 
 type WorkspaceLeftPanelProps = {
@@ -74,6 +76,7 @@ export function WorkspaceLeftPanel({
             <h2 className="m-0 text-base font-bold text-slate-50">Puzzle generation</h2>
             <p className="mt-1 mb-0 text-sm text-slate-400">Build a varied puzzle set aligned to your theme and room flow.</p>
           </header>
+          <GenerationProgressIndicator active={puzzlesGenerating} phases={PUZZLE_GENERATION_PHASES} />
           <button
             type="button"
             className="primary-btn w-full"
@@ -82,6 +85,9 @@ export function WorkspaceLeftPanel({
           >
             {puzzlesGenerating ? "Generating puzzles…" : "Generate puzzle set"}
           </button>
+          {!puzzlesGenerating ? null : (
+            <p className="m-0 text-xs text-slate-500">Diegetic compile runs on the server — collapse side panels for a full blueprint view.</p>
+          )}
           {extraContent ? <div className="min-h-0 flex-1 overflow-auto">{extraContent}</div> : null}
         </div>
       );

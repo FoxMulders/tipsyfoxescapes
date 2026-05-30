@@ -63,6 +63,47 @@ export type AiPuzzlePlanningContext = {
 export type AiPuzzleThemeContext = {
   name: string;
   tldr: string;
+  /** Full theme brief / markdown description — primary narrative context for diegetic compile. */
+  description?: string;
+};
+
+/** Narrative context passed into Step 2 presentation compile (theme brief + premise). */
+export const buildStoryContext = (theme: AiPuzzleThemeContext): string => {
+  const parts = [theme.tldr.trim(), theme.description?.trim()].filter(Boolean);
+  return parts.join("\n\n").trim() || theme.name;
+};
+
+const buildDiegeticNarrativeBlock = (
+  theme: AiPuzzleThemeContext,
+  layer: DiegeticLayer,
+): string => {
+  const storyContext = buildStoryContext(theme);
+  const propDesign = layer.physical_prop_translation.prop_design.trim();
+  return [
+    `Theme: ${theme.name}`,
+    `Story context: ${storyContext}`,
+    `Prop design (Step 1): ${propDesign}`,
+    `Player action (Step 1): ${layer.physical_prop_translation.player_action.trim()}`,
+    `Trigger mechanism (Step 1): ${layer.hardware_and_electronics.trigger_mechanism.trim()}`,
+  ].join("\n");
+};
+
+const buildPresentationSystemPrompt = (theme: AiPuzzleThemeContext, layer: DiegeticLayer, home: boolean): string => {
+  const storyContext = buildStoryContext(theme);
+  const propDesign = layer.physical_prop_translation.prop_design.trim();
+  const critical = [
+    "CRITICAL: You are designing puzzles for a room with the theme:",
+    theme.name,
+    "The narrative context is:",
+    storyContext,
+    "The room's physical design is:",
+    propDesign,
+    "EVERY puzzle mechanic, item, and Arduino hardware profile MUST be diegetically embedded in this specific narrative.",
+    "Do not use generic escape room tropes.",
+  ].join(" ");
+
+  const policy = home ? homePartyCompilerSystem : `${commercialCompilerSystem}\n\n${STEP2_FIRMWARE_SYSTEM}`;
+  return `${COMPILER_SYSTEM}\n\n${critical}\n\n${policy}`;
 };
 
 export type CallOpenAiPuzzlesInput = {
@@ -173,14 +214,17 @@ const compileDiegeticLayer = async (
   feedback?: string,
 ): Promise<DiegeticLayer> => {
   const home = isHomePartyTarget(ctx.targetInterface);
+  const storyContext = buildStoryContext(theme);
   const userPrompt = [
     `Theme: "${theme.name}"`,
     `Theme premise: ${theme.tldr}`,
+    theme.description?.trim() ? `Story context (full theme brief):\n${theme.description.trim()}` : "",
     buildPlanningBlock(planning, difficulty, ctx.targetInterface),
     ctx.roomSkeleton ? `\nApproved room skeleton:\n${JSON.stringify(ctx.roomSkeleton, null, 2)}` : "",
     "",
     `Compile STEP 1 — diegetic hardware/physical layer for ONE ${category} puzzle.`,
-    "Output ONLY the physical affordances and trigger mechanism — NO narrative flavor yet.",
+    `Anchor every affordance in this narrative context:\n${storyContext}`,
+    "Output ONLY the physical affordances and trigger mechanism — NO host-facing title or solve steps yet.",
     home
       ? "Set hardware_profile to print_and_play (household props, paper clues, padlocks — no MCU)."
       : category === "electronic"
@@ -214,17 +258,17 @@ const compilePuzzlePresentation = async (
   feedback?: string,
 ): Promise<PuzzlePresentation> => {
   const home = isHomePartyTarget(ctx.targetInterface);
+  const diegeticBlock = buildDiegeticNarrativeBlock(theme, layer);
   const userPrompt = [
-    `Theme: "${theme.name}"`,
-    `Theme premise: ${theme.tldr}`,
+    diegeticBlock,
     buildPlanningBlock(planning, difficulty, ctx.targetInterface),
     ctx.roomSkeleton ? `\nApproved room skeleton:\n${JSON.stringify(ctx.roomSkeleton, null, 2)}` : "",
     "",
     `Compile STEP 2 — host-facing presentation for ONE ${category} puzzle.`,
-    "Derive title, objective, solveSteps, and narrative_justification ONLY from this validated physical layer:",
+    "Derive title, objective, solveSteps, and narrative_justification ONLY from the Step 1 physical layer below:",
     JSON.stringify(layer, null, 2),
     "",
-    "narrative_justification MUST explain why this exact mechanism exists in the room fiction.",
+    "narrative_justification MUST explain why this exact mechanism exists in the room fiction using the theme and story context above.",
     "Do NOT use: represents, symbolizes, simulates, cipher chart, padlock.",
     "Set banned_word_check=true only when all strings avoid those tropes.",
     home
@@ -240,7 +284,7 @@ const compilePuzzlePresentation = async (
 
   return callOpenAiStructured({
     apiKey,
-    system: `${COMPILER_SYSTEM}\n\n${home ? homePartyCompilerSystem : `${commercialCompilerSystem}\n\n${STEP2_FIRMWARE_SYSTEM}`}`,
+    system: buildPresentationSystemPrompt(theme, layer, home),
     user: userPrompt,
     schema: PuzzlePresentationSchema,
     schemaName: "puzzle_presentation",

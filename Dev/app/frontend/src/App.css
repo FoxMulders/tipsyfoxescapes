@@ -1122,7 +1122,8 @@ pre.code-inline {
   gap: 0.45rem;
 }
 
-.theme-generating-indicator {
+.theme-generating-indicator,
+.generation-progress-indicator {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1131,13 +1132,15 @@ pre.code-inline {
   text-align: center;
 }
 
-.theme-generating-spinner {
+.theme-generating-spinner,
+.generation-progress-indicator__spinner {
   display: flex;
   gap: 0.45rem;
   align-items: center;
 }
 
-.theme-generating-spinner span {
+.theme-generating-spinner span,
+.generation-progress-indicator__spinner span {
   display: block;
   width: 10px;
   height: 10px;
@@ -1146,15 +1149,18 @@ pre.code-inline {
   animation: theme-gen-pulse 1.4s ease-in-out infinite;
 }
 
-.theme-generating-spinner span:nth-child(2) { animation-delay: 0.22s; }
-.theme-generating-spinner span:nth-child(3) { animation-delay: 0.44s; }
+.theme-generating-spinner span:nth-child(2),
+.generation-progress-indicator__spinner span:nth-child(2) { animation-delay: 0.22s; }
+.theme-generating-spinner span:nth-child(3),
+.generation-progress-indicator__spinner span:nth-child(3) { animation-delay: 0.44s; }
 
 @keyframes theme-gen-pulse {
   0%, 80%, 100% { opacity: 0.25; transform: scale(0.75); }
   40%            { opacity: 1;    transform: scale(1.15); }
 }
 
-.theme-generating-headline {
+.theme-generating-headline,
+.generation-progress-indicator__headline {
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
@@ -1162,14 +1168,16 @@ pre.code-inline {
   letter-spacing: 0.01em;
 }
 
-.theme-generating-sub {
+.theme-generating-sub,
+.generation-progress-indicator__sub {
   margin: 0;
   font-size: 0.85rem;
   max-width: 30rem;
   line-height: 1.5;
 }
 
-.theme-generating-bar {
+.theme-generating-bar,
+.generation-progress-indicator__bar {
   width: 100%;
   max-width: 20rem;
   height: 4px;
@@ -1178,12 +1186,26 @@ pre.code-inline {
   overflow: hidden;
 }
 
-.theme-generating-bar__fill {
+.theme-generating-bar__fill,
+.generation-progress-indicator__bar-fill {
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, hsl(187 92% 48%), hsl(220 80% 68%));
   animation: theme-gen-progress 18s cubic-bezier(0.1, 0.4, 0.6, 1) forwards;
   transform-origin: left;
+}
+
+.generation-progress-indicator--compact {
+  padding: 1rem 0.75rem 1.25rem;
+  gap: 0.5rem;
+}
+
+.generation-progress-indicator--compact .generation-progress-indicator__headline {
+  font-size: 0.9rem;
+}
+
+.generation-progress-indicator--compact .generation-progress-indicator__sub {
+  font-size: 0.78rem;
 }
 
 @keyframes theme-gen-progress {

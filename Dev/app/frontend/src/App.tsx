@@ -133,6 +133,8 @@ import {
 } from "./browserAi.ts";
 import { ThemeGenerateButton } from "@/components/themes/ThemeGenerateButton";
 import { generateThemesInBrowser } from "./browserAiThemes.ts";
+import { GenerationProgressIndicator } from "@/components/generation/GenerationProgressIndicator";
+import { PUZZLE_GENERATION_PHASES, THEME_GENERATION_PHASES } from "@/components/generation/GenerationProgressPhases";
 import { generatePuzzlesInBrowser } from "./browserAiPuzzles.ts";
 import { estimateBrowserCategoryCounts } from "./browserGenerationPlanning.ts";
 import type { CustomThemeCoachContext, CustomThemeCoachMessage } from "./browserAiCoach.ts";
@@ -7392,19 +7394,7 @@ export default function App() {
                         </div>
                       ) : null}
                       {themes.length === 0 && themeIdeasLoading && !themeSessionExpiredNotice ? (
-                        <div className="theme-generating-indicator" role="status" aria-live="polite">
-                          <div className="theme-generating-spinner" aria-hidden="true">
-                            <span /><span /><span />
-                          </div>
-                          <p className="theme-generating-headline">Generating theme ideas…</p>
-                          <p className="theme-generating-sub muted">
-                            Crafting escape-room concepts tailored to your room setup — this usually takes{" "}
-                            <strong>10–60 seconds</strong>.
-                          </p>
-                          <div className="theme-generating-bar" aria-hidden="true">
-                            <div className="theme-generating-bar__fill" />
-                          </div>
-                        </div>
+                        <GenerationProgressIndicator active phases={THEME_GENERATION_PHASES} />
                       ) : null}
                       {themes.length === 0 && !themeIdeasLoading && !themeSessionExpiredNotice ? (
                         <div className="theme-ideas-actions theme-ideas-actions--generate">
@@ -7530,6 +7520,7 @@ export default function App() {
                   </p>
                 </div>
                 <h2>Build puzzle set</h2>
+                <GenerationProgressIndicator active={puzzlesGenerating} phases={PUZZLE_GENERATION_PHASES} />
                 <p className="puzzle-pool-selection-note" role="note">
                   The generator drafted these thematic puzzles to match your room capacity. Select the active pool, toggle
                   variations, or leave unselected puzzles as backups—the set updates when you continue to review.

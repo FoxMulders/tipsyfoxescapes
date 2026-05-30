@@ -38,6 +38,7 @@ const compileRoomSkeleton = async (
   const userPrompt = [
     `Theme: "${input.theme.name}"`,
     `Premise: ${input.theme.tldr}`,
+    input.theme.description?.trim() ? `Story context:\n${input.theme.description.trim()}` : "",
     `Target: ${input.targetInterface}`,
     `Environment: ${input.planning.environmentType}`,
     `Players concurrent: ${input.planning.playersConcurrent}`,

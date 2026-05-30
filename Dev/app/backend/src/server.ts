@@ -5533,6 +5533,7 @@ app.post("/api/puzzles/generate", async (req, res) => {
     theme: {
       name: session.selectedTheme!.name,
       tldr: session.selectedTheme!.tldr,
+      description: session.selectedTheme!.description,
     },
     planning: {
       environmentType: session.planningInput.environmentType,
