@@ -15,9 +15,11 @@ html.builder-route--fullpage #root {
 .experience-designer {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--app-top-nav-height, 0px));
-  max-height: calc(100vh - var(--app-top-nav-height, 0px));
+  height: 100vh;
+  max-height: 100vh;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 .experience-designer__header {

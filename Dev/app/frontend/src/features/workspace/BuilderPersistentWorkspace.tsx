@@ -230,6 +230,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       ) : null}
       <Routes>
         <Route
+          path="/builder"
           element={
             <ExperienceDesignerShell
               navMenu={navMenu}
@@ -245,12 +246,13 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
             />
           }
         >
+          <Route index element={<Navigate to="compose" replace />} />
           <Route path="compose" element={<ComposePage />} />
           <Route path="generating" element={<GeneratingPage />} />
           <Route path="studio" element={<StudioPage />} />
           <Route path="curate" element={<CuratePage />} />
           <Route path="review" element={<ReviewPage />} />
-          <Route index element={<Navigate to="compose" replace />} />
+          <Route path="*" element={<Navigate to="compose" replace />} />
         </Route>
       </Routes>
     </ExperienceDesignerProvider>

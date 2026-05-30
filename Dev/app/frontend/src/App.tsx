@@ -7877,11 +7877,7 @@ export default function App() {
                 />
             </div>
             ) : null}
-            {persistentCanvasSteps ? (
-              <Routes>
-                <Route
-                  path="/builder/*"
-                  element={
+            {persistentCanvasSteps && location.pathname.startsWith("/builder") ? (
                     <BuilderPersistentWorkspace
                       flowWizardStep={flowWizardStep}
                       roomSkeleton={lastRoomSkeleton}
@@ -7931,9 +7927,6 @@ export default function App() {
                         puzzleCount: puzzles.length,
                       }}
                     />
-                  }
-                />
-              </Routes>
             ) : null}
           {flowWizardStep === "saved" && hasSavedPlans && showPlanPicker ? (
         <section className="card mission-panel">
