@@ -90,6 +90,91 @@ html.builder-route--fullpage #root {
   overflow-y: auto;
 }
 
+.compose-step-indicator {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 0.75rem;
+  flex-shrink: 0;
+  padding: 0.75rem 1rem 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.compose-step-indicator__item {
+  color: rgba(148, 163, 184, 0.72);
+}
+
+.compose-step-indicator__item--active {
+  color: #67e8f9;
+}
+
+.compose-step-indicator__item--complete {
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.compose-step-indicator__item--pending {
+  color: rgba(100, 116, 139, 0.72);
+}
+
+.compose-step-indicator__sep {
+  color: rgba(100, 116, 139, 0.55);
+}
+
+.compose-step-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.compose-step-panel--room-details {
+  overflow-y: auto;
+  padding: 0 1rem 1.5rem;
+}
+
+.compose-room-details {
+  width: min(100%, 42rem);
+  margin: 0.75rem auto 0;
+  padding: 1.25rem 1.25rem 1rem;
+  border-radius: 0.75rem;
+}
+
+.compose-room-details__header {
+  margin-bottom: 1rem;
+}
+
+.compose-room-details__form {
+  margin-top: 0.25rem;
+}
+
+.compose-room-details__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.compose-room-details__next {
+  min-width: min(100%, 12rem);
+}
+
+.compose-step-panel--themes {
+  overflow-y: auto;
+}
+
+.experience-compose-hero__actions {
+  display: flex;
+  justify-content: flex-start;
+  max-width: 1200px;
+  margin: 0 auto 0.5rem;
+  padding: 0 1rem;
+}
+
 .compose-planning-gate__header {
   display: flex;
   align-items: flex-start;

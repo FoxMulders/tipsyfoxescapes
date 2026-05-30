@@ -5,6 +5,8 @@ import type { PuzzleInspectorSlice } from "./WorkspaceInspectorPanel";
 import type { WorkspaceNavMenuProps } from "./WorkspaceNavMenu";
 import type { FlowNodeData, ZoneNodeData } from "./generationFlowGraph";
 
+export type ComposeActiveStep = "room-details" | "themes";
+
 export type ExperienceDesignerContextValue = {
   roomSkeleton: RoomSkeleton | null;
   generationTelemetry: GenerationTelemetry | null;
@@ -23,6 +25,12 @@ export type ExperienceDesignerContextValue = {
   themeIdeasLoading: boolean;
   canGenerateNewThemes: boolean;
   themePath: "generated" | "custom" | null;
+  composeActiveStep: ComposeActiveStep;
+  setComposeActiveStep: (step: ComposeActiveStep) => void;
+  onSaveRoomDetails: () => Promise<boolean>;
+  onTryValidateRoomDetails: () => boolean;
+  onPlanningIncomplete: () => void;
+  eventSuggestions: string[];
   onOpenReview: () => void;
   onReplacePuzzle: (id: string) => void;
   composeThemeContent: ReactNode;

@@ -3011,7 +3011,7 @@ export default function App() {
       window.requestAnimationFrame(() => {
         document
           .querySelector(
-            "[data-testid='compose-planning-gate'] [aria-invalid='true'], #room-details-blueprint-form .border-destructive, #room-details-blueprint-form .invalid-field",
+            "[data-testid='compose-room-details'] [aria-invalid='true'], [data-testid='compose-planning-gate'] [aria-invalid='true'], #room-details-blueprint-form .border-destructive, #room-details-blueprint-form .invalid-field",
           )
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
       });
@@ -3241,6 +3241,34 @@ export default function App() {
     participantsTotal,
     sessionDurationMinutes,
     environmentType,
+    targetInterface,
+  ]);
+
+  const saveComposeRoomDetails = useCallback(async (): Promise<boolean> => {
+    setError("");
+    if (!buildPlanningBody("strict")) {
+      flagMissingFields(collectStrictPlanningMissing());
+      return false;
+    }
+    rememberInput("environmentType", environmentType);
+    rememberInput("availableItems", availableItems);
+    rememberInput("eventType", eventType);
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) return false;
+    const synced = await syncPlanningInputToServer(activeSessionId, "strict");
+    if (!synced) return false;
+    if (themePath !== "custom") {
+      setThemePath("generated");
+    }
+    return true;
+  }, [
+    environmentType,
+    availableItems,
+    eventType,
+    themePath,
+    playersConcurrent,
+    participantsTotal,
+    sessionDurationMinutes,
     targetInterface,
   ]);
 
@@ -8234,6 +8262,7 @@ export default function App() {
                       onReplacePuzzle={(id) => void replacePuzzle(id)}
                       onTryGenerateRoom={tryGenerateRoom}
                       onPlanningIncomplete={notifyPlanningIncomplete}
+                      onSaveRoomDetails={saveComposeRoomDetails}
                       onResetGeneration={resetRoomGeneration}
                       composeThemeContent={experienceComposeTheme}
                       curateContent={experienceCurateContent}

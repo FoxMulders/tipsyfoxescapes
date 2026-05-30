@@ -4,9 +4,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { RoomSkeleton } from "../../../../shared/roomSkeleton";
 import type { GenerationTelemetry } from "@/features/planning/domain/generationTelemetry";
-import { ExperienceDesignerProvider } from "./ExperienceDesignerContext";
+import { ExperienceDesignerProvider, type ComposeActiveStep } from "./ExperienceDesignerContext";
 import { ExperienceDesignerShell } from "./ExperienceDesignerShell";
-import { GeneratePlanningDialog } from "./GeneratePlanningDialog";
 import type { FlowNodeData, PuzzleNodeData, ZoneNodeData } from "./generationFlowGraph";
 import { ComposePage, CuratePage, GeneratingPage, ReviewPage, StudioPage } from "./pages";
 import { resolveWorkspaceStep, workspaceStepFromPath, type WorkspaceStepId } from "./workspaceSteps";
@@ -43,6 +42,7 @@ export type BuilderPersistentWorkspaceProps = {
   onWorkspaceReauth: () => void;
   onTryGenerateRoom: () => boolean;
   onPlanningIncomplete: () => void;
+  onSaveRoomDetails: () => Promise<boolean>;
   onResetGeneration: () => void;
 };
 
@@ -77,6 +77,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     onWorkspaceReauth,
     onTryGenerateRoom,
     onPlanningIncomplete,
+    onSaveRoomDetails,
     onResetGeneration,
   } = props;
   const navigate = useNavigate();
@@ -84,7 +85,9 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
   const activeStep = workspaceStepFromPath(location.pathname);
   const hasBlueprint = Boolean(roomSkeleton?.zones?.length && puzzles.length > 0);
   const resolvedStep = resolveWorkspaceStep({ puzzlesGenerating, hasBlueprint, flowWizardStep });
-  const [planningDialogOpen, setPlanningDialogOpen] = useState(false);
+  const [composeActiveStep, setComposeActiveStep] = useState<ComposeActiveStep>(() =>
+    onTryGenerateRoom() ? "themes" : "room-details",
+  );
   const [studioInspectorOpen, setStudioInspectorOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedZone, setSelectedZone] = useState<ZoneNodeData | null>(null);
@@ -197,7 +200,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
   const handleGenerateClick = useCallback(() => {
     if (!onTryGenerateRoom()) {
       flushSync(() => {
-        setPlanningDialogOpen(true);
+        setComposeActiveStep("room-details");
       });
       onPlanningIncomplete();
       toast.error("Complete room details before generating.");
@@ -245,6 +248,12 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       themeIdeasLoading,
       canGenerateNewThemes,
       themePath,
+      composeActiveStep,
+      setComposeActiveStep,
+      onSaveRoomDetails,
+      onTryValidateRoomDetails: onTryGenerateRoom,
+      onPlanningIncomplete,
+      eventSuggestions,
       onOpenReview: () => void onOpenReview(),
       onReplacePuzzle,
       composeThemeContent,
@@ -278,6 +287,11 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       themeIdeasLoading,
       canGenerateNewThemes,
       themePath,
+      composeActiveStep,
+      onSaveRoomDetails,
+      onTryGenerateRoom,
+      onPlanningIncomplete,
+      eventSuggestions,
       onOpenReview,
       onReplacePuzzle,
       composeThemeContent,
@@ -314,14 +328,6 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
         workspaceSessionExpiredMessage={workspaceSessionExpiredMessage}
         workspaceSessionExpiredUserName={navMenu.authName}
         onWorkspaceReauth={onWorkspaceReauth}
-        planningGate={
-          <GeneratePlanningDialog
-            open={planningDialogOpen}
-            onOpenChange={setPlanningDialogOpen}
-            onSubmit={handleGenerateClick}
-            eventSuggestions={eventSuggestions}
-          />
-        }
       >
         {stepContent}
       </ExperienceDesignerShell>
