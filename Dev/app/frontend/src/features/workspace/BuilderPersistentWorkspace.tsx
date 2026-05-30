@@ -39,6 +39,7 @@ export type BuilderPersistentWorkspaceProps = {
   workspaceSessionExpiredMessage: string;
   onWorkspaceReauth: () => void;
   onTryGenerateRoom: () => boolean;
+  onPlanningIncomplete: () => void;
   onResetGeneration: () => void;
 };
 
@@ -69,6 +70,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     workspaceSessionExpiredMessage,
     onWorkspaceReauth,
     onTryGenerateRoom,
+    onPlanningIncomplete,
     onResetGeneration,
   } = props;
   const navigate = useNavigate();
@@ -180,7 +182,11 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
 
   const handleGenerateClick = useCallback(() => {
     if (!onTryGenerateRoom()) {
-      setPlanningDialogOpen(true);
+      flushSync(() => {
+        setPlanningDialogOpen(true);
+      });
+      onPlanningIncomplete();
+      toast.error("Complete room details before generating.");
       return;
     }
     flushSync(() => {
@@ -189,7 +195,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     void Promise.resolve(onGenerateRoom()).finally(() => {
       setPendingGenerate(false);
     });
-  }, [onTryGenerateRoom, onGenerateRoom]);
+  }, [onTryGenerateRoom, onPlanningIncomplete, onGenerateRoom]);
 
   const handleStepNavigate = useCallback(
     (step: WorkspaceStepId) => {
@@ -228,9 +234,6 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       reviewContent,
       selectedThemeId,
       navMenu,
-      planningDialogOpen,
-      setPlanningDialogOpen,
-      onPlanningDialogSubmit: handleGenerateClick,
       studioInspectorOpen,
       setStudioInspectorOpen,
       selectedZone,
@@ -260,8 +263,6 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       reviewContent,
       selectedThemeId,
       navMenu,
-      planningDialogOpen,
-      onGenerateRoom,
       studioInspectorOpen,
       selectedZone,
       selectedPuzzle,
@@ -273,12 +274,6 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
 
   return (
     <ExperienceDesignerProvider value={contextValue}>
-      <GeneratePlanningDialog
-        open={planningDialogOpen}
-        onOpenChange={setPlanningDialogOpen}
-        onSubmit={() => void onGenerateRoom()}
-        eventSuggestions={eventSuggestions}
-      />
       <ExperienceDesignerShell
         navMenu={navMenu}
         hasBlueprint={hasBlueprint}
@@ -297,6 +292,14 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
         workspaceSessionExpiredMessage={workspaceSessionExpiredMessage}
         workspaceSessionExpiredUserName={navMenu.authName}
         onWorkspaceReauth={onWorkspaceReauth}
+        planningGate={
+          <GeneratePlanningDialog
+            open={planningDialogOpen}
+            onOpenChange={setPlanningDialogOpen}
+            onSubmit={handleGenerateClick}
+            eventSuggestions={eventSuggestions}
+          />
+        }
       >
         {stepContent}
       </ExperienceDesignerShell>

@@ -27,9 +27,6 @@ export type ExperienceDesignerContextValue = {
   selectedThemeId: string;
   navMenu: WorkspaceNavMenuProps;
   selectedThemeName?: string;
-  planningDialogOpen: boolean;
-  setPlanningDialogOpen: (open: boolean) => void;
-  onPlanningDialogSubmit: () => void;
   studioInspectorOpen: boolean;
   setStudioInspectorOpen: (open: boolean) => void;
   selectedZone: ZoneNodeData | null;

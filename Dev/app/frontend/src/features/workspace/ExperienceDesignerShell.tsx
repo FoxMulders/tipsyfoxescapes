@@ -29,6 +29,7 @@ type ExperienceDesignerShellProps = {
   workspaceSessionExpiredUserName?: string;
   onWorkspaceReauth?: () => void;
   headerExtra?: ReactNode;
+  planningGate?: ReactNode;
   children: ReactNode;
 };
 
@@ -51,6 +52,7 @@ export function ExperienceDesignerShell({
   workspaceSessionExpiredUserName,
   onWorkspaceReauth,
   headerExtra,
+  planningGate,
   children,
 }: ExperienceDesignerShellProps) {
   const location = useLocation();
@@ -138,6 +140,7 @@ export function ExperienceDesignerShell({
           ) : null}
         </div>
       </header>
+      {planningGate}
       {workspaceSessionExpired && onWorkspaceReauth ? (
         <WorkspaceSessionExpiredOverlay
           variant="inline"

@@ -1,12 +1,5 @@
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { TargetInterfaceCard } from "@/features/planning/components/TargetInterfaceCard";
 import { RoomConfigurationForm } from "@/features/planning/components/RoomConfigurationForm";
 import { usePlanning } from "@/features/planning/context/PlanningProvider";
@@ -31,34 +24,52 @@ function GeneratePlanningForm({ eventSuggestions }: { eventSuggestions: string[]
   );
 }
 
+/** Inline room-details gate — no modal overlay or scroll lock. */
 export function GeneratePlanningDialog({ open, onOpenChange, onSubmit, eventSuggestions }: GeneratePlanningDialogProps) {
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[min(90vh,640px)] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Room details</DialogTitle>
-          <DialogDescription>
+    <section
+      className="compose-planning-gate glass-panel"
+      role="region"
+      aria-labelledby="compose-planning-gate-title"
+      data-testid="compose-planning-gate"
+    >
+      <div className="compose-planning-gate__header">
+        <div className="min-w-0 flex-1">
+          <h2 id="compose-planning-gate-title" className="text-lg font-semibold leading-none tracking-tight">
+            Room details
+          </h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">
             Confirm players, duration, and environment before we generate your room.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="py-2">
-          <GeneratePlanningForm eventSuggestions={eventSuggestions} />
+          </p>
         </div>
-        <DialogFooter>
-          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={() => {
-              onOpenChange(false);
-              onSubmit();
-            }}
-          >
-            Save and generate
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <button
+          type="button"
+          className="compose-planning-gate__close"
+          onClick={() => onOpenChange(false)}
+          aria-label="Close room details"
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+      <div id="room-details-blueprint-form" className="room-details-blueprint-form compose-planning-gate__form">
+        <GeneratePlanningForm eventSuggestions={eventSuggestions} />
+      </div>
+      <div className="compose-planning-gate__footer">
+        <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          onClick={() => {
+            onOpenChange(false);
+            onSubmit();
+          }}
+        >
+          Save and generate
+        </Button>
+      </div>
+    </section>
   );
 }

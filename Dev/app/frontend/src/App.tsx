@@ -3010,7 +3010,9 @@ export default function App() {
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         document
-          .querySelector("#room-details-blueprint-form .border-destructive, #room-details-blueprint-form .invalid-field")
+          .querySelector(
+            "[data-testid='compose-planning-gate'] [aria-invalid='true'], #room-details-blueprint-form .border-destructive, #room-details-blueprint-form .invalid-field",
+          )
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     });
@@ -3218,6 +3220,22 @@ export default function App() {
       return false;
     }
     return true;
+  }, [
+    playersConcurrent,
+    participantsTotal,
+    sessionDurationMinutes,
+    environmentType,
+    targetInterface,
+  ]);
+
+  const notifyPlanningIncomplete = useCallback((): void => {
+    const missing = collectStrictPlanningMissing();
+    setError(
+      missing.includes("headcountOrder")
+        ? "Players at one time cannot exceed total participants. Adjust the counters, then generate."
+        : "Complete room details (players, duration, and environment) before generating.",
+    );
+    scrollFirstInvalidRoomFieldIntoView();
   }, [
     playersConcurrent,
     participantsTotal,
@@ -8206,6 +8224,7 @@ export default function App() {
                       onOpenReview={() => void proceedToOutputReview()}
                       onReplacePuzzle={(id) => void replacePuzzle(id)}
                       onTryGenerateRoom={tryGenerateRoom}
+                      onPlanningIncomplete={notifyPlanningIncomplete}
                       onResetGeneration={resetRoomGeneration}
                       composeThemeContent={experienceComposeTheme}
                       curateContent={experienceCurateContent}
@@ -8299,11 +8318,11 @@ export default function App() {
             </div>
           </section>
         </section>
-        {flowWizardStep === "setup" ? (
+        {flowWizardStep === "setup" && !persistentCanvasSteps ? (
           <button type="button" className="mobile-continue-fab" onClick={() => void proceedFromSetupToThemes()}>
             Continue → Themes
           </button>
-        ) : flowWizardStep === "themes" && (selectedThemeId || (themePath === "custom" && customThemeName.trim())) ? (
+        ) : flowWizardStep === "themes" && !persistentCanvasSteps && (selectedThemeId || (themePath === "custom" && customThemeName.trim())) ? (
           <button
             type="button"
             className="mobile-continue-fab"
@@ -8311,7 +8330,7 @@ export default function App() {
           >
             {selectedThemeId ? "Continue → Build puzzles" : "Save theme → Build puzzles"}
           </button>
-        ) : flowWizardStep === "themes-puzzles" ? (
+        ) : flowWizardStep === "themes-puzzles" && !persistentCanvasSteps ? (
           <button
             type="button"
             className="mobile-continue-fab"
