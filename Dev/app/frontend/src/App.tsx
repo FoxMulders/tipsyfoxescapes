@@ -2629,13 +2629,7 @@ export default function App() {
   );
   const prevWizardStepsRef = useRef(wizardSteps);
   const flowWizardStep: WizardStep = wizardSteps.includes(wizardStep) ? wizardStep : (wizardSteps[0] ?? "setup");
-  const persistentCanvasSteps =
-    isExperienceDesignerRoute &&
-    (flowWizardStep === "setup" ||
-      flowWizardStep === "themes" ||
-      flowWizardStep === "themes-puzzles" ||
-      flowWizardStep === "output-review" ||
-      flowWizardStep === "output-export");
+  const persistentCanvasSteps = isExperienceDesignerRoute && appView === "builder";
   persistentCanvasStepsRef.current = persistentCanvasSteps;
   const wizardIndex = wizardSteps.indexOf(flowWizardStep);
   const missionStepLabels = useMemo(() => wizardSteps.map(wizardStepLabel), [wizardSteps]);
@@ -3703,6 +3697,18 @@ export default function App() {
         ? "Sign in to generate themes for your room"
         : "Use Chrome on-device AI or upgrade to a room pack for rotating theme ideas";
 
+
+  useEffect(() => {
+    if (!isExperienceDesignerRoute) return;
+    setAppView("builder");
+  }, [isExperienceDesignerRoute, location.pathname]);
+
+  useEffect(() => {
+    if (!location.pathname.startsWith("/builder/compose")) return;
+    if (flowWizardStep !== "saved") return;
+    setWizardStep("setup");
+    setShowPlanPicker(false);
+  }, [location.pathname, flowWizardStep]);
 
   useEffect(() => {
     if (appView !== "builder" || !isExperienceDesignerRoute) {
@@ -8253,7 +8259,9 @@ export default function App() {
           />
         </Suspense>
       ) : null}
+      {!(appView === "builder" && persistentCanvasSteps) ? (
       <GlobalFooter buildStamp={APP_BUILD_STAMP} />
+      ) : null}
       </div>
       {!(appView === "builder" && persistentCanvasSteps) ? (
       <aside className="app-sidebar-col">

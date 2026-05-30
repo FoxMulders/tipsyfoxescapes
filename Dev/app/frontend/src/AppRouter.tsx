@@ -42,6 +42,14 @@ export function AppRouter() {
           }
         />
         <Route
+          path="/builder"
+          element={
+            <Suspense fallback={<RouteFallback label="Loading Escape Room Builder…" />}>
+              <App />
+            </Suspense>
+          }
+        />
+        <Route
           path="/builder/*"
           element={
             <Suspense fallback={<RouteFallback label="Loading Escape Room Builder…" />}>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { RoomSkeleton } from "../../../../shared/roomSkeleton";
 import type { GenerationTelemetry } from "@/features/planning/domain/generationTelemetry";
@@ -9,7 +9,7 @@ import { GeneratePlanningDialog } from "./GeneratePlanningDialog";
 import { WorkspaceSessionExpiredOverlay } from "./WorkspaceSessionExpiredOverlay";
 import type { FlowNodeData, PuzzleNodeData, ZoneNodeData } from "./generationFlowGraph";
 import { ComposePage, CuratePage, GeneratingPage, ReviewPage, StudioPage } from "./pages";
-import { resolveWorkspaceStep, type WorkspaceStepId } from "./workspaceSteps";
+import { resolveWorkspaceStep, workspaceStepFromPath, type WorkspaceStepId } from "./workspaceSteps";
 import type { PuzzleInspectorSlice } from "./WorkspaceInspectorPanel";
 import type { WorkspaceNavMenuProps } from "./WorkspaceNavMenu";
 
@@ -66,6 +66,8 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     onTryGenerateRoom,
   } = props;
   const navigate = useNavigate();
+  const location = useLocation();
+  const activeStep = workspaceStepFromPath(location.pathname);
   const hasBlueprint = Boolean(roomSkeleton?.zones?.length && puzzles.length > 0);
   const resolvedStep = resolveWorkspaceStep({ puzzlesGenerating, hasBlueprint, flowWizardStep });
   const [planningDialogOpen, setPlanningDialogOpen] = useState(false);
@@ -92,15 +94,34 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
   };
 
   useEffect(() => {
+    if (location.pathname === "/builder" || location.pathname === "/builder/") {
+      navigate("/builder/compose", { replace: true });
+      return;
+    }
     const target = routeForStep(resolvedStep);
-    if (!window.location.pathname.startsWith("/builder/")) {
+    if (!location.pathname.startsWith("/builder/")) {
       navigate(target, { replace: true });
       return;
     }
-    if (window.location.pathname !== target && resolvedStep !== "curate") {
+    if (location.pathname !== target && resolvedStep !== "curate") {
       navigate(target, { replace: true });
     }
-  }, [resolvedStep, navigate]);
+  }, [resolvedStep, navigate, location.pathname]);
+
+  const stepContent = useMemo(() => {
+    switch (activeStep) {
+      case "generating":
+        return <GeneratingPage />;
+      case "studio":
+        return <StudioPage />;
+      case "curate":
+        return <CuratePage />;
+      case "review":
+        return <ReviewPage />;
+      default:
+        return <ComposePage />;
+    }
+  }, [activeStep]);
 
   useEffect(() => {
     if (prevGenerating && !puzzlesGenerating && hasBlueprint) {
@@ -228,33 +249,20 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
           onSignIn={onWorkspaceReauth}
         />
       ) : null}
-      <Routes>
-        <Route
-          path="/builder"
-          element={
-            <ExperienceDesignerShell
-              navMenu={navMenu}
-              hasBlueprint={hasBlueprint}
-              puzzlesGenerating={puzzlesGenerating}
-              canReview={canReview}
-              canGenerateRoom={canGenerateRoom}
-              generateRoomDisabledReason={generateRoomDisabledReason}
-              onGenerateRoom={handleGenerateClick}
-              onGenerateThemes={onGenerateThemes}
-              onOpenReview={() => void onOpenReview()}
-              onStepNavigate={handleStepNavigate}
-            />
-          }
-        >
-          <Route index element={<Navigate to="compose" replace />} />
-          <Route path="compose" element={<ComposePage />} />
-          <Route path="generating" element={<GeneratingPage />} />
-          <Route path="studio" element={<StudioPage />} />
-          <Route path="curate" element={<CuratePage />} />
-          <Route path="review" element={<ReviewPage />} />
-          <Route path="*" element={<Navigate to="compose" replace />} />
-        </Route>
-      </Routes>
+      <ExperienceDesignerShell
+        navMenu={navMenu}
+        hasBlueprint={hasBlueprint}
+        puzzlesGenerating={puzzlesGenerating}
+        canReview={canReview}
+        canGenerateRoom={canGenerateRoom}
+        generateRoomDisabledReason={generateRoomDisabledReason}
+        onGenerateRoom={handleGenerateClick}
+        onGenerateThemes={onGenerateThemes}
+        onOpenReview={() => void onOpenReview()}
+        onStepNavigate={handleStepNavigate}
+      >
+        {stepContent}
+      </ExperienceDesignerShell>
     </ExperienceDesignerProvider>
   );
 }

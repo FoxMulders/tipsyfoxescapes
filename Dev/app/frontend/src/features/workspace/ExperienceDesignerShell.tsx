@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { WorkspaceNavMenu } from "./WorkspaceNavMenu";
@@ -20,6 +20,7 @@ type ExperienceDesignerShellProps = {
   onOpenReview: () => void;
   onStepNavigate: (step: WorkspaceStepId) => void;
   headerExtra?: ReactNode;
+  children: ReactNode;
 };
 
 export function ExperienceDesignerShell({
@@ -34,6 +35,7 @@ export function ExperienceDesignerShell({
   onOpenReview,
   onStepNavigate,
   headerExtra,
+  children,
 }: ExperienceDesignerShellProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -42,7 +44,7 @@ export function ExperienceDesignerShell({
   const showStudioSegment = activeStep === "studio" || activeStep === "curate";
 
   return (
-    <div className="experience-designer builder-route--fullpage">
+    <div className="experience-designer builder-route--fullpage" data-testid="experience-designer">
       <header className="experience-designer__header glass-panel flex items-center gap-2 px-2 md:gap-3 md:px-4">
         <WorkspaceNavMenu {...navMenu} />
         <Separator orientation="vertical" className="mx-1 hidden h-8 md:block" />
@@ -86,7 +88,7 @@ export function ExperienceDesignerShell({
         </div>
       </header>
       <div className="experience-designer__body">
-        <Outlet />
+        {children}
       </div>
     </div>
   );

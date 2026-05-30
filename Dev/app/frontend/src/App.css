@@ -7748,10 +7748,23 @@ ul.auth-hero-para {
 
 .page-shell--room-cad-setup {
   grid-template-columns: minmax(0, 1fr);
+  min-height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  padding: 0;
 }
 
 .page-shell--room-cad-setup .app-main-col {
   max-width: none;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.page-shell--room-cad-setup .builder-workspace--persistent {
+  min-height: 100vh;
+  max-height: 100vh;
+  height: 100vh;
 }
 
 .builder-account-strip {
