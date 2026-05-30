@@ -33,7 +33,6 @@ export const resolveWorkspaceStep = (input: {
   hasBlueprint: boolean;
   flowWizardStep: string;
 }): WorkspaceStepId => {
-  if (input.puzzlesGenerating) return "generating";
   if (input.flowWizardStep === "output-review" || input.flowWizardStep === "output-export") return "review";
   if (input.hasBlueprint) return "studio";
   return "compose";

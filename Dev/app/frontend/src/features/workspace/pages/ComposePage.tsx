@@ -57,7 +57,7 @@ export function ComposePage() {
             aria-busy={generateBusy}
             onClick={onGenerateRoom}
           >
-            {generateBusy ? "Please wait…" : "Generate room →"}
+            {generateBusy ? "Generating…" : "Generate room →"}
           </Button>
         </div>
       ) : null}

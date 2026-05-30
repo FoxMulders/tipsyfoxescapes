@@ -35,6 +35,8 @@ html.builder-route--fullpage #root {
 }
 
 .experience-designer__header {
+  position: relative;
+  z-index: 50;
   flex-shrink: 0;
   height: 60px;
   border-bottom: 1px solid var(--workspace-surface-border, rgba(255, 255, 255, 0.1));
@@ -45,24 +47,22 @@ html.builder-route--fullpage #root {
   min-height: 0;
   overflow: hidden;
   position: relative;
+  z-index: 2;
 }
 
-.experience-generating-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 8vh 1.25rem 2rem;
-  overflow-y: auto;
-  background: rgba(5, 8, 14, 0.96);
+.experience-generating-banner {
+  position: sticky;
+  top: 0;
+  z-index: 45;
+  pointer-events: none;
+  padding: 0.5rem 1rem 0.75rem;
+  background: linear-gradient(180deg, rgba(6, 10, 18, 0.94) 0%, rgba(6, 10, 18, 0.72) 72%, transparent 100%);
 }
 
-.experience-generating-overlay .generating-hero-panel {
-  background: rgba(12, 20, 36, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 20px 56px rgb(0 0 0 / 0.55);
+.experience-generating-banner__indicator {
+  pointer-events: auto;
+  max-width: 28rem;
+  margin: 0 auto;
 }
 
 .experience-step {
@@ -95,10 +95,11 @@ html.builder-route--fullpage #root {
 .experience-step--generating {
   justify-content: flex-start;
   min-height: 100%;
-  background: linear-gradient(180deg, rgba(6, 10, 18, 0.72) 0%, rgba(4, 8, 14, 0.82) 100%);
 }
 
 .generating-hero-panel {
+  position: relative;
+  z-index: 3;
   padding: 1.5rem 1.25rem;
   border-radius: 0.75rem;
   background: rgba(10, 18, 32, 0.72);

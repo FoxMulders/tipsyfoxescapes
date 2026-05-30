@@ -26,9 +26,52 @@ export type FlowNodeData = ZoneNodeData | PuzzleNodeData;
 const EDGE_STYLE = { stroke: "#5b8fd9", strokeWidth: 2 };
 const FLOW_EDGE_STYLE = { stroke: "#22d3ee", strokeWidth: 2.5 };
 
-const PUZZLE_NODE_ESTIMATED_HEIGHT = 120;
-const PUZZLE_STACK_GAP = 48;
-const ZONE_PUZZLE_OFFSET = 160;
+const PUZZLE_NODE_ESTIMATED_HEIGHT = 170;
+const PUZZLE_STACK_GAP = 56;
+const ZONE_PUZZLE_OFFSET = 220;
+const MIN_NODE_GAP = 40;
+
+const estimateNodeSize = (node: Node<FlowNodeData>): { w: number; h: number } => {
+  if (node.type === "blueprintZone") return { w: 260, h: 160 };
+  return { w: 240, h: PUZZLE_NODE_ESTIMATED_HEIGHT };
+};
+
+/** Push overlapping nodes apart so every pair keeps at least MIN_NODE_GAP between bounds. */
+function enforceMinimumSpacing(nodes: Node<FlowNodeData>[]): Node<FlowNodeData>[] {
+  const placed = nodes.map((node) => ({ ...node, position: { ...node.position } }));
+
+  for (let pass = 0; pass < 24; pass += 1) {
+    let adjusted = false;
+    for (let i = 0; i < placed.length; i += 1) {
+      for (let j = i + 1; j < placed.length; j += 1) {
+        const a = placed[i];
+        const b = placed[j];
+        const aSize = estimateNodeSize(a);
+        const bSize = estimateNodeSize(b);
+        const dx = b.position.x - a.position.x;
+        const dy = b.position.y - a.position.y;
+        const overlapX = aSize.w / 2 + bSize.w / 2 + MIN_NODE_GAP - Math.abs(dx);
+        const overlapY = aSize.h / 2 + bSize.h / 2 + MIN_NODE_GAP - Math.abs(dy);
+
+        if (overlapX > 0 && overlapY > 0) {
+          if (overlapX >= overlapY) {
+            const pushX = dx >= 0 ? overlapX : -overlapX;
+            b.position.x += pushX / 2;
+            a.position.x -= pushX / 2;
+          } else {
+            const pushY = dy >= 0 ? overlapY : -overlapY;
+            b.position.y += pushY / 2;
+            a.position.y -= pushY / 2;
+          }
+          adjusted = true;
+        }
+      }
+    }
+    if (!adjusted) break;
+  }
+
+  return placed;
+}
 
 /** Post-generation logic tree: zones L→R with linked puzzle beats beneath each zone. */
 export function generationToFlowGraph(
@@ -132,7 +175,7 @@ export function generationToFlowGraph(
     });
   }
 
-  return { nodes, edges };
+  return { nodes: enforceMinimumSpacing(nodes), edges };
 }
 
 export { BLUEPRINT_NODE_GAP_X, BLUEPRINT_NODE_GAP_Y, BLUEPRINT_ORIGIN_X, BLUEPRINT_ORIGIN_Y, zonePosition };

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { RoomSkeleton } from "../../../../shared/roomSkeleton";
@@ -104,11 +105,8 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       navigate("/builder/compose", { replace: true });
       return;
     }
-    // Stay on compose until the user explicitly generates — do not auto-skip to studio.
+    // Stay on compose during generation — progress banner is non-blocking inline UI.
     if (location.pathname.startsWith("/builder/compose")) {
-      if (puzzlesGenerating) {
-        navigate("/builder/generating", { replace: true });
-      }
       return;
     }
     if (location.pathname.includes("/builder/generating")) {
@@ -178,7 +176,9 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       setPlanningDialogOpen(true);
       return;
     }
-    setPendingGenerate(true);
+    flushSync(() => {
+      setPendingGenerate(true);
+    });
     void Promise.resolve(onGenerateRoom()).finally(() => {
       setPendingGenerate(false);
     });

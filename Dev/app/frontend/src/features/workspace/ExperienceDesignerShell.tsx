@@ -1,12 +1,13 @@
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { GenerationProgressIndicator } from "@/components/generation/GenerationProgressIndicator";
+import { PUZZLE_GENERATION_PHASES } from "@/components/generation/GenerationProgressPhases";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { WorkspaceNavMenu } from "./WorkspaceNavMenu";
 import { StudioSegmentToggle, WorkspaceStepper } from "./WorkspaceStepper";
 import { workspaceStepFromPath, type WorkspaceStepId } from "./workspaceSteps";
 import type { WorkspaceNavMenuProps } from "./WorkspaceNavMenu";
-import { GeneratingPanel } from "./pages/GeneratingPage";
 import "./workspace.tokens.css";
 
 type ExperienceDesignerShellProps = {
@@ -48,13 +49,6 @@ export function ExperienceDesignerShell({
 
   const showStudioSegment = activeStep === "studio" || activeStep === "curate";
   const generateBusy = showGeneratingOverlay || puzzlesGenerating;
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("builder-route--generating", showGeneratingOverlay);
-    return () => {
-      document.documentElement.classList.remove("builder-route--generating");
-    };
-  }, [showGeneratingOverlay]);
 
   return (
     <div className="experience-designer builder-route--fullpage" data-testid="experience-designer">
@@ -98,7 +92,7 @@ export function ExperienceDesignerShell({
                 title={!canGenerateRoom ? "Choose a theme first" : undefined}
                 onClick={onGenerateRoom}
               >
-                {generateBusy ? "Please wait…" : "Generate room"}
+                {generateBusy ? "Generating…" : "Generate room"}
               </Button>
             </>
           ) : null}
@@ -110,18 +104,17 @@ export function ExperienceDesignerShell({
         </div>
       </header>
       <div className="experience-designer__body">
-        {children}
-        {showGeneratingOverlay ? (
-          <div
-            className="experience-generating-overlay"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="experience-generating-title"
-            aria-busy="true"
-          >
-            <GeneratingPanel />
+        {generateBusy ? (
+          <div className="experience-generating-banner" role="status" aria-live="polite" aria-busy="true">
+            <GenerationProgressIndicator
+              active
+              phases={PUZZLE_GENERATION_PHASES}
+              phaseIntervalMs={4000}
+              className="generation-progress-indicator--compact experience-generating-banner__indicator"
+            />
           </div>
         ) : null}
+        {children}
       </div>
     </div>
   );
