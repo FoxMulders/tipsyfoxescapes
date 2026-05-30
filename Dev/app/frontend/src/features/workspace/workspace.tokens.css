@@ -80,6 +80,9 @@ html.builder-route--fullpage #root {
 .generating-hero-panel {
   padding: 1.5rem 1.25rem;
   border-radius: 0.75rem;
+  background: rgba(10, 18, 32, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.45);
 }
 
 .experience-compose-hero {

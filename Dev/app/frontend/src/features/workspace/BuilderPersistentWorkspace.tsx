@@ -109,6 +109,12 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       }
       return;
     }
+    if (location.pathname.includes("/builder/generating")) {
+      if (puzzlesGenerating) return;
+      if (hasBlueprint) return;
+      navigate("/builder/compose", { replace: true });
+      return;
+    }
     const target = routeForStep(resolvedStep);
     if (!location.pathname.startsWith("/builder/")) {
       navigate(target, { replace: true });
@@ -117,7 +123,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     if (location.pathname !== target && resolvedStep !== "curate") {
       navigate(target, { replace: true });
     }
-  }, [resolvedStep, navigate, location.pathname, puzzlesGenerating]);
+  }, [resolvedStep, navigate, location.pathname, puzzlesGenerating, hasBlueprint]);
 
   const stepContent = useMemo(() => {
     switch (activeStep) {

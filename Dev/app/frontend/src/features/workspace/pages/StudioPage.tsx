@@ -28,7 +28,13 @@ export function StudioPage() {
   }, [hasBlueprint, puzzlesGenerating, navigate]);
 
   if (!roomSkeleton) {
-    return null;
+    return (
+      <div className="experience-step flex h-full items-center justify-center p-8">
+        <p className="m-0 text-sm text-slate-400" role="status" aria-live="polite">
+          Loading blueprint…
+        </p>
+      </div>
+    );
   }
 
   return (

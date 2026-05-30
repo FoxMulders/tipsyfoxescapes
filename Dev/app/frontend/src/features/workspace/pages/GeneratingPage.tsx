@@ -3,7 +3,7 @@ import { PUZZLE_GENERATION_PHASES } from "@/components/generation/GenerationProg
 
 export function GeneratingPage() {
   return (
-    <div className="experience-step experience-step--generating flex h-full flex-col items-center justify-start gap-6 p-8 pt-[8vh] md:pt-[10vh]">
+    <div className="experience-step experience-step--generating flex h-full min-h-0 flex-col items-center justify-start gap-6 p-8 pt-[8vh] md:pt-[10vh]">
       <div className="generating-hero-panel glass-panel w-full max-w-md text-center">
         <p className="m-0 text-xs font-bold uppercase tracking-widest text-cyan-400/80">Master generation</p>
         <h2 className="mb-0 mt-2 text-xl font-bold text-slate-50">Building your room</h2>

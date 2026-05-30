@@ -240,7 +240,7 @@ function resolveNarrativeHook(
 ): string {
   const justification = puzzle.narrative_justification?.trim();
   if (justification) return justification;
-  const storyRole = storyPlan?.puzzleLinks.find((link) => link.puzzleId === puzzle.id)?.storyRole.trim();
+  const storyRole = storyPlan?.puzzleLinks?.find((link) => link.puzzleId === puzzle.id)?.storyRole?.trim();
   if (storyRole) return storyRole;
   return `${puzzle.title}: ${puzzle.objective}`;
 }
@@ -3174,18 +3174,19 @@ export default function App() {
         setPuzzlesGenerating(true);
         setWizardStep("themes-puzzles");
         setActivePanel("themes");
-        navigate("/builder/generating");
       });
     } else {
       setWizardStep("themes-puzzles");
       setActivePanel("themes");
-      navigate("/builder/generating");
+      navigate("/builder/curate", { replace: true });
+      return;
     }
     const activeSessionId = await ensureSession();
     if (!activeSessionId) {
       if (needsGeneration) {
         puzzlesGeneratingInitRef.current = false;
         setPuzzlesGenerating(false);
+        navigate("/builder/compose", { replace: true });
       }
       return;
     }
@@ -3194,6 +3195,7 @@ export default function App() {
       if (needsGeneration) {
         puzzlesGeneratingInitRef.current = false;
         setPuzzlesGenerating(false);
+        navigate("/builder/compose", { replace: true });
       }
       return;
     }
