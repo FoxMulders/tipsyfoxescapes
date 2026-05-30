@@ -14,9 +14,9 @@ import {
 import "@xyflow/react/dist/style.css";
 import type { RoomSkeleton } from "../../../../shared/roomSkeleton";
 import { roomSkeletonToFlowGraph, type ZoneNodeData } from "./skeletonFlowGraph";
-import { ZoneFlowNode } from "./nodes/ZoneFlowNode";
+import { BlueprintZoneNode } from "./nodes/BlueprintZoneNode";
 
-const nodeTypes = { zone: ZoneFlowNode };
+const nodeTypes = { blueprintZone: BlueprintZoneNode };
 
 type BlueprintFlowCanvasProps = {
   skeleton: RoomSkeleton | null;
@@ -55,7 +55,14 @@ function BlueprintFlowCanvasInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
 
   useEffect(() => {
-    setNodes(graph.nodes);
+    setNodes((prev) => {
+      const savedPositions = new Map(prev.map((n) => [n.id, n.position]));
+      return graph.nodes.map((n) => ({
+        ...n,
+        position: savedPositions.get(n.id) ?? n.position,
+        draggable: true,
+      }));
+    });
     setEdges(graph.edges);
   }, [graph.nodes, graph.edges, setNodes, setEdges]);
 

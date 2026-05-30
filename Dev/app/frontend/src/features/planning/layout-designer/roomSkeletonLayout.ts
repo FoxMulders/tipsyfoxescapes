@@ -127,24 +127,24 @@ export function applyRoomSkeletonToLayout(
 export function buildHeuristicRoomSkeleton(themeName: string, commercialVenue: boolean): RoomSkeleton {
   const zones = [
     {
-      zone_id: "entry",
-      name: "Entry briefing",
-      primary_player_action: "Receive the mission and orient players to the space.",
+      zone_id: "entry_antechamber",
+      name: "Entry Antechamber",
+      primary_player_action: "Players gather in the vestibule and receive orientation at a briefing table.",
     },
     {
-      zone_id: "search",
-      name: "Search & discovery",
-      primary_player_action: "Find hidden clues in props and set dressing.",
+      zone_id: "main_gallery",
+      name: "Main Gallery",
+      primary_player_action: "Search shelves, drawers, and wall fixtures for hidden mechanisms.",
     },
     {
-      zone_id: "core",
-      name: "Core challenge",
-      primary_player_action: "Solve the main logic or physical beat as a team.",
+      zone_id: "workshop_bay",
+      name: "Workshop Bay",
+      primary_player_action: "Manipulate workbench props, alignment panels, and bench-mounted controls.",
     },
     {
-      zone_id: "finale",
-      name: "Finale release",
-      primary_player_action: "Complete the escape or unlock the final door.",
+      zone_id: "exit_airlock",
+      name: "Exit Airlock",
+      primary_player_action: "Release the final maglock or latch assembly to leave the room.",
     },
   ];
   return {

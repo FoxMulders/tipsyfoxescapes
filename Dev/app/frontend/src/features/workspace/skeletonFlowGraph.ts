@@ -8,58 +8,98 @@ export type ZoneNodeData = {
   zoneId: string;
 };
 
-const NODE_GAP_X = 300;
-const NODE_GAP_Y = 160;
-const GRID_ORIGIN_X = 80;
-const GRID_ORIGIN_Y = 80;
+/** Horizontal left-to-right floor-plan spacing (px). */
+export const BLUEPRINT_NODE_GAP_X = 350;
+export const BLUEPRINT_NODE_GAP_Y = 130;
+export const BLUEPRINT_ORIGIN_X = 48;
+export const BLUEPRINT_ORIGIN_Y = 96;
 
 const PLACEHOLDER_NODES: Node<ZoneNodeData>[] = [
   {
     id: "placeholder-entry",
-    type: "zone",
-    position: { x: GRID_ORIGIN_X, y: GRID_ORIGIN_Y + 40 },
+    type: "blueprintZone",
+    position: { x: BLUEPRINT_ORIGIN_X, y: BLUEPRINT_ORIGIN_Y },
     data: {
       zoneId: "placeholder-entry",
-      label: "Entry briefing",
-      action: "Orient players and set the story hook.",
+      label: "Entry Antechamber",
+      action: "Players receive briefing and initial orientation in this vestibule.",
     },
   },
   {
     id: "placeholder-core",
-    type: "zone",
-    position: { x: GRID_ORIGIN_X + NODE_GAP_X, y: GRID_ORIGIN_Y },
+    type: "blueprintZone",
+    position: { x: BLUEPRINT_ORIGIN_X + BLUEPRINT_NODE_GAP_X, y: BLUEPRINT_ORIGIN_Y },
     data: {
       zoneId: "placeholder-core",
-      label: "Core challenge",
-      action: "Main puzzle beat — generate skeleton to customize.",
+      label: "Main Workshop",
+      action: "Central floor space for hands-on puzzle stations and prop tables.",
     },
   },
   {
     id: "placeholder-finale",
-    type: "zone",
-    position: { x: GRID_ORIGIN_X + NODE_GAP_X * 2, y: GRID_ORIGIN_Y + 40 },
+    type: "blueprintZone",
+    position: { x: BLUEPRINT_ORIGIN_X + BLUEPRINT_NODE_GAP_X * 2, y: BLUEPRINT_ORIGIN_Y },
     data: {
       zoneId: "placeholder-finale",
-      label: "Finale",
-      action: "Escape or unlock moment.",
+      label: "Exit Airlock",
+      action: "Final chamber with maglock or release mechanism leading out.",
     },
   },
 ];
 
 const PLACEHOLDER_EDGES: Edge[] = [
-  { id: "pe-1", source: "placeholder-entry", target: "placeholder-core", animated: true },
-  { id: "pe-2", source: "placeholder-core", target: "placeholder-finale", animated: true },
+  {
+    id: "pe-1",
+    source: "placeholder-entry",
+    target: "placeholder-core",
+    sourceHandle: "door-out",
+    targetHandle: "door-in",
+    animated: true,
+    style: { stroke: "#5b8fd9", strokeWidth: 2 },
+  },
+  {
+    id: "pe-2",
+    source: "placeholder-core",
+    target: "placeholder-finale",
+    sourceHandle: "door-out",
+    targetHandle: "door-in",
+    animated: true,
+    style: { stroke: "#5b8fd9", strokeWidth: 2 },
+  },
 ];
 
-function zonePosition(index: number, total: number, pattern: RoomSkeleton["flow_pattern"]): { x: number; y: number } {
+/** Left-to-right floor plan layout — x is the primary axis. */
+export function zonePosition(
+  index: number,
+  _total: number,
+  pattern: RoomSkeleton["flow_pattern"],
+): { x: number; y: number } {
   if (pattern === "nonlinear_open") {
-    const cols = Math.max(1, Math.ceil(Math.sqrt(total)));
-    const col = index % cols;
-    const row = Math.floor(index / cols);
-    return { x: GRID_ORIGIN_X + col * NODE_GAP_X, y: GRID_ORIGIN_Y + row * NODE_GAP_Y };
+    if (index === 0) {
+      return { x: BLUEPRINT_ORIGIN_X, y: BLUEPRINT_ORIGIN_Y + BLUEPRINT_NODE_GAP_Y * 0.5 };
+    }
+    const branchIndex = index - 1;
+    const col = 1 + Math.floor(branchIndex / 3);
+    const row = branchIndex % 3;
+    return {
+      x: BLUEPRINT_ORIGIN_X + col * BLUEPRINT_NODE_GAP_X,
+      y: BLUEPRINT_ORIGIN_Y + row * BLUEPRINT_NODE_GAP_Y,
+    };
   }
-  const y = pattern === "multilinear" ? GRID_ORIGIN_Y + (index % 2 === 0 ? 0 : NODE_GAP_Y * 0.75) : GRID_ORIGIN_Y + 20;
-  return { x: GRID_ORIGIN_X + index * NODE_GAP_X, y };
+
+  if (pattern === "multilinear") {
+    const col = Math.floor(index / 2);
+    const track = index % 2;
+    return {
+      x: BLUEPRINT_ORIGIN_X + col * BLUEPRINT_NODE_GAP_X,
+      y: BLUEPRINT_ORIGIN_Y + track * BLUEPRINT_NODE_GAP_Y,
+    };
+  }
+
+  return {
+    x: BLUEPRINT_ORIGIN_X + index * BLUEPRINT_NODE_GAP_X,
+    y: BLUEPRINT_ORIGIN_Y,
+  };
 }
 
 export function roomSkeletonToFlowGraph(skeleton: RoomSkeleton | null): {
@@ -75,8 +115,9 @@ export function roomSkeletonToFlowGraph(skeleton: RoomSkeleton | null): {
     const pos = zonePosition(index, zones.length, skeleton.flow_pattern);
     return {
       id: zone.zone_id,
-      type: "zone",
+      type: "blueprintZone",
       position: pos,
+      draggable: true,
       data: {
         zoneId: zone.zone_id,
         label: zone.name,
@@ -86,15 +127,19 @@ export function roomSkeletonToFlowGraph(skeleton: RoomSkeleton | null): {
     };
   });
 
+  const edgeStyle = { stroke: "#5b8fd9", strokeWidth: 2 };
   const edges: Edge[] = [];
+
   if (skeleton.flow_pattern === "nonlinear_open") {
     for (let i = 1; i < zones.length; i += 1) {
       edges.push({
         id: `e-${zones[0].zone_id}-${zones[i].zone_id}`,
         source: zones[0].zone_id,
         target: zones[i].zone_id,
+        sourceHandle: "door-out",
+        targetHandle: "door-in",
         animated: true,
-        style: { stroke: "#22d3ee", strokeWidth: 2 },
+        style: edgeStyle,
       });
     }
   } else {
@@ -103,8 +148,10 @@ export function roomSkeletonToFlowGraph(skeleton: RoomSkeleton | null): {
         id: `e-${zones[i].zone_id}-${zones[i + 1].zone_id}`,
         source: zones[i].zone_id,
         target: zones[i + 1].zone_id,
+        sourceHandle: "door-out",
+        targetHandle: "door-in",
         animated: true,
-        style: { stroke: "#22d3ee", strokeWidth: 2 },
+        style: edgeStyle,
       });
     }
   }

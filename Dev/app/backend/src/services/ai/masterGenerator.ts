@@ -29,6 +29,15 @@ export type MasterGeneratorResult = {
   councilIterations: number;
 };
 
+const ROOM_SKELETON_ARCHITECT_RULES = [
+  "CRITICAL: You are an architect.",
+  "zones MUST be literal, physical rooms in a building (e.g. 'Starting Cell', 'Main Reactor', 'Hidden Vent').",
+  "Do NOT output narrative pacing beats (forbidden examples: 'Search & discovery', 'Final reveal', 'Act 2', 'Climax').",
+  "Every zone must represent a physical square footage constraint the host could partition or build.",
+  "primary_player_action describes what players physically do inside that room — not story pacing labels.",
+  "Lay out flow left-to-right through connected rooms with doorways, not a vertical storyboard.",
+].join(" ");
+
 const compileRoomSkeleton = async (
   apiKey: string,
   input: MasterGeneratorInput,
@@ -44,7 +53,8 @@ const compileRoomSkeleton = async (
     `Players concurrent: ${input.planning.playersConcurrent}`,
     `Session minutes: ${input.planning.sessionDurationMinutes}`,
     "",
-    "Compile the ARCHITECTURAL SKELETON — physics-first room flow before any narrative flavor.",
+    "Compile the ARCHITECTURAL SKELETON — a physical floor plan of literal rooms connected by doorways.",
+    ROOM_SKELETON_ARCHITECT_RULES,
     home
       ? "Home party: zones use print_and_play / household props only — no electronics zones."
       : "Commercial venue: zones may include electronic control panels and maglock releases.",
@@ -55,7 +65,7 @@ const compileRoomSkeleton = async (
 
   return callOpenAiStructured({
     apiKey,
-    system: `You are a spatial escape-room architect. Define zone flow and player actions only — no story prose.\n${home ? homePartyCompilerSystem : commercialCompilerSystem}`,
+    system: `You are a spatial escape-room architect drafting buildable floor plans.\n${ROOM_SKELETON_ARCHITECT_RULES}\n${home ? homePartyCompilerSystem : commercialCompilerSystem}`,
     user: userPrompt,
     schema: RoomSkeletonSchema,
     schemaName: "room_skeleton",
