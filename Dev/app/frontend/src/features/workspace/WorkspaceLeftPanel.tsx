@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { GenerationProgressIndicator } from "@/components/generation/GenerationProgressIndicator";
 import { PUZZLE_GENERATION_PHASES } from "@/components/generation/GenerationProgressPhases";
 import { RoomConfigurationPanel } from "@/features/planning/components/RoomConfigurationPanel";
+import { cn } from "@/lib/utils";
 import { WorkspaceBriefPanel } from "./WorkspaceBriefPanel";
 import type { LayoutStylePreference, WorkspaceStepId } from "./workspaceSteps";
 
@@ -47,7 +48,12 @@ export function WorkspaceLeftPanel({
     case "generating":
       return (
         <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
-          <div className="min-h-0 max-h-[38%] shrink-0 overflow-auto border-b border-slate-800/80 pb-3">
+          <div
+            className={cn(
+              "min-h-0 overflow-auto",
+              step === "brief" ? "flex-1 shrink" : "max-h-[38%] shrink-0 border-b border-slate-800/80 pb-3",
+            )}
+          >
             <RoomConfigurationPanel
               eventSuggestions={eventSuggestions}
               itemHistory={itemHistory}

@@ -19,6 +19,8 @@ type WorkspaceShellProps = {
   onMobileLeftOpenChange: (open: boolean) => void;
   onLayoutChange?: (revision: number) => void;
   navMenu?: WorkspaceNavMenuProps;
+  /** Step 1 brief: hide canvas, inspector, and view toggles — form-only layout. */
+  briefFocusMode?: boolean;
   className?: string;
 };
 
@@ -32,8 +34,10 @@ export function WorkspaceShell({
   onMobileLeftOpenChange,
   onLayoutChange,
   navMenu,
+  briefFocusMode = false,
   className,
 }: WorkspaceShellProps) {
+  const briefOnly = briefFocusMode && activeStep === "brief";
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [layoutRevision, setLayoutRevision] = useState(0);
@@ -69,6 +73,7 @@ export function WorkspaceShell({
     <div
       className={cn(
         "workspace-shell flex h-[calc(100vh-var(--app-top-nav-height,0px))] max-h-[calc(100vh-var(--app-top-nav-height,0px))] w-full flex-col overflow-hidden bg-slate-950",
+        briefOnly && "workspace-shell--brief-focus",
         className,
       )}
     >
@@ -117,8 +122,9 @@ export function WorkspaceShell({
             className={cn(
               "workspace-shell__left relative flex shrink-0 flex-col overflow-hidden rounded-lg border border-slate-800/80 bg-slate-900/40 transition-[width] duration-300 ease-out",
               leftOpen ? "p-2" : "items-center justify-center p-1",
+              briefOnly && "min-w-0 flex-1",
             )}
-            style={{ width: leftOpen ? LEFT_OPEN_W : LEFT_RAIL_W }}
+            style={briefOnly ? undefined : { width: leftOpen ? LEFT_OPEN_W : LEFT_RAIL_W }}
           >
             {leftOpen ? <div className="min-h-0 flex-1 overflow-auto">{leftPanel}</div> : null}
             {!leftOpen ? (
@@ -146,46 +152,52 @@ export function WorkspaceShell({
             ) : null}
           </aside>
 
-          <main className="workspace-shell__center min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-slate-800/80 bg-slate-950">
-            {centerWithLayout}
-          </main>
+          {!briefOnly ? (
+            <main className="workspace-shell__center min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-slate-800/80 bg-slate-950">
+              {centerWithLayout}
+            </main>
+          ) : null}
 
-          <aside
-            className={cn(
-              "workspace-shell__right relative flex shrink-0 flex-col overflow-hidden rounded-lg border border-slate-800/80 bg-slate-900/40 transition-[width] duration-300 ease-out",
-              rightOpen ? "" : "items-center justify-center p-1",
-            )}
-            style={{ width: rightOpen ? RIGHT_OPEN_W : RIGHT_RAIL_W }}
-          >
-            {rightOpen ? <div className="min-h-0 flex-1 overflow-auto">{rightPanel}</div> : null}
-            {!rightOpen ? (
-              <button
-                type="button"
-                className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400 hover:text-cyan-300"
-                aria-label="Expand inspector panel"
-                title="Expand inspector panel"
-                onClick={toggleRight}
-              >
-                <ChevronLeft className="h-4 w-4" aria-hidden />
-                <PanelRight className="h-4 w-4" aria-hidden />
-              </button>
-            ) : null}
-            {rightOpen ? (
-              <button
-                type="button"
-                className="workspace-panel-toggle workspace-panel-toggle--right"
-                aria-label="Collapse inspector panel"
-                title="Collapse inspector panel"
-                onClick={toggleRight}
-              >
-                <ChevronRight className="h-4 w-4" aria-hidden />
-              </button>
-            ) : null}
-          </aside>
+          {!briefOnly ? (
+            <aside
+              className={cn(
+                "workspace-shell__right relative flex shrink-0 flex-col overflow-hidden rounded-lg border border-slate-800/80 bg-slate-900/40 transition-[width] duration-300 ease-out",
+                rightOpen ? "" : "items-center justify-center p-1",
+              )}
+              style={{ width: rightOpen ? RIGHT_OPEN_W : RIGHT_RAIL_W }}
+            >
+              {rightOpen ? <div className="min-h-0 flex-1 overflow-auto">{rightPanel}</div> : null}
+              {!rightOpen ? (
+                <button
+                  type="button"
+                  className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400 hover:text-cyan-300"
+                  aria-label="Expand inspector panel"
+                  title="Expand inspector panel"
+                  onClick={toggleRight}
+                >
+                  <ChevronLeft className="h-4 w-4" aria-hidden />
+                  <PanelRight className="h-4 w-4" aria-hidden />
+                </button>
+              ) : null}
+              {rightOpen ? (
+                <button
+                  type="button"
+                  className="workspace-panel-toggle workspace-panel-toggle--right"
+                  aria-label="Collapse inspector panel"
+                  title="Collapse inspector panel"
+                  onClick={toggleRight}
+                >
+                  <ChevronRight className="h-4 w-4" aria-hidden />
+                </button>
+              ) : null}
+            </aside>
+          ) : null}
         </div>
 
-        {/* Mobile / tablet: full-bleed canvas */}
-        <div className="absolute inset-0 lg:hidden">{centerCanvas}</div>
+        {/* Mobile / tablet: brief step shows form; later steps show canvas */}
+        <div className={cn("absolute inset-0 lg:hidden", briefOnly && "overflow-auto p-2")}>
+          {briefOnly ? leftPanel : centerCanvas}
+        </div>
 
         {/* Mobile bottom sheet — left wizard */}
         <div

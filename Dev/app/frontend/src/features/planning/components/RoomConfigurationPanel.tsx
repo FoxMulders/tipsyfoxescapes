@@ -1,7 +1,8 @@
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { TargetInterfaceCard } from "./TargetInterfaceCard";
 import { RoomConfigurationForm } from "./RoomConfigurationForm";
 import { PropManager } from "./PropManager";
-import { AdvancedFeatureToggle } from "./AdvancedFeatureToggle";
+import { AdvancedFeatureSections } from "./AdvancedFeatureToggle";
 import { usePlanning } from "../context/PlanningProvider";
 
 type RoomConfigurationPanelProps = {
@@ -42,8 +43,19 @@ export function RoomConfigurationPanel({
           />
         </div>
         <RoomConfigurationForm eventSuggestions={eventSuggestions} />
-        <PropManager itemHistory={itemHistory} />
-        <AdvancedFeatureToggle />
+        <Accordion
+          type="single"
+          collapsible
+          className="form-field-panel advanced-config-panel rounded-md border border-slate-600 bg-slate-900 px-4"
+        >
+          <AccordionItem value="advanced-configuration">
+            <AccordionTrigger>Advanced Configuration</AccordionTrigger>
+            <AccordionContent className="space-y-4">
+              <PropManager itemHistory={itemHistory} />
+              <AdvancedFeatureSections />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </div>
     </aside>
   );

@@ -161,6 +161,7 @@ export function BuilderPersistentWorkspace({
         onMobileLeftOpenChange={setMobileLeftOpen}
         onLayoutChange={setLayoutRevision}
         navMenu={navMenu}
+        briefFocusMode
       />
       <WorkspaceInspectorMobile
         open={mobileInspectorOpen && Boolean(selectedZone || selectedPuzzle)}

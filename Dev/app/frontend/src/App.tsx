@@ -83,6 +83,7 @@ import { type BillingPlan } from "@/components/account/PlansAndBillingSection";
 import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
 import { BuilderPersistentWorkspace } from "@/features/workspace/BuilderPersistentWorkspace";
+import { WorkspaceSessionExpiredOverlay } from "@/features/workspace/WorkspaceSessionExpiredOverlay";
 import { ThemeStepWorkspacePanel } from "@/features/workspace/ThemeStepWorkspacePanel";
 import { PuzzleThemesStepShell } from "@/features/workspace/PuzzleThemesStepShell";
 import { ThemeStepPortalOrStatic } from "@/features/workspace/ThemeStepPortalOrStatic";
@@ -477,7 +478,8 @@ type SavedPlanPayload = {
   themeCoachChat?: Array<{ id: string; role: "user" | "assistant"; content: string }>;
 };
 const API_BASE = "";
-const THEME_SESSION_EXPIRED_MESSAGE = "Session expired. Please log in to view and save your theme ideas,";
+const THEME_SESSION_EXPIRED_MESSAGE =
+  "You were signed out after 30 minutes without activity. Sign in again to continue AI theme and puzzle generation.";
 const HISTORY_STORAGE_KEY = "escape-room-builder-input-history-v1";
 /** After idle sign-out, saved draft plan id so the next login can reopen the builder automatically. */
 const IDLE_RESUME_PLAN_ID_KEY = "escape-room-builder-idle-resume-plan-v1";
@@ -2135,6 +2137,10 @@ export default function App() {
   const [browserAiReady, setBrowserAiReady] = useState<boolean>(() => isBrowserAiAvailable());
   const [themesAiGenerated, setThemesAiGenerated] = useState<boolean | null>(null);
   const [themeSessionExpiredNotice, setThemeSessionExpiredNotice] = useState("");
+  const [workspaceSessionExpired, setWorkspaceSessionExpired] = useState<{ open: boolean; message: string }>({
+    open: false,
+    message: "",
+  });
   const [selectedThemeId, setSelectedThemeId] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [serviceHealth, setServiceHealth] = useState<ServiceHealth | null>(null);
@@ -2299,6 +2305,11 @@ export default function App() {
   const clearWizardBusyStateRef = useRef<() => void>(() => {});
   const idleLastActivityRef = useRef(0);
   const idleTimeoutSignOutStartedRef = useRef(false);
+  const appViewRef = useRef(appView);
+  appViewRef.current = appView;
+  const persistentCanvasStepsRef = useRef(false);
+  const workspaceSessionExpiredRef = useRef(workspaceSessionExpired);
+  workspaceSessionExpiredRef.current = workspaceSessionExpired;
   const [idlePromptOpen, setIdlePromptOpen] = useState(false);
   const [idleDraftBusy, setIdleDraftBusy] = useState(false);
   const [snapshotSyncHint, setSnapshotSyncHint] = useState<string | null>(null);
@@ -2615,6 +2626,7 @@ export default function App() {
   const flowWizardStep: WizardStep = wizardSteps.includes(wizardStep) ? wizardStep : (wizardSteps[0] ?? "setup");
   const persistentCanvasSteps =
     flowWizardStep === "setup" || flowWizardStep === "themes" || flowWizardStep === "themes-puzzles";
+  persistentCanvasStepsRef.current = persistentCanvasSteps;
   const wizardIndex = wizardSteps.indexOf(flowWizardStep);
   const missionStepLabels = useMemo(() => wizardSteps.map(wizardStepLabel), [wizardSteps]);
 
@@ -2972,6 +2984,10 @@ export default function App() {
   };
 
   const handleGenerateRoom = async (): Promise<void> => {
+    if (workspaceSessionExpired.open || (Boolean(authUser) && !hasAuthToken() && persistentCanvasSteps)) {
+      activateWorkspaceSessionExpired(THEME_SESSION_EXPIRED_MESSAGE);
+      return;
+    }
     setError("");
     const missing = collectStrictPlanningMissing();
     if (!buildPlanningBody("strict")) {
@@ -3634,12 +3650,15 @@ export default function App() {
   };
 
   const hasFullCatalogAccess = Boolean(authUser?.hasFullCatalog);
+  const workspaceAuthBlocked =
+    workspaceSessionExpired.open || (Boolean(authUser) && !hasAuthToken() && persistentCanvasSteps);
   const canGenerateNewThemes =
-    hasFullCatalogAccess ||
+    !workspaceAuthBlocked &&
+    (hasFullCatalogAccess ||
     serverOpenAiConfigured === true ||
     browserAiReady ||
     coachBrowserAiReady ||
-    (Boolean(authUser) && isMobileLikeDevice());
+    (Boolean(authUser) && isMobileLikeDevice()));
   const handleGenerateNewThemes = (): void => {
     void loadThemes(themes.length > 0 ? "/api/themes/refresh" : "/api/themes/generate");
   };
@@ -3718,11 +3737,19 @@ export default function App() {
     return isFatalAuthError(code) || code === "UNAUTHORIZED" || code === "TOKEN_MISSING";
   };
 
-  const handleThemeGenerationAuthExpired = (): void => {
-    cacheLocalPlanningInputs();
+  const activateWorkspaceSessionExpired = useCallback((message: string): void => {
     themesAutoFetchInFlight.current = false;
     setThemeIdeasLoading(false);
-    setThemeSessionExpiredNotice(THEME_SESSION_EXPIRED_MESSAGE);
+    setThemeSessionExpiredNotice("");
+    setWorkspaceSessionExpired({
+      open: true,
+      message: message.trim() || THEME_SESSION_EXPIRED_MESSAGE,
+    });
+  }, []);
+
+  const handleThemeGenerationAuthExpired = (): void => {
+    cacheLocalPlanningInputs();
+    activateWorkspaceSessionExpired(THEME_SESSION_EXPIRED_MESSAGE);
     setError("");
     setSessionId("");
     setSelectedThemeId("");
@@ -3986,8 +4013,19 @@ export default function App() {
     planningSessionRecoveryInFlight.current = false;
     pendingAuthSessionBootstrap.current = false;
     lastPlanningAuthTokenRef.current = "";
+    const expiredMessage = message?.trim() || THEME_SESSION_EXPIRED_MESSAGE;
+    if (appViewRef.current === "builder" && persistentCanvasStepsRef.current) {
+      activateWorkspaceSessionExpired(expiredMessage);
+      setAuthToken("");
+      try {
+        clearAuthSession();
+      } catch {
+        // ignore storage errors
+      }
+      return;
+    }
     persistAuth("", null);
-    setError(message?.trim() || "Your sign-in expired. Please log in again.");
+    setError(expiredMessage);
   };
   const handleAuthExpiredRef = useRef(handleAuthExpired);
   handleAuthExpiredRef.current = handleAuthExpired;
@@ -4024,6 +4062,21 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = subscribeCrossTabAuth((newSession) => {
       if (!newSession?.authToken.trim()) {
+        if (
+          appViewRef.current === "builder" &&
+          persistentCanvasStepsRef.current &&
+          authSessionRef.current.authUser &&
+          !workspaceSessionExpiredRef.current.open
+        ) {
+          activateWorkspaceSessionExpired(THEME_SESSION_EXPIRED_MESSAGE);
+          setAuthToken("");
+          try {
+            clearAuthSession();
+          } catch {
+            // ignore
+          }
+          return;
+        }
         clearWizardBusyStateRef.current();
         persistAuthRef.current("", null);
         return;
@@ -5060,6 +5113,7 @@ export default function App() {
   };
 
   const loadThemes = async (endpoint: "/api/themes/generate" | "/api/themes/refresh") => {
+    if (workspaceAuthBlocked) return;
     const activeSessionId = await ensureSession();
     if (!activeSessionId) return;
     await startThemeGeneration(activeSessionId, endpoint, themes);
@@ -5068,7 +5122,7 @@ export default function App() {
   useEffect(() => {
     const onBriefOrThemes =
       wizardStep === "themes" || (persistentCanvasSteps && wizardStep === "setup");
-    if (!onBriefOrThemes || themePath === "custom") {
+    if (!onBriefOrThemes || themePath === "custom" || workspaceAuthBlocked) {
       return;
     }
     if (themes.length > 0) {
@@ -6364,14 +6418,25 @@ export default function App() {
               // ignore
             }
           }
-          setError(
-            resumePlanId
-              ? "You were signed out after 30 minutes without activity. Your plan was saved as a draft and will reopen automatically when you sign back in."
-              : authUser?.canSaveRooms
-                ? "You were signed out after 30 minutes without activity. Sign in again to continue. If you saw the inactivity prompt, use Save draft there to keep work in Saved room plans."
-                : "You were signed out after 30 minutes without activity. Sign in again to continue. Trial accounts cannot save drafts—purchase a room pack to save plans to your account.",
-          );
-          persistAuthRef.current("", null);
+          const expiredMessage = resumePlanId
+            ? "You were signed out after 30 minutes without activity. Your plan was saved as a draft and will reopen automatically when you sign back in."
+            : authUser?.canSaveRooms
+              ? "You were signed out after 30 minutes without activity. Sign in again to continue. If you saw the inactivity prompt, use Save draft there to keep work in Saved room plans."
+              : "You were signed out after 30 minutes without activity. Sign in again to continue. Trial accounts cannot save drafts—purchase a room pack to save plans to your account.";
+          const inPersistentWorkspace =
+            appViewRef.current === "builder" && persistentCanvasStepsRef.current;
+          if (inPersistentWorkspace) {
+            activateWorkspaceSessionExpired(expiredMessage);
+            setAuthToken("");
+            try {
+              clearAuthSession();
+            } catch {
+              // ignore
+            }
+          } else {
+            setError(expiredMessage);
+            persistAuthRef.current("", null);
+          }
           idleTimeoutSignOutStartedRef.current = false;
         })();
         return;
@@ -6389,8 +6454,33 @@ export default function App() {
       window.removeEventListener("touchstart", markActive, scrollOpts);
       window.clearInterval(id);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- idle watchdog only needs token/user identity
-  }, [authToken, authUser]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- idle watchdog only needs token/user identity
+  }, [authToken, authUser, activateWorkspaceSessionExpired]);
+
+  useEffect(() => {
+    if (
+      authUser &&
+      !hasAuthToken() &&
+      appView === "builder" &&
+      persistentCanvasSteps &&
+      !workspaceSessionExpired.open
+    ) {
+      activateWorkspaceSessionExpired(THEME_SESSION_EXPIRED_MESSAGE);
+    }
+  }, [
+    authUser,
+    authToken,
+    appView,
+    persistentCanvasSteps,
+    workspaceSessionExpired.open,
+    activateWorkspaceSessionExpired,
+  ]);
+
+  useEffect(() => {
+    if (authToken.trim() && authUser?.id && workspaceSessionExpired.open) {
+      setWorkspaceSessionExpired({ open: false, message: "" });
+    }
+  }, [authToken, authUser?.id, workspaceSessionExpired.open]);
 
   useLayoutEffect(() => {
     if (wizardStep !== "output-review" && wizardStep !== "output-export") return;
@@ -7473,15 +7563,15 @@ export default function App() {
                           />
                         </div>
                       ) : null}
-                      {themeSessionExpiredNotice ? (
+                      {themeSessionExpiredNotice && !workspaceSessionExpired.open ? (
                         <div className="theme-session-expired-card" role="alert">
                           {themeSessionExpiredNotice}
                         </div>
                       ) : null}
-                      {themes.length === 0 && themeIdeasLoading && !themeSessionExpiredNotice ? (
+                      {themes.length === 0 && themeIdeasLoading && !themeSessionExpiredNotice && !workspaceSessionExpired.open ? (
                         <GenerationProgressIndicator active phases={THEME_GENERATION_PHASES} />
                       ) : null}
-                      {themes.length === 0 && !themeIdeasLoading && !themeSessionExpiredNotice ? (
+                      {themes.length === 0 && !themeIdeasLoading && !themeSessionExpiredNotice && !workspaceSessionExpired.open ? (
                         <div className="theme-ideas-actions theme-ideas-actions--generate">
                           <p className="muted">Theme ideas did not load yet.</p>
                           <ThemeGenerateButton
@@ -8656,6 +8746,19 @@ export default function App() {
             onClose={() => setUpgradePromptOpen(false)}
           />
         </Suspense>
+      ) : null}
+      {workspaceSessionExpired.open && authUser && appView === "builder" && persistentCanvasSteps ? (
+        <WorkspaceSessionExpiredOverlay
+          open
+          message={workspaceSessionExpired.message}
+          userName={authUser.name}
+          onSignIn={() => {
+            const msg = workspaceSessionExpired.message;
+            setWorkspaceSessionExpired({ open: false, message: "" });
+            persistAuth("", null);
+            setError(msg);
+          }}
+        />
       ) : null}
       {idlePromptOpen && authUser ? (
         <div className="idle-session-overlay" role="dialog" aria-modal="true" aria-labelledby="idle-session-title">
