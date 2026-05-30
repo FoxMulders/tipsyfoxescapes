@@ -855,6 +855,22 @@ pre.code-inline {
   min-height: 0;
   max-height: calc(100vh - var(--app-top-nav-height, 0px));
   overflow: hidden;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+}
+
+.page-shell--room-cad-setup .builder-workspace--persistent {
+  min-height: calc(100vh - var(--app-top-nav-height, 0px));
+  max-height: calc(100vh - var(--app-top-nav-height, 0px));
+  overflow: hidden;
+}
+
+.page-shell--room-cad-setup .app-main-col {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .flow-shell-scroll-region--persistent {

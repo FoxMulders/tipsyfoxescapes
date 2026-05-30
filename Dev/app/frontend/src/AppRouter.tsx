@@ -50,6 +50,14 @@ export function AppRouter() {
           }
         />
         <Route
+          path="/coordinator/experience-designer/*"
+          element={
+            <Suspense fallback={<RouteFallback label="Loading Escape Room Builder…" />}>
+              <App />
+            </Suspense>
+          }
+        />
+        <Route
           path="/admin/dashboard"
           element={
             <Suspense fallback={<RouteFallback label="Loading admin panel…" />}>
