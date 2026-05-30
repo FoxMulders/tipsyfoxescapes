@@ -77,19 +77,22 @@ export function WorkspaceShell({
         <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="Workspace steps">
           {WORKSPACE_STEPS.map((step, index) => {
             const active = step.id === activeStep;
+            const disabled = Boolean(step.transient);
             return (
               <div key={step.id} className="flex shrink-0 items-center gap-1">
                 {index > 0 ? <span className="hidden text-slate-600 sm:inline" aria-hidden="true">→</span> : null}
                 <button
                   type="button"
+                  disabled={disabled}
                   className={cn(
                     "rounded-md px-2 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors sm:px-3 sm:text-sm",
                     active
                       ? "bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-500/35"
                       : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200",
+                    disabled && "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-slate-400",
                   )}
                   aria-current={active ? "step" : undefined}
-                  onClick={() => onStepChange(step.id)}
+                  onClick={() => !disabled && onStepChange(step.id)}
                 >
                   <span className="sm:hidden">{step.index}</span>
                   <span className="hidden sm:inline">{step.shortLabel}</span>

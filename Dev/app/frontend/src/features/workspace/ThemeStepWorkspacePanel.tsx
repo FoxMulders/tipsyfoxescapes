@@ -9,7 +9,8 @@ type ThemeStepWorkspacePanelProps = {
   themesCount: number;
   onGenerateThemes: () => void;
   selectedThemeId: string;
-  onContinueToPuzzles: () => void;
+  onContinueToPuzzles?: () => void;
+  showContinueButton?: boolean;
 };
 
 /** Theme cards + controls for the persistent workspace left panel. */
@@ -22,6 +23,7 @@ export function ThemeStepWorkspacePanel({
   onGenerateThemes,
   selectedThemeId,
   onContinueToPuzzles,
+  showContinueButton = true,
 }: ThemeStepWorkspacePanelProps) {
   return (
     <div className="workspace-themes-extra flex flex-col gap-3">
@@ -33,7 +35,7 @@ export function ThemeStepWorkspacePanel({
         onGenerate={onGenerateThemes}
       />
       <div className="min-h-0 flex-1 overflow-auto">{children}</div>
-      {selectedThemeId ? (
+      {showContinueButton && selectedThemeId && onContinueToPuzzles ? (
         <button type="button" className="primary-btn w-full shrink-0" onClick={onContinueToPuzzles}>
           Continue to puzzle builder →
         </button>

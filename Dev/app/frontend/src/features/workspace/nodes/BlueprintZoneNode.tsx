@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import type { ZoneNodeData } from "../skeletonFlowGraph";
+import type { ZoneNodeData } from "../generationFlowGraph";
 
 function DoorHandle({ type, position, id }: { type: "source" | "target"; position: Position; id: string }) {
   const side =

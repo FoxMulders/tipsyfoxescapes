@@ -2971,6 +2971,89 @@ export default function App() {
     }
   };
 
+  const handleGenerateRoom = async (): Promise<void> => {
+    setError("");
+    const missing = collectStrictPlanningMissing();
+    if (!buildPlanningBody("strict")) {
+      flagMissingFields(missing);
+      setError(
+        missing.includes("headcountOrder")
+          ? "Players at one time cannot exceed total participants. Adjust the counters, then generate."
+          : "Complete room details (players, duration, and environment) before generating.",
+      );
+      scrollFirstInvalidRoomFieldIntoView();
+      return;
+    }
+    if (themePath === "custom") {
+      if (!selectedThemeId.trim()) {
+        setError('Use “Add and Select Custom Theme” to save your brief to this session, then generate.');
+        return;
+      }
+    } else if (!selectedThemeId.trim()) {
+      setValidationFlags((current) => ({ ...current, selectedThemeId: true }));
+      if (themes.length === 0 && canGenerateNewThemes) {
+        const bootstrapSessionId = await ensureSession();
+        if (bootstrapSessionId) {
+          const synced = await syncPlanningInputToServer(bootstrapSessionId, "strict");
+          if (synced) {
+            void startThemeGenerationRef.current(bootstrapSessionId, "/api/themes/generate", []);
+          }
+        }
+      }
+      setError("Choose one theme in The Brief before generating.");
+      return;
+    }
+    rememberInput("environmentType", environmentType);
+    rememberInput("availableItems", availableItems);
+    rememberInput("eventType", eventType);
+    const activeSessionId = await ensureSession();
+    if (!activeSessionId) return;
+    const synced = await syncPlanningInputToServer(activeSessionId, "strict");
+    if (!synced) return;
+    setWizardStep("themes-puzzles");
+    setActivePanel("themes");
+    if (puzzles.length === 0) {
+      const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
+      await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
+    }
+  };
+
+  const canGenerateRoom = useMemo(() => {
+    if (!buildPlanningBody("strict")) return false;
+    if (!selectedThemeId.trim()) return false;
+    return true;
+  }, [
+    playersConcurrent,
+    participantsTotal,
+    sessionDurationMinutes,
+    environmentType,
+    selectedThemeId,
+    targetInterface,
+  ]);
+
+  const generateRoomDisabledReason = useMemo((): string | undefined => {
+    if (!buildPlanningBody("strict")) {
+      return "Complete room details (players, duration, environment)";
+    }
+    if (!selectedThemeId.trim()) {
+      return "Choose a theme in The Brief";
+    }
+    return undefined;
+  }, [
+    playersConcurrent,
+    participantsTotal,
+    sessionDurationMinutes,
+    environmentType,
+    selectedThemeId,
+    targetInterface,
+  ]);
+
+  const workspaceVenueSummary = useMemo(
+    () =>
+      `${builderSelectionSummary.venue} · ${builderSelectionSummary.duration} · ${builderSelectionSummary.players}`,
+    [builderSelectionSummary],
+  );
+
   const proceedToOutputReview = async (): Promise<void> => {
     setError("");
     if (!buildPlanningBody("strict")) {
@@ -4983,7 +5066,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (wizardStep !== "themes" || themePath === "custom") {
+    const onBriefOrThemes =
+      wizardStep === "themes" || (persistentCanvasSteps && wizardStep === "setup");
+    if (!onBriefOrThemes || themePath === "custom") {
       return;
     }
     if (themes.length > 0) {
@@ -7102,31 +7187,31 @@ export default function App() {
                 generationTelemetry={generationTelemetry}
                 puzzlesGenerating={puzzlesGenerating}
                 puzzles={puzzleInspectorSlices}
+                venueSummary={workspaceVenueSummary}
                 eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
                 itemHistory={inputHistory.availableItems ?? []}
                 onOpenInspiration={() => setInspirationOpen(true)}
-                onGenerateSkeleton={handleGenerateArchitecturalSkeleton}
-                onGeneratePuzzles={() => void requestPuzzles(sessionId, selectedThemeId, selectedTheme ?? undefined)}
-                canGeneratePuzzles={Boolean(selectedThemeId && hasFullCatalogAccess)}
-                onContinueSetup={() => void proceedFromSetupToThemes()}
+                canGenerateRoom={canGenerateRoom}
+                generateRoomDisabledReason={generateRoomDisabledReason}
+                onGenerateRoom={() => void handleGenerateRoom()}
                 onOpenReview={() => void proceedToOutputReview()}
-                constraintsExtra={
-                  flowWizardStep === "themes" ? (
-                    <ThemeStepWorkspacePanel
-                      themeIdeasLoading={themeIdeasLoading}
-                      canGenerateNewThemes={canGenerateNewThemes}
-                      themeGenerateDisabledTitle={themeGenerateDisabledTitle}
-                      themesCount={themes.length}
-                      onGenerateThemes={handleGenerateNewThemes}
-                      selectedThemeId={selectedThemeId}
-                      onContinueToPuzzles={() => void proceedFromThemesToPuzzles()}
-                    >
-                      <div id="workspace-theme-slot" className="workspace-theme-slot" />
-                    </ThemeStepWorkspacePanel>
-                  ) : undefined
+                briefThemeContent={
+                  <ThemeStepWorkspacePanel
+                    themeIdeasLoading={themeIdeasLoading}
+                    canGenerateNewThemes={canGenerateNewThemes}
+                    themeGenerateDisabledTitle={themeGenerateDisabledTitle}
+                    themesCount={themes.length}
+                    onGenerateThemes={handleGenerateNewThemes}
+                    selectedThemeId={selectedThemeId}
+                    showContinueButton={false}
+                  >
+                    <div id="workspace-theme-slot" className="workspace-theme-slot" />
+                  </ThemeStepWorkspacePanel>
                 }
-                puzzlesExtra={
-                  flowWizardStep === "themes-puzzles" ? <div id="workspace-puzzle-slot" className="workspace-puzzle-slot min-h-[200px]" /> : undefined
+                blueprintExtra={
+                  flowWizardStep === "themes-puzzles" ? (
+                    <div id="workspace-puzzle-slot" className="workspace-puzzle-slot min-h-[200px]" />
+                  ) : undefined
                 }
                 navMenu={{
                   brandName: BRAND_NAME,
@@ -7149,7 +7234,7 @@ export default function App() {
                 }}
               />
             ) : null}
-            {flowWizardStep === "themes" ? (
+            {flowWizardStep === "themes" || (persistentCanvasSteps && flowWizardStep === "setup") ? (
               <ThemeStepPortalOrStatic persistent={persistentCanvasSteps}>
                 <OpenAiOpsBanner configured={serverOpenAiConfigured} browserAiReady={browserAiReady} />
                 <div className="theme-view-toggle-row theme-view-toggle-row--themes-step">

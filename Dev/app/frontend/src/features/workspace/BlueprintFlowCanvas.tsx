@@ -13,15 +13,18 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { RoomSkeleton } from "../../../../shared/roomSkeleton";
-import { roomSkeletonToFlowGraph, type ZoneNodeData } from "./skeletonFlowGraph";
+import { generationToFlowGraph, type FlowNodeData } from "./generationFlowGraph";
+import type { PuzzleInspectorSlice } from "./WorkspaceInspectorPanel";
 import { BlueprintZoneNode } from "./nodes/BlueprintZoneNode";
+import { PuzzleBeatNode } from "./nodes/PuzzleBeatNode";
 
-const nodeTypes = { blueprintZone: BlueprintZoneNode };
+const nodeTypes = { blueprintZone: BlueprintZoneNode, puzzleBeat: PuzzleBeatNode };
 
 type BlueprintFlowCanvasProps = {
   skeleton: RoomSkeleton | null;
+  puzzles: PuzzleInspectorSlice[];
   selectedNodeId: string | null;
-  onNodeSelect: (nodeId: string | null, data: ZoneNodeData | null) => void;
+  onNodeSelect: (nodeId: string | null, data: FlowNodeData | null) => void;
   layoutRevision?: number;
   className?: string;
 };
@@ -31,7 +34,7 @@ function FitViewOnGraphChange({ graphKey, layoutRevision }: { graphKey: string; 
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void fitView({ padding: 0.2, duration: 280, maxZoom: 1.35 });
+      void fitView({ padding: 0.2, duration: 280, maxZoom: 1.25 });
     }, 60);
     return () => window.clearTimeout(timer);
   }, [fitView, graphKey, layoutRevision]);
@@ -41,15 +44,16 @@ function FitViewOnGraphChange({ graphKey, layoutRevision }: { graphKey: string; 
 
 function BlueprintFlowCanvasInner({
   skeleton,
+  puzzles,
   selectedNodeId,
   onNodeSelect,
   layoutRevision,
   className,
 }: BlueprintFlowCanvasProps) {
-  const graph = useMemo(() => roomSkeletonToFlowGraph(skeleton), [skeleton]);
+  const graph = useMemo(() => generationToFlowGraph(skeleton, puzzles), [skeleton, puzzles]);
   const graphKey = useMemo(
-    () => `${skeleton?.flow_pattern ?? "placeholder"}:${graph.nodes.map((n) => n.id).join(",")}`,
-    [graph.nodes, skeleton?.flow_pattern],
+    () => `${skeleton?.flow_pattern ?? "empty"}:${graph.nodes.map((n) => n.id).join(",")}:${puzzles.length}`,
+    [graph.nodes, puzzles.length, skeleton?.flow_pattern],
   );
   const [nodes, setNodes, onNodesChange] = useNodesState(graph.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
@@ -76,13 +80,9 @@ function BlueprintFlowCanvasInner({
   }, [selectedNodeId, setNodes]);
 
   const onSelectionChange = useCallback(
-    ({ nodes: selected }: { nodes: Node<ZoneNodeData>[] }) => {
+    ({ nodes: selected }: { nodes: Node<FlowNodeData>[] }) => {
       const picked = selected[0];
       if (!picked) {
-        onNodeSelect(null, null);
-        return;
-      }
-      if (picked.id.startsWith("placeholder-")) {
         onNodeSelect(null, null);
         return;
       }
@@ -101,8 +101,8 @@ function BlueprintFlowCanvasInner({
         onEdgesChange={onEdgesChange}
         onSelectionChange={onSelectionChange}
         fitView
-        fitViewOptions={{ padding: 0.2, maxZoom: 1.35 }}
-        minZoom={0.15}
+        fitViewOptions={{ padding: 0.2, maxZoom: 1.25 }}
+        minZoom={0.12}
         maxZoom={2}
         panOnScroll
         zoomOnPinch
@@ -114,11 +114,11 @@ function BlueprintFlowCanvasInner({
         className="workspace-flow-canvas__flow bg-slate-950"
       >
         <FitViewOnGraphChange graphKey={graphKey} layoutRevision={layoutRevision} />
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="hsl(187 50% 40% / 0.35)" />
+        <Background variant={BackgroundVariant.Lines} gap={24} size={1} color="hsl(215 35% 28% / 0.45)" />
         <Controls className="workspace-flow-controls !border-slate-700 !bg-slate-900/90 !shadow-lg" position="bottom-left" />
         <MiniMap
           className="!border-slate-700 !bg-slate-900/80 hidden md:block"
-          nodeColor={() => "#22d3ee"}
+          nodeColor={(node) => (node.type === "puzzleBeat" ? "#a78bfa" : "#22d3ee")}
           maskColor="rgb(15 23 42 / 0.75)"
           position="bottom-right"
         />

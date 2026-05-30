@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { GenerationTelemetry } from "@/features/planning/domain/generationTelemetry";
 import { CouncilTelemetryPanel } from "@/features/planning/components/GenerationTelemetryPanel";
-import type { ZoneNodeData } from "./skeletonFlowGraph";
+import type { ZoneNodeData } from "./generationFlowGraph";
 
 export type PuzzleInspectorSlice = {
   id: string;
@@ -19,7 +19,7 @@ type WorkspaceInspectorPanelProps = {
   telemetry: GenerationTelemetry | null;
   puzzlesGenerating: boolean;
   selectedZone: ZoneNodeData | null;
-  linkedPuzzle: PuzzleInspectorSlice | null;
+  selectedPuzzle: PuzzleInspectorSlice | null;
   flowSummary?: string | null;
 };
 
@@ -27,9 +27,21 @@ export function WorkspaceInspectorPanel({
   telemetry,
   puzzlesGenerating,
   selectedZone,
-  linkedPuzzle,
+  selectedPuzzle,
   flowSummary,
 }: WorkspaceInspectorPanelProps) {
+  if (selectedPuzzle && !selectedZone) {
+    return (
+      <aside className="flex h-full min-h-0 flex-col gap-3 overflow-auto p-3" aria-label="Puzzle inspector">
+        <header>
+          <p className="m-0 text-[10px] font-bold uppercase tracking-widest text-violet-300/90">Puzzle beat</p>
+          <h3 className="m-0 mt-1 text-lg font-bold text-slate-50">{selectedPuzzle.title}</h3>
+        </header>
+        <PuzzleInspectorBlock puzzle={selectedPuzzle} />
+      </aside>
+    );
+  }
+
   if (selectedZone) {
     return (
       <aside className="flex h-full min-h-0 flex-col gap-3 overflow-auto p-3" aria-label="Zone inspector">
@@ -43,10 +55,10 @@ export function WorkspaceInspectorPanel({
             Suggested hardware: <strong className="text-slate-200">{selectedZone.hardware.replace(/_/g, " ")}</strong>
           </p>
         ) : null}
-        {linkedPuzzle ? (
-          <PuzzleInspectorBlock puzzle={linkedPuzzle} />
+        {selectedPuzzle ? (
+          <PuzzleInspectorBlock puzzle={selectedPuzzle} />
         ) : (
-          <p className="m-0 text-sm text-slate-500">No puzzle mapped to this zone yet — generate puzzles in step 3.</p>
+          <p className="m-0 text-sm text-slate-500">No puzzle linked to this zone in the logic tree.</p>
         )}
       </aside>
     );
