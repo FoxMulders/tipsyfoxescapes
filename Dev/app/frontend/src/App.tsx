@@ -83,6 +83,10 @@ import { type BillingPlan } from "@/components/account/PlansAndBillingSection";
 import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
 import { RoomDetailsWorkspace } from "@/features/planning/components/RoomDetailsWorkspace";
+import { BuilderPersistentWorkspace } from "@/features/workspace/BuilderPersistentWorkspace";
+import { ThemeStepWorkspacePanel } from "@/features/workspace/ThemeStepWorkspacePanel";
+import { PuzzleThemesStepShell } from "@/features/workspace/PuzzleThemesStepShell";
+import { ThemeStepPortalOrStatic } from "@/features/workspace/ThemeStepPortalOrStatic";
 import { CouncilTelemetryPanel } from "@/features/planning/components/GenerationTelemetryPanel";
 import { OpenAiOpsBanner } from "@/features/planning/components/OpenAiOpsBanner";
 import type { GenerationTelemetry } from "@/features/planning/domain/generationTelemetry";
@@ -2608,6 +2612,8 @@ export default function App() {
   );
   const prevWizardStepsRef = useRef(wizardSteps);
   const flowWizardStep: WizardStep = wizardSteps.includes(wizardStep) ? wizardStep : (wizardSteps[0] ?? "setup");
+  const persistentCanvasSteps =
+    flowWizardStep === "setup" || flowWizardStep === "themes" || flowWizardStep === "themes-puzzles";
   const wizardIndex = wizardSteps.indexOf(flowWizardStep);
   const missionStepLabels = useMemo(() => wizardSteps.map(wizardStepLabel), [wizardSteps]);
 
@@ -3560,6 +3566,37 @@ export default function App() {
       : isMobileLikeDevice()
         ? "Sign in to generate themes for your room"
         : "Use Chrome on-device AI or upgrade to a room pack for rotating theme ideas";
+
+  const handleGenerateArchitecturalSkeleton = useCallback((): void => {
+    const planning = planningRef.current;
+    if (!planning) return;
+    const themeName =
+      customThemeName.trim() ||
+      selectedTheme?.name ||
+      themes.find((t) => t.id === selectedThemeId)?.name ||
+      "Your escape room";
+    const commercial = planning.state.targetInterface === "commercial_venue";
+    const skeleton = buildHeuristicRoomSkeleton(themeName, commercial);
+    setLastRoomSkeleton(skeleton);
+    const nextLayout = applyRoomSkeletonToLayout(planning.state.roomLayout, skeleton);
+    planning.dispatch({ type: "SET_ROOM_LAYOUT", layout: nextLayout });
+    planning.dispatch({
+      type: "LAYOUT_ANNOUNCE",
+      message: `Plotted ${skeleton.zones.length} flow zones on the blueprint canvas.`,
+    });
+  }, [customThemeName, selectedTheme, themes, selectedThemeId]);
+
+  const puzzleInspectorSlices = useMemo(
+    () =>
+      puzzles.map((p) => ({
+        id: p.id,
+        title: p.title,
+        category: p.category,
+        objective: p.objective,
+        electronicDetails: p.electronicDetails,
+      })),
+    [puzzles],
+  );
   const canNavigateToOutputReview = Boolean(selectedThemeId.trim());
 
   const planCompletionPercent = useMemo(
@@ -7018,9 +7055,10 @@ export default function App() {
       <PlanningAppHydrate hydrateKey={sessionId.trim() || "draft"} payload={planningHydratePayload} />
       <PlanningStateSync setters={planningStateSetters} />
       <BuilderErrorBoundary>
-      <div className="builder-workspace">
+      <div className={`builder-workspace${persistentCanvasSteps ? " builder-workspace--persistent" : ""}`}>
         <section className="stage-main">
-          <section className="card mission-panel flow-shell builder-workspace-shell">
+          <section className={`card mission-panel flow-shell builder-workspace-shell${persistentCanvasSteps ? " builder-workspace-shell--persistent" : ""}`}>
+            {!persistentCanvasSteps ? (
             <div
               id="flow-shell-error-anchor"
               ref={flowMapBarRef}
@@ -7037,10 +7075,11 @@ export default function App() {
                 navigationDisabled={wizardNavigationBusy}
               />
             </div>
-            <div className="flow-shell-scroll-region flow-shell-scroll-region--body">
+            ) : null}
+            <div className={`flow-shell-scroll-region flow-shell-scroll-region--body${persistentCanvasSteps ? " flow-shell-scroll-region--persistent" : ""}`}>
+            {!persistentCanvasSteps ? (
             <div className="flow-controls flow-controls--step-intro">
-              {flowWizardStep !== "setup" ? (
-                <FlowStepIntro
+              <FlowStepIntro
                   stepIndex={wizardIndex}
                   stepTotal={wizardSteps.length}
                   title={wizardLabel}
@@ -7053,44 +7092,45 @@ export default function App() {
                     ) : undefined)
                   }
                 />
-              ) : null}
             </div>
-            {flowWizardStep === "setup" ? (
-              <RoomDetailsWorkspace
-                eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
-                itemHistory={inputHistory.availableItems ?? []}
-                onContinue={() => void proceedFromSetupToThemes()}
-                onOpenInspiration={() => setInspirationOpen(true)}
-                themeLabel={
-                  themePath === "custom"
-                    ? customThemeName.trim() || "Custom theme"
-                    : selectedTheme?.name ?? (selectedThemeId ? "Theme selected" : "Not selected")
-                }
-                mainPuzzleCount={mainTrackPuzzles.length}
-                sessionSyncing={planningSyncing}
+            ) : null}
+            {persistentCanvasSteps ? (
+              <BuilderPersistentWorkspace
+                flowWizardStep={flowWizardStep}
+                roomSkeleton={lastRoomSkeleton}
                 generationTelemetry={generationTelemetry}
                 puzzlesGenerating={puzzlesGenerating}
-                spatialFlowSummary={lastRoomSkeleton?.flow_summary ?? null}
-                serverOpenAiConfigured={serverOpenAiConfigured}
-                browserAiReady={browserAiReady}
-                authName={authUser.name}
-                authEmail={authUser.email}
-                billingTierLabel={formatBillingTierLabel(authUser.billingTier)}
-                planStatusDetail={`${authUser.roomsRemaining} of ${authUser.roomAllowance} save slots · ${authUser.exportCreditsRemaining} export credits`}
-                appView={appView}
-                showAdminTab={authUser.role === "admin" || authUser.isAdmin}
-                onAppViewChange={(view) => {
-                  if (view === "admin") {
-                    navigate("/admin/dashboard");
-                    return;
-                  }
-                  setAppView(view);
-                }}
-                onSignOut={signOut}
+                puzzles={puzzleInspectorSlices}
+                eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
+                itemHistory={inputHistory.availableItems ?? []}
+                onOpenInspiration={() => setInspirationOpen(true)}
+                onGenerateSkeleton={handleGenerateArchitecturalSkeleton}
+                onGeneratePuzzles={() => void requestPuzzles(sessionId, selectedThemeId, selectedTheme ?? undefined)}
+                canGeneratePuzzles={Boolean(selectedThemeId && hasFullCatalogAccess)}
+                onContinueSetup={() => void proceedFromSetupToThemes()}
+                onOpenReview={() => void proceedToOutputReview()}
+                constraintsExtra={
+                  flowWizardStep === "themes" ? (
+                    <ThemeStepWorkspacePanel
+                      themeIdeasLoading={themeIdeasLoading}
+                      canGenerateNewThemes={canGenerateNewThemes}
+                      themeGenerateDisabledTitle={themeGenerateDisabledTitle}
+                      themesCount={themes.length}
+                      onGenerateThemes={handleGenerateNewThemes}
+                      selectedThemeId={selectedThemeId}
+                      onContinueToPuzzles={() => void proceedFromThemesToPuzzles()}
+                    >
+                      <div id="workspace-theme-slot" className="workspace-theme-slot" />
+                    </ThemeStepWorkspacePanel>
+                  ) : undefined
+                }
+                puzzlesExtra={
+                  flowWizardStep === "themes-puzzles" ? <div id="workspace-puzzle-slot" className="workspace-puzzle-slot min-h-[200px]" /> : undefined
+                }
               />
             ) : null}
             {flowWizardStep === "themes" ? (
-              <div className="flow-content flow-content--themes-step">
+              <ThemeStepPortalOrStatic persistent={persistentCanvasSteps}>
                 <OpenAiOpsBanner configured={serverOpenAiConfigured} browserAiReady={browserAiReady} />
                 <div className="theme-view-toggle-row theme-view-toggle-row--themes-step">
                   <span className="theme-view-toggle-legend" id="theme-view-toggle-label">
@@ -7425,12 +7465,17 @@ export default function App() {
                     </div>
                   </>
                 ) : null}
-              </div>
+              </ThemeStepPortalOrStatic>
             ) : null}
             {flowWizardStep === "themes-puzzles" ? (
-              <div className="puzzle-builder-layout">
-                <OpenAiOpsBanner configured={serverOpenAiConfigured} browserAiReady={browserAiReady} className="puzzle-builder-layout__banner" />
-                <div className="puzzle-builder-layout__main flow-content">
+              <PuzzleThemesStepShell
+                persistent={persistentCanvasSteps}
+                serverOpenAiConfigured={serverOpenAiConfigured}
+                browserAiReady={browserAiReady}
+                lastRoomSkeleton={lastRoomSkeleton}
+                puzzlesGenerating={puzzlesGenerating}
+                generationTelemetry={generationTelemetry}
+              >
                 {!hasFullCatalogAccess ? (
                   <p className="muted puzzle-builder-freegen-note puzzle-builder-freegen-note--top">
                     <strong>Trial:</strong> a puzzle set usually loads when you open this step. If the list is still empty, use{" "}
@@ -7827,30 +7872,7 @@ export default function App() {
                     </div>
                   ) : null}
                 </div>
-              </div>
-              <div className="puzzle-builder-layout__blueprint">
-                {lastRoomSkeleton?.flow_summary ? (
-                  <p className="blueprint-flow-summary muted text-sm" role="note">
-                    <strong>Spatial flow:</strong> {lastRoomSkeleton.flow_summary}
-                  </p>
-                ) : (
-                  <p className="blueprint-flow-summary muted text-sm" role="note">
-                    Generate puzzles to plot AI zones on this blueprint, or place nodes manually.
-                  </p>
-                )}
-                <Suspense fallback={<p className="muted p-4 text-sm">Loading blueprint…</p>}>
-                  <BlueprintWorkspace />
-                </Suspense>
-              </div>
-              <aside className="puzzle-builder-layout__telemetry glass-panel" aria-label="Generation telemetry">
-                <CouncilTelemetryPanel
-                  loading={puzzlesGenerating}
-                  telemetry={generationTelemetry}
-                  serverOpenAiConfigured={serverOpenAiConfigured}
-                  browserAiReady={browserAiReady}
-                />
-              </aside>
-            </div>
+              </PuzzleThemesStepShell>
             ) : null}
           {flowWizardStep === "saved" && hasSavedPlans && showPlanPicker ? (
         <section className="card mission-panel">
