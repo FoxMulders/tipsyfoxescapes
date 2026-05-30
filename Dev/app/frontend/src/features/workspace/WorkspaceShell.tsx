@@ -1,6 +1,13 @@
-import type { ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import { ChevronLeft, ChevronRight, PanelLeft, PanelRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WORKSPACE_STEPS, type WorkspaceStepId } from "./workspaceSteps";
+import { WorkspaceNavMenu, type WorkspaceNavMenuProps } from "./WorkspaceNavMenu";
+
+const LEFT_OPEN_W = 320;
+const LEFT_RAIL_W = 48;
+const RIGHT_OPEN_W = 360;
+const RIGHT_RAIL_W = 48;
 
 type WorkspaceShellProps = {
   activeStep: WorkspaceStepId;
@@ -10,6 +17,8 @@ type WorkspaceShellProps = {
   rightPanel: ReactNode;
   mobileLeftOpen: boolean;
   onMobileLeftOpenChange: (open: boolean) => void;
+  onLayoutChange?: (revision: number) => void;
+  navMenu?: WorkspaceNavMenuProps;
   className?: string;
 };
 
@@ -21,8 +30,41 @@ export function WorkspaceShell({
   rightPanel,
   mobileLeftOpen,
   onMobileLeftOpenChange,
+  onLayoutChange,
+  navMenu,
   className,
 }: WorkspaceShellProps) {
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
+  const [layoutRevision, setLayoutRevision] = useState(0);
+
+  const bumpLayout = (): void => {
+    setLayoutRevision((r) => {
+      const next = r + 1;
+      onLayoutChange?.(next);
+      return next;
+    });
+  };
+
+  const toggleLeft = (): void => {
+    setLeftOpen((v) => !v);
+    bumpLayout();
+  };
+
+  const toggleRight = (): void => {
+    setRightOpen((v) => !v);
+    bumpLayout();
+  };
+
+  const centerWithLayout = useMemo(
+    () => (
+      <div className="workspace-shell__center-inner h-full min-h-0" data-layout-revision={layoutRevision}>
+        {centerCanvas}
+      </div>
+    ),
+    [centerCanvas, layoutRevision],
+  );
+
   return (
     <div
       className={cn(
@@ -30,7 +72,8 @@ export function WorkspaceShell({
         className,
       )}
     >
-      <header className="workspace-shell__header flex h-[60px] shrink-0 items-center gap-3 border-b border-slate-800/90 bg-slate-950/95 px-3 md:px-4">
+      <header className="workspace-shell__header flex h-[60px] shrink-0 items-center gap-2 border-b border-slate-800/90 bg-slate-950/95 px-2 md:gap-3 md:px-4">
+        {navMenu ? <WorkspaceNavMenu {...navMenu} /> : null}
         <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="Workspace steps">
           {WORKSPACE_STEPS.map((step, index) => {
             const active = step.id === activeStep;
@@ -65,16 +108,76 @@ export function WorkspaceShell({
       </header>
 
       <div className="workspace-shell__body relative min-h-0 flex-1">
-        {/* Desktop grid */}
-        <div className="hidden h-full min-h-0 lg:grid lg:grid-cols-[320px_1fr_360px] lg:gap-2 lg:p-2">
-          <aside className="workspace-shell__left min-h-0 overflow-hidden rounded-lg border border-slate-800/80 bg-slate-900/40 p-2">
-            {leftPanel}
+        {/* Desktop: flex columns with collapsible rails */}
+        <div className="hidden h-full min-h-0 gap-2 p-2 lg:flex">
+          <aside
+            className={cn(
+              "workspace-shell__left relative flex shrink-0 flex-col overflow-hidden rounded-lg border border-slate-800/80 bg-slate-900/40 transition-[width] duration-300 ease-out",
+              leftOpen ? "p-2" : "items-center justify-center p-1",
+            )}
+            style={{ width: leftOpen ? LEFT_OPEN_W : LEFT_RAIL_W }}
+          >
+            {leftOpen ? <div className="min-h-0 flex-1 overflow-auto">{leftPanel}</div> : null}
+            {!leftOpen ? (
+              <button
+                type="button"
+                className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400 hover:text-cyan-300"
+                aria-label="Expand wizard panel"
+                title="Expand wizard panel"
+                onClick={toggleLeft}
+              >
+                <PanelLeft className="h-4 w-4" aria-hidden />
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            ) : null}
+            {leftOpen ? (
+              <button
+                type="button"
+                className="workspace-panel-toggle workspace-panel-toggle--left"
+                aria-label="Collapse wizard panel"
+                title="Collapse wizard panel"
+                onClick={toggleLeft}
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+              </button>
+            ) : null}
           </aside>
-          <main className="workspace-shell__center min-h-0 overflow-hidden rounded-lg border border-slate-800/80 bg-slate-950">
-            {centerCanvas}
+
+          <main className="workspace-shell__center min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-slate-800/80 bg-slate-950">
+            {centerWithLayout}
           </main>
-          <aside className="workspace-shell__right min-h-0 overflow-hidden rounded-lg border border-slate-800/80 bg-slate-900/40">
-            {rightPanel}
+
+          <aside
+            className={cn(
+              "workspace-shell__right relative flex shrink-0 flex-col overflow-hidden rounded-lg border border-slate-800/80 bg-slate-900/40 transition-[width] duration-300 ease-out",
+              rightOpen ? "" : "items-center justify-center p-1",
+            )}
+            style={{ width: rightOpen ? RIGHT_OPEN_W : RIGHT_RAIL_W }}
+          >
+            {rightOpen ? <div className="min-h-0 flex-1 overflow-auto">{rightPanel}</div> : null}
+            {!rightOpen ? (
+              <button
+                type="button"
+                className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400 hover:text-cyan-300"
+                aria-label="Expand inspector panel"
+                title="Expand inspector panel"
+                onClick={toggleRight}
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+                <PanelRight className="h-4 w-4" aria-hidden />
+              </button>
+            ) : null}
+            {rightOpen ? (
+              <button
+                type="button"
+                className="workspace-panel-toggle workspace-panel-toggle--right"
+                aria-label="Collapse inspector panel"
+                title="Collapse inspector panel"
+                onClick={toggleRight}
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            ) : null}
           </aside>
         </div>
 

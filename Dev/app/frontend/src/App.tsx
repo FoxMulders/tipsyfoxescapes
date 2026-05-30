@@ -82,7 +82,6 @@ import { MissionFlowMap } from "@/components/planning/MissionFlowMap";
 import { type BillingPlan } from "@/components/account/PlansAndBillingSection";
 import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
-import { RoomDetailsWorkspace } from "@/features/planning/components/RoomDetailsWorkspace";
 import { BuilderPersistentWorkspace } from "@/features/workspace/BuilderPersistentWorkspace";
 import { ThemeStepWorkspacePanel } from "@/features/workspace/ThemeStepWorkspacePanel";
 import { PuzzleThemesStepShell } from "@/features/workspace/PuzzleThemesStepShell";
@@ -6636,7 +6635,7 @@ export default function App() {
       <main
         ref={builderShellRef}
         className={`page-shell page-shell--layered page-shell--cols${
-          appView === "builder" && flowWizardStep === "setup" ? " page-shell--room-cad-setup" : ""
+          appView === "builder" && persistentCanvasSteps ? " page-shell--room-cad-setup" : ""
         }`}
       >
       <div className="app-main-col">
@@ -7127,6 +7126,25 @@ export default function App() {
                 puzzlesExtra={
                   flowWizardStep === "themes-puzzles" ? <div id="workspace-puzzle-slot" className="workspace-puzzle-slot min-h-[200px]" /> : undefined
                 }
+                navMenu={{
+                  brandName: BRAND_NAME,
+                  authName: authUser.name,
+                  billingTierLabel: formatBillingTierLabel(authUser.billingTier),
+                  planStatusDetail: `${authUser.roomsRemaining} of ${authUser.roomAllowance} save slots · ${authUser.exportCreditsRemaining} export credits`,
+                  appView,
+                  showAdminTab: authUser.role === "admin" || authUser.isAdmin,
+                  onAppViewChange: (view) => {
+                    if (view === "admin") {
+                      navigate("/admin/dashboard");
+                      return;
+                    }
+                    setAppView(view);
+                  },
+                  onSignOut: signOut,
+                  onOpenSnapshot: () => setSnapshotOpen(true),
+                  themeName: selectedTheme?.name,
+                  puzzleCount: puzzles.length,
+                }}
               />
             ) : null}
             {flowWizardStep === "themes" ? (
@@ -8650,7 +8668,7 @@ export default function App() {
       ) : null}
       <GlobalFooter buildStamp={APP_BUILD_STAMP} />
       </div>
-      {!(appView === "builder" && flowWizardStep === "setup") ? (
+      {!(appView === "builder" && persistentCanvasSteps) ? (
       <aside className="app-sidebar-col">
         <TopNavBar
           ref={topNavRef}

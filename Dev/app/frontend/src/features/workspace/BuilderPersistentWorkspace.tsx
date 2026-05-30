@@ -3,11 +3,13 @@ import type { ReactNode } from "react";
 import type { RoomSkeleton, RoomZone } from "../../../../shared/roomSkeleton";
 import type { GenerationTelemetry } from "@/features/planning/domain/generationTelemetry";
 import { BlueprintFlowCanvas } from "./BlueprintFlowCanvas";
+import { WorkspaceCanvasStage, type WorkspaceCanvasView } from "./WorkspaceCanvasStage";
 import { WorkspaceInspectorMobile, WorkspaceInspectorPanel, type PuzzleInspectorSlice } from "./WorkspaceInspectorPanel";
 import { WorkspaceLeftPanel } from "./WorkspaceLeftPanel";
 import { WorkspaceShell } from "./WorkspaceShell";
 import { workspaceStepFromWizard, type WorkspaceStepId } from "./workspaceSteps";
 import type { ZoneNodeData } from "./skeletonFlowGraph";
+import type { WorkspaceNavMenuProps } from "./WorkspaceNavMenu";
 
 export type BuilderPersistentWorkspaceProps = {
   flowWizardStep: string;
@@ -25,6 +27,7 @@ export type BuilderPersistentWorkspaceProps = {
   onOpenReview?: () => void;
   constraintsExtra?: ReactNode;
   puzzlesExtra?: ReactNode;
+  navMenu: WorkspaceNavMenuProps;
 };
 
 export function BuilderPersistentWorkspace({
@@ -43,6 +46,7 @@ export function BuilderPersistentWorkspace({
   onOpenReview,
   constraintsExtra,
   puzzlesExtra,
+  navMenu,
 }: BuilderPersistentWorkspaceProps) {
   const wizardMappedStep = workspaceStepFromWizard(flowWizardStep);
   const [workspaceStep, setWorkspaceStep] = useState<WorkspaceStepId>(wizardMappedStep);
@@ -50,6 +54,8 @@ export function BuilderPersistentWorkspace({
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedZone, setSelectedZone] = useState<ZoneNodeData | null>(null);
+  const [canvasView, setCanvasView] = useState<WorkspaceCanvasView>("flow");
+  const [layoutRevision, setLayoutRevision] = useState(0);
 
   useEffect(() => {
     setWorkspaceStep(workspaceStepFromWizard(flowWizardStep));
@@ -91,11 +97,20 @@ export function BuilderPersistentWorkspace({
   );
 
   const centerCanvas = (
-    <BlueprintFlowCanvas
-      skeleton={roomSkeleton}
-      selectedNodeId={selectedNodeId}
-      onNodeSelect={onNodeSelect}
-      className="h-full w-full"
+    <WorkspaceCanvasStage
+      view={canvasView}
+      onViewChange={setCanvasView}
+      flowSummary={roomSkeleton?.flow_summary}
+      layoutRevision={layoutRevision}
+      flowCanvas={
+        <BlueprintFlowCanvas
+          skeleton={roomSkeleton}
+          selectedNodeId={selectedNodeId}
+          onNodeSelect={onNodeSelect}
+          layoutRevision={layoutRevision}
+          className="h-full w-full"
+        />
+      }
     />
   );
 
@@ -122,6 +137,8 @@ export function BuilderPersistentWorkspace({
         rightPanel={rightPanel}
         mobileLeftOpen={mobileLeftOpen}
         onMobileLeftOpenChange={setMobileLeftOpen}
+        onLayoutChange={setLayoutRevision}
+        navMenu={navMenu}
       />
       <WorkspaceInspectorMobile open={mobileInspectorOpen && Boolean(selectedZone)} onClose={() => setMobileInspectorOpen(false)}>
         <WorkspaceInspectorPanel

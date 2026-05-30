@@ -8,11 +8,16 @@ export type ZoneNodeData = {
   zoneId: string;
 };
 
+const NODE_GAP_X = 300;
+const NODE_GAP_Y = 160;
+const GRID_ORIGIN_X = 80;
+const GRID_ORIGIN_Y = 80;
+
 const PLACEHOLDER_NODES: Node<ZoneNodeData>[] = [
   {
     id: "placeholder-entry",
     type: "zone",
-    position: { x: 40, y: 120 },
+    position: { x: GRID_ORIGIN_X, y: GRID_ORIGIN_Y + 40 },
     data: {
       zoneId: "placeholder-entry",
       label: "Entry briefing",
@@ -22,7 +27,7 @@ const PLACEHOLDER_NODES: Node<ZoneNodeData>[] = [
   {
     id: "placeholder-core",
     type: "zone",
-    position: { x: 320, y: 80 },
+    position: { x: GRID_ORIGIN_X + NODE_GAP_X, y: GRID_ORIGIN_Y },
     data: {
       zoneId: "placeholder-core",
       label: "Core challenge",
@@ -32,7 +37,7 @@ const PLACEHOLDER_NODES: Node<ZoneNodeData>[] = [
   {
     id: "placeholder-finale",
     type: "zone",
-    position: { x: 600, y: 140 },
+    position: { x: GRID_ORIGIN_X + NODE_GAP_X * 2, y: GRID_ORIGIN_Y + 40 },
     data: {
       zoneId: "placeholder-finale",
       label: "Finale",
@@ -51,10 +56,10 @@ function zonePosition(index: number, total: number, pattern: RoomSkeleton["flow_
     const cols = Math.max(1, Math.ceil(Math.sqrt(total)));
     const col = index % cols;
     const row = Math.floor(index / cols);
-    return { x: 40 + col * 200, y: 40 + row * 140 };
+    return { x: GRID_ORIGIN_X + col * NODE_GAP_X, y: GRID_ORIGIN_Y + row * NODE_GAP_Y };
   }
-  const y = pattern === "multilinear" ? (index % 2 === 0 ? 60 : 160) : 100;
-  return { x: 40 + index * 220, y };
+  const y = pattern === "multilinear" ? GRID_ORIGIN_Y + (index % 2 === 0 ? 0 : NODE_GAP_Y * 0.75) : GRID_ORIGIN_Y + 20;
+  return { x: GRID_ORIGIN_X + index * NODE_GAP_X, y };
 }
 
 export function roomSkeletonToFlowGraph(skeleton: RoomSkeleton | null): {
