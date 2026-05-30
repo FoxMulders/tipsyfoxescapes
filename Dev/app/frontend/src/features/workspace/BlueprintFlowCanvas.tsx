@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -51,10 +51,23 @@ function BlueprintFlowCanvasInner({
   layoutRevision,
   className,
 }: BlueprintFlowCanvasProps) {
-  const graph = useMemo(() => generationToFlowGraph(skeleton, puzzles), [skeleton, puzzles]);
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : 1280,
+  );
+
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const graph = useMemo(
+    () => generationToFlowGraph(skeleton, puzzles, { viewportWidth }),
+    [skeleton, puzzles, viewportWidth],
+  );
   const graphKey = useMemo(
-    () => `${graph.layoutMode}:${skeleton?.flow_pattern ?? "empty"}:${graph.nodes.map((n) => n.id).join(",")}:${puzzles.length}`,
-    [graph.layoutMode, graph.nodes, puzzles.length, skeleton?.flow_pattern],
+    () => `${graph.layoutMode}:${viewportWidth}:${skeleton?.flow_pattern ?? "empty"}:${graph.nodes.map((n) => n.id).join(",")}:${puzzles.length}`,
+    [graph.layoutMode, graph.nodes, puzzles.length, skeleton?.flow_pattern, viewportWidth],
   );
   const [nodes, setNodes, onNodesChange] = useNodesState(graph.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(graph.edges);
@@ -65,16 +78,15 @@ function BlueprintFlowCanvasInner({
       setEdges([]);
       return;
     }
-    setNodes((prev) => {
-      const savedPositions = new Map(prev.map((n) => [n.id, n.position]));
-      return graph.nodes.map((n) => ({
+    setNodes(
+      graph.nodes.map((n) => ({
         ...n,
-        position: savedPositions.get(n.id) ?? n.position,
         draggable: false,
-      }));
-    });
+        selected: selectedNodeId !== null && n.id === selectedNodeId,
+      })),
+    );
     setEdges(graph.edges);
-  }, [graph.nodes, graph.edges, graph.layoutMode, setNodes, setEdges]);
+  }, [graph.nodes, graph.edges, graph.layoutMode, selectedNodeId, setNodes, setEdges]);
 
   useEffect(() => {
     setNodes((prev) =>

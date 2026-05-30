@@ -38,7 +38,7 @@ export function StudioPage() {
   }
 
   return (
-    <div className="experience-step h-full">
+    <div className="experience-step experience-step--studio h-full">
       <BlueprintFlowCanvas
         skeleton={roomSkeleton}
         puzzles={puzzles}

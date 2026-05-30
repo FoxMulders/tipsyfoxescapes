@@ -46,8 +46,20 @@ const EDGE_STYLE = { stroke: "#5b8fd9", strokeWidth: 2 };
 const FLOW_EDGE_STYLE = { stroke: "#22d3ee", strokeWidth: 2.5 };
 
 /** Minimum edge-to-edge buffer between node bounding boxes (px). */
-export const GRID_MIN_H_GAP = 300;
-export const GRID_MIN_V_GAP = 200;
+export const GRID_MIN_NODE_GAP = 50;
+/** @deprecated Use GRID_MIN_NODE_GAP — kept for tests comparing legacy horizontal spacing. */
+export const GRID_MIN_H_GAP = GRID_MIN_NODE_GAP;
+/** @deprecated Use GRID_MIN_NODE_GAP */
+export const GRID_MIN_V_GAP = GRID_MIN_NODE_GAP;
+/** CSS grid auto-fit min track width: repeat(auto-fit, minmax(300px, 1fr)). */
+export const GRID_MIN_COL_WIDTH = 300;
+
+export type FlowLayoutOptions = {
+  /** Viewport width used to spread zone columns across available space. */
+  viewportWidth?: number;
+};
+
+const DEFAULT_VIEWPORT_WIDTH = 1280;
 
 const ZONE_WIDTH = 260;
 const ZONE_HEIGHT = 160;
@@ -75,8 +87,8 @@ const nodeBounds = (node: Node<FlowNodeData>): Bounds => {
 export const nodesViolateMinGap = (
   a: Node<FlowNodeData>,
   b: Node<FlowNodeData>,
-  minH = GRID_MIN_H_GAP,
-  minV = GRID_MIN_V_GAP,
+  minH = GRID_MIN_NODE_GAP,
+  minV = GRID_MIN_NODE_GAP,
 ): boolean => {
   const ba = nodeBounds(a);
   const bb = nodeBounds(b);
@@ -95,17 +107,28 @@ export const layoutHasCollisionViolations = (nodes: Node<FlowNodeData>[]): boole
   return false;
 };
 
-function zoneGridPosition(col: number, row = 0): { x: number; y: number } {
+/** Column pitch mirrors repeat(auto-fit, minmax(300px, 1fr)) — wider viewports spread nodes out. */
+export function resolveColumnPitch(zoneCount: number, viewportWidth: number): number {
+  const margin = BLUEPRINT_ORIGIN_X * 2;
+  const minPitchForNodes = ZONE_WIDTH + GRID_MIN_NODE_GAP;
+  const autoFitPitch = Math.max(
+    GRID_MIN_COL_WIDTH,
+    (viewportWidth - margin) / Math.max(1, zoneCount),
+  );
+  return Math.max(minPitchForNodes, autoFitPitch);
+}
+
+function zoneGridPosition(col: number, columnPitch: number, row = 0): { x: number; y: number } {
   return {
-    x: BLUEPRINT_ORIGIN_X + col * (ZONE_WIDTH + GRID_MIN_H_GAP),
-    y: BLUEPRINT_ORIGIN_Y + row * (ZONE_HEIGHT + GRID_MIN_V_GAP),
+    x: BLUEPRINT_ORIGIN_X + col * columnPitch,
+    y: BLUEPRINT_ORIGIN_Y + row * (ZONE_HEIGHT + GRID_MIN_NODE_GAP),
   };
 }
 
-function puzzleGridPosition(zoneCol: number, stackIndex: number, zonePos: { x: number; y: number }): { x: number; y: number } {
+function puzzleGridPosition(stackIndex: number, zonePos: { x: number; y: number }): { x: number; y: number } {
   return {
     x: zonePos.x,
-    y: zonePos.y + ZONE_HEIGHT + GRID_MIN_V_GAP + stackIndex * (PUZZLE_HEIGHT + GRID_MIN_V_GAP),
+    y: zonePos.y + ZONE_HEIGHT + GRID_MIN_NODE_GAP + stackIndex * (PUZZLE_HEIGHT + GRID_MIN_NODE_GAP),
   };
 }
 
@@ -137,16 +160,19 @@ function buildLinearSteps(zones: RoomZone[], puzzles: PuzzleInspectorSlice[]): L
 export function generationToFlowGraph(
   skeleton: RoomSkeleton | null,
   puzzles: PuzzleInspectorSlice[],
+  layoutOptions: FlowLayoutOptions = {},
 ): FlowGraphLayout {
   if (!skeleton?.zones?.length) {
     return { nodes: [], edges: [], layoutMode: "grid", linearSteps: [] };
   }
 
   const zones = skeleton.zones.filter((z: RoomZone) => z.zone_id.trim() && z.name.trim());
+  const viewportWidth = layoutOptions.viewportWidth ?? DEFAULT_VIEWPORT_WIDTH;
+  const columnPitch = resolveColumnPitch(zones.length, viewportWidth);
   const nodes: Node<FlowNodeData>[] = zones.map((zone: RoomZone, index: number) => {
     const col = index;
     const row = 0;
-    const position = zoneGridPosition(col, row);
+    const position = zoneGridPosition(col, columnPitch, row);
     return {
       id: zone.zone_id,
       type: "blueprintZone",
@@ -203,7 +229,7 @@ export function generationToFlowGraph(
       const stackIndex = index % puzzlesPerZone;
       const zoneCol = zoneIndex;
       const puzzleNodeId = `puzzle-${puzzle.id}`;
-      const position = puzzleGridPosition(zoneCol, stackIndex, zoneNode.position);
+      const position = puzzleGridPosition(stackIndex, zoneNode.position);
 
       nodes.push({
         id: puzzleNodeId,

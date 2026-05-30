@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { RoomSkeleton } from "../../../../../shared/roomSkeleton";
 import {
   generationToFlowGraph,
-  GRID_MIN_H_GAP,
-  GRID_MIN_V_GAP,
+  GRID_MIN_NODE_GAP,
   layoutHasCollisionViolations,
   nodesViolateMinGap,
+  resolveColumnPitch,
 } from "../generationFlowGraph";
+
+const ZONE_WIDTH = 260;
+const ZONE_HEIGHT = 160;
 
 const skeleton: RoomSkeleton = {
   flow_pattern: "linear_4zone",
@@ -27,7 +30,8 @@ const puzzles = [
 
 describe("generationToFlowGraph", () => {
   it("maps zones left-to-right with grid row/col and attaches puzzle beats beneath zones", () => {
-    const { nodes, edges, layoutMode } = generationToFlowGraph(skeleton, puzzles);
+    const viewportWidth = 1600;
+    const { nodes, edges, layoutMode } = generationToFlowGraph(skeleton, puzzles, { viewportWidth });
     expect(layoutMode).toBe("grid");
 
     const zoneNodes = nodes.filter((n) => n.type === "blueprintZone");
@@ -35,12 +39,20 @@ describe("generationToFlowGraph", () => {
 
     expect(zoneNodes).toHaveLength(4);
     expect(puzzleNodes).toHaveLength(3);
-    expect(zoneNodes[1].position.x - zoneNodes[0].position.x).toBeGreaterThanOrEqual(GRID_MIN_H_GAP);
-    expect(puzzleNodes[0].position.y).toBeGreaterThan(zoneNodes[0].position.y + GRID_MIN_V_GAP);
+    const columnPitch = resolveColumnPitch(4, viewportWidth);
+    expect(zoneNodes[1].position.x - zoneNodes[0].position.x).toBe(columnPitch);
+    expect(zoneNodes[1].position.x - zoneNodes[0].position.x - ZONE_WIDTH).toBeGreaterThanOrEqual(GRID_MIN_NODE_GAP);
+    expect(puzzleNodes[0].position.y - (zoneNodes[0].position.y + ZONE_HEIGHT)).toBeGreaterThanOrEqual(GRID_MIN_NODE_GAP);
     expect(zoneNodes[1].data.kind === "zone" && zoneNodes[1].data.col).toBe(1);
     expect(edges.some((e) => e.id === "flow-z1-z2")).toBe(true);
     expect(edges.some((e) => e.source === "z1" && e.target === "puzzle-p1")).toBe(true);
     expect(layoutHasCollisionViolations(nodes)).toBe(false);
+  });
+
+  it("spreads columns wider as viewport grows (auto-fit minmax behavior)", () => {
+    const narrow = resolveColumnPitch(4, 900);
+    const wide = resolveColumnPitch(4, 1920);
+    expect(wide).toBeGreaterThan(narrow);
   });
 
   it("returns empty graph when skeleton has no zones", () => {

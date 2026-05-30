@@ -299,6 +299,15 @@ html.builder-route--fullpage #root {
   padding-bottom: 4.5rem;
 }
 
+.experience-step--studio {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  overflow: auto;
+  min-height: 0;
+}
+
 .experience-compose-footer {
   display: flex;
   justify-content: center;
