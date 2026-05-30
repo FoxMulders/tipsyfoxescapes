@@ -7157,6 +7157,78 @@ export default function App() {
           <h3 className="output-review-section-title">Export &amp; save</h3>
           {outputExportActionsElement}
         </section>
+        {sessionId ? (
+          <div className="export-live-actions" role="group" aria-label="Run your game">
+            <div className="export-live-actions__copy">
+              <h3 className="export-live-actions__title">Run your game</h3>
+              <ol className="export-live-actions__steps">
+                {targetInterface === "commercial_venue" ? (
+                  <>
+                    <li>Open the GM Live Console on your crew device.</li>
+                    <li>Pair the player display on the in-room projector or tablet.</li>
+                    <li>Start the timer, send clues, and mark puzzles complete as teams progress.</li>
+                  </>
+                ) : (
+                  <>
+                    <li>Open the player link on your TV or tablet inside the room.</li>
+                    <li>Keep this device as your controller with the runbook.</li>
+                    <li>Start the timer and deliver hints from your exported plan.</li>
+                  </>
+                )}
+              </ol>
+            </div>
+            <div className="export-live-actions__buttons">
+              {targetInterface === "commercial_venue" ? (
+                <>
+                  {authUser?.hasGmConsole && !authUser.subscriptionInactive ? (
+                    <Link
+                      to={`/gm/${sessionId}`}
+                      className="primary-btn export-live-actions__primary"
+                      onClick={() => void initLiveSession(sessionId, "venue")}
+                    >
+                      Open Gamemaster Live Console
+                    </Link>
+                  ) : (
+                    <button type="button" className="primary-btn export-live-actions__primary" disabled>
+                      Gamemaster console frozen
+                    </button>
+                  )}
+                  {authUser?.subscriptionInactive ? (
+                    <button type="button" className="secondary-btn export-live-actions__primary" disabled>
+                      Player screen frozen
+                    </button>
+                  ) : (
+                    <Link
+                      to={`/room/${sessionId}/player-display`}
+                      className="secondary-btn export-live-actions__primary"
+                      onClick={() => void initLiveSession(sessionId, "venue")}
+                    >
+                      Launch player screen
+                    </Link>
+                  )}
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    disabled={!exportContent}
+                    onClick={() => downloadExportFile("md")}
+                  >
+                    Print / Download Runbook
+                  </button>
+                  <Link
+                    to={`/room/${sessionId}/player-display`}
+                    className="primary-btn export-live-actions__primary"
+                    onClick={() => void initLiveSession(sessionId, "home")}
+                  >
+                    Launch player screen
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+        ) : null}
         {generationTelemetry ? (
           <Accordion type="single" collapsible className="mt-6">
             <AccordionItem value="generation-telemetry">
@@ -7172,6 +7244,10 @@ export default function App() {
     [
       outputReviewBodyElement,
       outputExportActionsElement,
+      sessionId,
+      targetInterface,
+      authUser,
+      exportContent,
       generationTelemetry,
       serverOpenAiConfigured,
       browserAiReady,
