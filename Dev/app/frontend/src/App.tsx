@@ -3695,427 +3695,6 @@ export default function App() {
         ? "Sign in to generate themes for your room"
         : "Use Chrome on-device AI or upgrade to a room pack for rotating theme ideas";
 
-  const experienceComposeTheme = useMemo(
-    () => (
-      <ExperienceThemeSection
-        serverOpenAiConfigured={serverOpenAiConfigured}
-        browserAiReady={browserAiReady}
-        themePath={themePath}
-        themes={themes}
-        themeIdeasLoading={themeIdeasLoading}
-        themeSessionExpiredNotice={themeSessionExpiredNotice}
-        workspaceSessionExpiredOpen={workspaceSessionExpired.open}
-        canGenerateNewThemes={canGenerateNewThemes}
-        themeGenerateDisabledTitle={themeGenerateDisabledTitle}
-        onGenerateThemes={handleGenerateNewThemes}
-        selectedThemeId={selectedThemeId}
-        simpleThemeView={simpleThemeView}
-        simpleRoomSetup={simpleRoomSetup}
-        hasFullCatalogAccess={hasFullCatalogAccess}
-        validationFlagsSelectedTheme={validationFlags.selectedThemeId}
-        hoverPreviewThemeId={hoverPreviewThemeId}
-        themePlanningContextLine={themePlanningContextLine}
-        resolveThemeTldr={(theme) => resolveThemeTldr(theme as Theme)}
-        onThemeSelect={handleThemeSelect}
-        onHoverTheme={setHoverPreviewThemeId}
-        onUseCustomTheme={() => {
-          cancelThemeGeneration();
-          setThemePath("custom");
-          setThemes([]);
-          setSelectedThemeId("");
-          resetCustomThemeCoach();
-        }}
-        onBrowseGenerated={() => {
-          setThemePath("generated");
-          resetCustomThemeCoach();
-          void loadThemes("/api/themes/generate");
-        }}
-        customThemeName={customThemeName}
-        customThemeDescription={customThemeDescription}
-        customThemeSaving={customThemeSaving}
-        onCustomThemeNameChange={(v) => {
-          setCustomThemeName(v);
-          setValidationFlags((c) => ({ ...c, customThemeName: false }));
-        }}
-        onCustomThemeDescriptionChange={setCustomThemeDescription}
-        onAddCustomTheme={() => void addCustomTheme()}
-        customThemeCoachMessages={customThemeCoachMessages}
-        customThemeCoachBusy={customThemeCoachBusy}
-        customThemeCoachError={customThemeCoachError}
-        coachBrowserAiReady={coachBrowserAiReady}
-        authToken={authToken}
-        customThemeCoachPrereqsOk={customThemeCoachPrereqsOk}
-        coachCoverage={coachCoverage}
-        onStartCoach={() => void handleStartCustomThemeCoach()}
-        onSelectCoachOption={(option) => void handleSelectCoachOption(option)}
-        onSynthesizeCoach={() => void handleSynthesizeCustomThemeCoach()}
-        onClearCoach={resetCustomThemeCoach}
-        briefPolishBusy={briefPolishBusy}
-        onRunPolishBrief={() => void runPolishCurrentBrief()}
-        ThemeDescriptionBlocks={ThemeDescriptionBlocks}
-        inputHistoryCustomThemeNames={inputHistory.customThemeName ?? []}
-      />
-    ),
-    [
-      serverOpenAiConfigured,
-      browserAiReady,
-      themePath,
-      themes,
-      themeIdeasLoading,
-      themeSessionExpiredNotice,
-      workspaceSessionExpired.open,
-      canGenerateNewThemes,
-      themeGenerateDisabledTitle,
-      selectedThemeId,
-      simpleThemeView,
-      simpleRoomSetup,
-      hasFullCatalogAccess,
-      validationFlags.selectedThemeId,
-      hoverPreviewThemeId,
-      themePlanningContextLine,
-      customThemeName,
-      customThemeDescription,
-      customThemeSaving,
-      customThemeCoachMessages,
-      customThemeCoachBusy,
-      customThemeCoachError,
-      coachBrowserAiReady,
-      authToken,
-      customThemeCoachPrereqsOk,
-      coachCoverage,
-      briefPolishBusy,
-      inputHistory.customThemeName,
-    ],
-  );
-
-  const experienceCurateContent = useMemo(
-    () =>
-      puzzles.length > 0 || refusedPuzzleSlots.length > 0 ? (
-        <PuzzleWindowsTrack
-          puzzles={puzzles}
-          refusedSlots={refusedPuzzleSlots}
-          numberOffset={0}
-          selectedThemeName={selectedThemeName}
-          selectedThemeDescription={selectedThemeDescription}
-          authUser={authUser}
-          arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
-          puzzleWindowBusy={puzzleWindowBusy}
-          onToggleArduinoPreview={(id) => setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))}
-          onReplace={(id) => void replacePuzzle(id)}
-          onReject={(id) => void rejectPuzzle(id)}
-          onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
-        />
-      ) : (
-        <p className="muted">Generate a room first to curate puzzles.</p>
-      ),
-    [
-      puzzles,
-      refusedPuzzleSlots,
-      selectedThemeName,
-      selectedThemeDescription,
-      authUser,
-      arduinoPreviewPuzzleId,
-      puzzleWindowBusy,
-    ],
-  );
-
-
-  const outputReviewBodyElement = useMemo(
-    () => (
-      <>
-
-              {puzzles.length > 0 || refusedPuzzleSlots.length > 0 ? (
-                <>
-                  <h3 className="output-review-section-title">Puzzle set</h3>
-                  <p className={compatibilityPassed ? "status-pass" : "status-fail"}>
-                    Theme compatibility checks passed: {compatibilityPassed ? "Yes" : "No"}
-                  </p>
-                  <JuniorGateIntegrationCallout
-                    youthAddOnEnabled={youthAddOnEnabled}
-                    youthAddOnGatesAdultFlow={youthAddOnGatesAdultFlow}
-                    juniorGatingPuzzles={juniorGatingPuzzles}
-                    juniorTrackPuzzles={juniorTrackPuzzles}
-                  />
-                  {youthAddOnEnabled && (juniorTrackPuzzles.length > 0 || juniorRefusedSlots.length > 0) ? (
-                    <>
-                      <h4 className="puzzle-track-heading">Main crew</h4>
-                      <PuzzleWindowsTrack
-                        puzzles={mainTrackPuzzles}
-                        refusedSlots={mainRefusedSlots}
-                        numberOffset={0}
-                        selectedThemeName={selectedThemeName}
-                        selectedThemeDescription={selectedThemeDescription}
-                        authUser={authUser}
-                        arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
-                        puzzleWindowBusy={puzzleWindowBusy}
-                        onToggleArduinoPreview={(id) =>
-                          setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))
-                        }
-                        onReplace={(id) => void replacePuzzle(id)}
-                        onReject={(id) => void rejectPuzzle(id)}
-                        onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
-                      />
-                      <h4 className="puzzle-track-heading puzzle-track-heading--junior">Junior add-on track</h4>
-                      <p className="muted puzzle-track-lead">
-                        Easy–medium beats in the same fiction as your theme.
-                        {youthAddOnGatesAdultFlow ? (
-                          <>
-                            {" "}
-                            Cards marked <span className="puzzle-gate-pill junior-gate-pill-inline">Gates adult flow</span> may be
-                            required before the main crew advances a linked beat.
-                          </>
-                        ) : (
-                          <>
-                            {" "}
-                            Parallel play without a mandatory hard gate on adults—still debrief together so the story stays coherent.
-                          </>
-                        )}
-                      </p>
-                      <PuzzleWindowsTrack
-                        puzzles={juniorTrackPuzzles}
-                        refusedSlots={juniorRefusedSlots}
-                        numberOffset={mainTrackPuzzles.length + mainRefusedSlots.length}
-                        selectedThemeName={selectedThemeName}
-                        selectedThemeDescription={selectedThemeDescription}
-                        authUser={authUser}
-                        arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
-                        puzzleWindowBusy={puzzleWindowBusy}
-                        onToggleArduinoPreview={(id) =>
-                          setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))
-                        }
-                        onReplace={(id) => void replacePuzzle(id)}
-                        onReject={(id) => void rejectPuzzle(id)}
-                        onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
-                      />
-                      <JuniorTrackEnvironmentIdeas
-                        themeName={selectedThemeName}
-                        environmentType={environmentType}
-                        availableItems={availableItems}
-                      />
-                    </>
-                  ) : (
-                    <PuzzleWindowsTrack
-                      puzzles={puzzles}
-                      refusedSlots={refusedPuzzleSlots}
-                      numberOffset={0}
-                      selectedThemeName={selectedThemeName}
-                      selectedThemeDescription={selectedThemeDescription}
-                      authUser={authUser}
-                      arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
-                      puzzleWindowBusy={puzzleWindowBusy}
-                      onToggleArduinoPreview={(id) =>
-                        setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))
-                      }
-                      onReplace={(id) => void replacePuzzle(id)}
-                      onReject={(id) => void rejectPuzzle(id)}
-                      onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
-                    />
-                  )}
-                </>
-              ) : (
-                <p className="muted">
-                  No puzzle output yet. Finish room details and theme selection — a theme-fit set generates automatically when you open{" "}
-                  <strong>Build puzzle set</strong> or continue to this review step.
-                </p>
-              )}
-              {suggestedAdditionsRequired.length > 0 || suggestedAdditions.length > 0 ? (
-                <div className="suggested-additions-panel">
-                  {suggestedAdditionsRequired.length > 0 ? (
-                    <div className="suggested-additions-block suggested-additions-block--required">
-                      <h3>Required staging / props</h3>
-                      <p className="muted suggested-additions-lead">
-                        Address these gaps before you treat the room as ready to rehearse—usually missing lock surfaces, clue boards, or
-                        electronics bench items called out from your inventory and puzzle mix.
-                      </p>
-                      <ul className="suggested-additions-list">
-                        {suggestedAdditionsRequired.map((item) => (
-                          <StagingPropListItem key={`req-${item}`} item={item} />
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                  {suggestedAdditions.length > 0 ? (
-                    <div className="suggested-additions-block suggested-additions-block--optional">
-                      <h3>Suggested elements to add</h3>
-                      <ul className="suggested-additions-list">
-                        {suggestedAdditions.map((item) => (
-                          <StagingPropListItem key={`opt-${item}`} item={item} />
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-              {suggestedSafetyProtocols.length > 0 ? (
-                <div className="safety-protocols-panel suggested-additions-panel suggested-additions-panel--safety">
-                  <div className="suggested-additions-block suggested-additions-block--safety">
-                    <h3 className="safety-protocols-panel__title">Safety Protocols &amp; Guidelines</h3>
-                    <p className="muted suggested-additions-lead">
-                      Construction hazards, space constraints, and operational precautions — isolated from general staging copy.
-                    </p>
-                    <ul className="suggested-additions-list suggested-additions-list--safety">
-                      {suggestedSafetyProtocols.map((item) => (
-                        <li key={`safety-${item}`}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              ) : null}
-              {storyPlan ? (
-                <>
-                <div className="output-review-story output-review-glass-surface">
-                  <h3 className="output-review-section-title">Storyline and progression</h3>
-                  <div className="output-review-narrative-grid">
-                    <OutputReviewNarrativeField label="Situation" text={storyPlan.situation} />
-                    <OutputReviewNarrativeField label="Premise" text={storyPlan.premise} />
-                    <OutputReviewNarrativeField label="Mission objective" text={storyPlan.missionObjective} />
-                    <article className="output-review-field output-review-field--wide">
-                      <h4 className="output-review-field-label">Progression rule</h4>
-                      <OutputReviewProgressionGuide
-                        progressionRule={storyPlan.progressionRule}
-                        puzzleLinks={storyPlan.puzzleLinks}
-                      />
-                    </article>
-                  </div>
-                </div>
-                  {storyPlan.stages && storyPlan.stages.length > 0 ? (
-                    <>
-                      <h3 className="output-review-section-title">Stage flow</h3>
-                      <ol className="output-review-stage-list output-review-glass-surface">
-                        {storyPlan.stages.map((st) => (
-                          <li key={st.stage} className="output-review-stage-card">
-                            <div className="output-review-stage-head">
-                              <span className="output-review-stage-badge">Stage {st.stage}</span>
-                              <strong className="output-review-stage-title">{st.title}</strong>
-                            </div>
-                            <dl className="output-review-stage-dl">
-                              <div>
-                                <dt>Story beat</dt>
-                                <dd>{st.storyBeat}</dd>
-                              </div>
-                              <div>
-                                <dt>Why this stage exists</dt>
-                                <dd>{st.whyThisStageExists}</dd>
-                              </div>
-                              <div>
-                                <dt>Objective</dt>
-                                <dd>
-                                  <OutputReviewProse text={st.objective} />
-                                </dd>
-                              </div>
-                              {st.whatPlayersMustDo?.length ? (
-                                <div>
-                                  <dt>What players must do</dt>
-                                  <dd>
-                                    <ul className="output-review-stage-ul">
-                                      {st.whatPlayersMustDo.map((line, idx) => (
-                                        <li key={idx}>{line}</li>
-                                      ))}
-                                    </ul>
-                                  </dd>
-                                </div>
-                              ) : null}
-                              {st.requiredPuzzleTitles?.length ? (
-                                <div>
-                                  <dt>Required puzzles</dt>
-                                  <dd>{st.requiredPuzzleTitles.join(", ")}</dd>
-                                </div>
-                              ) : null}
-                              {st.reveals ? (
-                                <div>
-                                  <dt>Reveal</dt>
-                                  <dd>
-                                    <OutputReviewProse text={st.reveals} />
-                                  </dd>
-                                </div>
-                              ) : null}
-                            </dl>
-                          </li>
-                        ))}
-                      </ol>
-                    </>
-                  ) : null}
-                  {storyPlan.stagingDiagram ? (
-                    <>
-                      <h3 className="output-review-section-title">Room layout sketch</h3>
-                      <OutputReviewStagingDiagram text={storyPlan.stagingDiagram} />
-                    </>
-                  ) : null}
-                  {targetInterface === "commercial_venue" && selectedTheme && puzzles.length > 0 ? (
-                    <EmptyRoomInstallChecklist environmentType={environmentType} themeName={selectedTheme.name} />
-                  ) : null}
-                  {puzzles.length > 0 ? (
-                    <div className="output-review-flow-block">
-                      <h3 className="output-review-section-title">Room flowchart</h3>
-                      <p className="muted room-flowchart-lead">
-                        Click the chart to enlarge and pan. Download SVG, PNG, or Mermaid source for runbooks.
-                      </p>
-                      <Suspense fallback={<p className="muted">Loading flowchart…</p>}>
-                        <RoomFlowchartPanel
-                          storyPlan={storyPlan}
-                          puzzles={puzzles}
-                          themeName={selectedTheme?.name}
-                          fileBase="room-flow-review"
-                        />
-                      </Suspense>
-                      <NarrativeFlowGuide storyPlan={storyPlan} />
-                    </div>
-                  ) : null}
-                  {isCreativeEnginesEnabled() && puzzles.length > 0 ? (
-                    <Suspense fallback={<p className="muted">Loading creative engines…</p>}>
-                      <CreativeEnginesWorkspace
-                        sessionId={sessionId}
-                        puzzles={puzzles.map((p) => ({
-                          id: p.id,
-                          title: p.title,
-                          audienceTrack: p.audienceTrack,
-                        }))}
-                        storyStages={
-                          storyPlan?.stages?.map((st) => ({
-                            stage: st.stage,
-                            title: st.title,
-                            storyBeat: st.storyBeat,
-                            requiredPuzzleIds: st.requiredPuzzleIds,
-                          })) ?? []
-                        }
-                        progressionGraph={storyPlan?.progressionGraph ?? null}
-                        youthAddOnEnabled={youthAddOnEnabled}
-                      />
-                    </Suspense>
-                  ) : null}
-                </>
-              ) : null}
-      </>
-    ),
-    [
-      puzzles,
-      refusedPuzzleSlots,
-      compatibilityPassed,
-      youthAddOnEnabled,
-      youthAddOnGatesAdultFlow,
-      juniorGatingPuzzles,
-      juniorTrackPuzzles,
-      mainTrackPuzzles,
-      mainRefusedSlots,
-      juniorRefusedSlots,
-      selectedThemeName,
-      selectedThemeDescription,
-      authUser,
-      arduinoPreviewPuzzleId,
-      puzzleWindowBusy,
-      suggestedAdditionsRequired,
-      suggestedAdditions,
-      suggestedSafetyProtocols,
-      storyPlan,
-      targetInterface,
-      selectedTheme,
-      environmentType,
-      availableItems,
-      sessionId,
-    ],
-  );
-
-
 
   useEffect(() => {
     if (appView !== "builder" || !persistentCanvasSteps) return;
@@ -4190,143 +3769,7 @@ export default function App() {
     authUser?.billingTier === "trial" && authUser.trialRemaining && authUser.canExportRunbook,
   );
 
-  const outputExportActionsElement = useMemo(
-    () => (
-              <div className="export-action-flow" role="group" aria-label="Approve, save, then export">
-                <div className="export-action-flow__row">
-                  <div className={`export-action-flow__node${approvedForBuild ? " export-action-flow__node--done" : ""}`}>
-                    <span className="export-action-flow__step-num" aria-hidden>
-                      1
-                    </span>
-                    <button
-                      type="button"
-                      className={approvedForBuild ? "primary-btn export-action-flow__btn" : "secondary-btn export-action-flow__btn"}
-                      onClick={() => {
-                        setApprovedForBuild((current) => {
-                          const next = !current;
-                          if (!next) setPlanSavedSuccessfully(false);
-                          return next;
-                        });
-                      }}
-                    >
-                      {approvedForBuild ? "Approved for build" : "Mark approved for build"}
-                    </button>
-                  </div>
-                  <div className="export-action-flow__rail" aria-hidden />
-                  <div className="export-action-flow__node">
-                    <span className="export-action-flow__step-num" aria-hidden>
-                      2
-                    </span>
-                    <button
-                      type="button"
-                      className="secondary-btn export-action-flow__btn save-plan-btn"
-                      disabled={!authUser?.canSaveRooms}
-                      title={authUser?.canSaveRooms ? undefined : "Purchase a room pack to save plans"}
-                      onClick={() => (authUser?.canSaveRooms ? void saveCurrentPlan() : openUpgradePrompt())}
-                    >
-                      {authUser?.canSaveRooms ? (
-                        <>
-                          <span
-                            className="save-plan-btn__meter"
-                            style={{ ["--save-pct" as string]: `${planCompletionPercent}%` }}
-                            aria-hidden
-                          />
-                          Save plan ({planCompletionPercent}% complete)
-                        </>
-                      ) : (
-                        "Save plan (paid)"
-                      )}
-                    </button>
-                  </div>
-                  <div className="export-action-flow__rail export-action-flow__rail--accent" aria-hidden />
-                  <div className="export-action-flow__node">
-                    <span className="export-action-flow__step-num" aria-hidden>
-                      3
-                    </span>
-                    <button
-                      type="button"
-                      className="primary-btn export-action-flow__btn"
-                      disabled={
-                        exportBusy ||
-                        !authUser?.canExportRunbook ||
-                        !approvedForBuild ||
-                        (!planSavedSuccessfully && !trialEvalExportAllowed)
-                      }
-                      aria-busy={exportBusy}
-                      title={
-                        !authUser?.canExportRunbook
-                          ? "Purchase an export credit or upgrade to export a full runbook."
-                          : !approvedForBuild
-                            ? "Approve the plan for build first."
-                            : !planSavedSuccessfully && !trialEvalExportAllowed
-                              ? "Save the plan successfully before exporting."
-                              : trialEvalExportAllowed && !planSavedSuccessfully
-                                ? "Trial evaluation export — save is optional for your first export."
-                                : undefined
-                      }
-                      onClick={() =>
-                        authUser?.canExportRunbook ? void exportPlan() : openUpgradePrompt()
-                      }
-                    >
-                      {exportBusy ? "Exporting…" : authUser?.canExportRunbook ? "Export plan" : "Export plan (locked)"}
-                    </button>
-                  </div>
-                </div>
-                <p className="muted export-action-flow__hint">
-                  Complete all three steps in order: approve, save without errors, then export. Planning syncs with strict validation when
-                  you export (markdown + PDF).
-                  {trialEvalExportAllowed && !planSavedSuccessfully ? (
-                    <>
-                      {" "}
-                      On trial, you may export once after approval to evaluate the PDF without saving first.
-                    </>
-                  ) : null}
-                </p>
-              </div>
-    ),
-    [
-      approvedForBuild,
-      authUser,
-      planCompletionPercent,
-      exportBusy,
-      planSavedSuccessfully,
-      trialEvalExportAllowed,
-    ],
-  );
 
-  const experienceReviewContent = useMemo(
-    () => (
-      <>
-        <h2 className="text-xl font-bold text-slate-50">Review your room</h2>
-        <p className="muted mb-4 text-sm">
-          Story, puzzles, staging props, and flow — then approve and export when you are ready.
-        </p>
-        <div className="output-review-body">{outputReviewBodyElement}</div>
-        <BuilderLegalDisclaimer compact />
-        <section id="builder-export-anchor" className="output-review-glass-surface mt-6 rounded-lg p-4">
-          <h3 className="output-review-section-title">Export &amp; save</h3>
-          {outputExportActionsElement}
-        </section>
-        {generationTelemetry ? (
-          <Accordion type="single" collapsible className="mt-6">
-            <AccordionItem value="generation-telemetry">
-              <AccordionTrigger className="text-sm text-slate-300">Generation details</AccordionTrigger>
-              <AccordionContent>
-                <CouncilTelemetryPanel telemetry={generationTelemetry} compact serverOpenAiConfigured={serverOpenAiConfigured} browserAiReady={browserAiReady} />
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        ) : null}
-      </>
-    ),
-    [
-      outputReviewBodyElement,
-      outputExportActionsElement,
-      generationTelemetry,
-      serverOpenAiConfigured,
-      browserAiReady,
-    ],
-  );
 
   const isGenerationAuthExpired = (
     response: Response,
@@ -7169,6 +6612,564 @@ export default function App() {
         ))}
       </ul>
     );
+
+  const experienceComposeTheme = useMemo(
+    () => (
+      <ExperienceThemeSection
+        serverOpenAiConfigured={serverOpenAiConfigured}
+        browserAiReady={browserAiReady}
+        themePath={themePath}
+        themes={themes}
+        themeIdeasLoading={themeIdeasLoading}
+        themeSessionExpiredNotice={themeSessionExpiredNotice}
+        workspaceSessionExpiredOpen={workspaceSessionExpired.open}
+        canGenerateNewThemes={canGenerateNewThemes}
+        themeGenerateDisabledTitle={themeGenerateDisabledTitle}
+        onGenerateThemes={handleGenerateNewThemes}
+        selectedThemeId={selectedThemeId}
+        simpleThemeView={simpleThemeView}
+        simpleRoomSetup={simpleRoomSetup}
+        hasFullCatalogAccess={hasFullCatalogAccess}
+        validationFlagsSelectedTheme={validationFlags.selectedThemeId}
+        hoverPreviewThemeId={hoverPreviewThemeId}
+        themePlanningContextLine={themePlanningContextLine}
+        resolveThemeTldr={(theme) => resolveThemeTldr(theme as Theme)}
+        onThemeSelect={handleThemeSelect}
+        onHoverTheme={setHoverPreviewThemeId}
+        onUseCustomTheme={() => {
+          cancelThemeGeneration();
+          setThemePath("custom");
+          setThemes([]);
+          setSelectedThemeId("");
+          resetCustomThemeCoach();
+        }}
+        onBrowseGenerated={() => {
+          setThemePath("generated");
+          resetCustomThemeCoach();
+          void loadThemes("/api/themes/generate");
+        }}
+        customThemeName={customThemeName}
+        customThemeDescription={customThemeDescription}
+        customThemeSaving={customThemeSaving}
+        onCustomThemeNameChange={(v) => {
+          setCustomThemeName(v);
+          setValidationFlags((c) => ({ ...c, customThemeName: false }));
+        }}
+        onCustomThemeDescriptionChange={setCustomThemeDescription}
+        onAddCustomTheme={() => void addCustomTheme()}
+        customThemeCoachMessages={customThemeCoachMessages}
+        customThemeCoachBusy={customThemeCoachBusy}
+        customThemeCoachError={customThemeCoachError}
+        coachBrowserAiReady={coachBrowserAiReady}
+        authToken={authToken}
+        customThemeCoachPrereqsOk={customThemeCoachPrereqsOk}
+        coachCoverage={coachCoverage}
+        onStartCoach={() => void handleStartCustomThemeCoach()}
+        onSelectCoachOption={(option) => void handleSelectCoachOption(option)}
+        onSynthesizeCoach={() => void handleSynthesizeCustomThemeCoach()}
+        onClearCoach={resetCustomThemeCoach}
+        briefPolishBusy={briefPolishBusy}
+        onRunPolishBrief={() => void runPolishCurrentBrief()}
+        ThemeDescriptionBlocks={ThemeDescriptionBlocks}
+        inputHistoryCustomThemeNames={inputHistory.customThemeName ?? []}
+      />
+    ),
+    [
+      serverOpenAiConfigured,
+      browserAiReady,
+      themePath,
+      themes,
+      themeIdeasLoading,
+      themeSessionExpiredNotice,
+      workspaceSessionExpired.open,
+      canGenerateNewThemes,
+      themeGenerateDisabledTitle,
+      selectedThemeId,
+      simpleThemeView,
+      simpleRoomSetup,
+      hasFullCatalogAccess,
+      validationFlags.selectedThemeId,
+      hoverPreviewThemeId,
+      themePlanningContextLine,
+      customThemeName,
+      customThemeDescription,
+      customThemeSaving,
+      customThemeCoachMessages,
+      customThemeCoachBusy,
+      customThemeCoachError,
+      coachBrowserAiReady,
+      authToken,
+      customThemeCoachPrereqsOk,
+      coachCoverage,
+      briefPolishBusy,
+      inputHistory.customThemeName,
+    ],
+  );
+
+  const experienceCurateContent = useMemo(
+    () =>
+      puzzles.length > 0 || refusedPuzzleSlots.length > 0 ? (
+        <PuzzleWindowsTrack
+          puzzles={puzzles}
+          refusedSlots={refusedPuzzleSlots}
+          numberOffset={0}
+          selectedThemeName={selectedThemeName}
+          selectedThemeDescription={selectedThemeDescription}
+          authUser={authUser}
+          arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
+          puzzleWindowBusy={puzzleWindowBusy}
+          onToggleArduinoPreview={(id) => setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))}
+          onReplace={(id) => void replacePuzzle(id)}
+          onReject={(id) => void rejectPuzzle(id)}
+          onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+        />
+      ) : (
+        <p className="muted">Generate a room first to curate puzzles.</p>
+      ),
+    [
+      puzzles,
+      refusedPuzzleSlots,
+      selectedThemeName,
+      selectedThemeDescription,
+      authUser,
+      arduinoPreviewPuzzleId,
+      puzzleWindowBusy,
+    ],
+  );
+
+
+  const outputReviewBodyElement = useMemo(
+    () => (
+      <>
+
+              {puzzles.length > 0 || refusedPuzzleSlots.length > 0 ? (
+                <>
+                  <h3 className="output-review-section-title">Puzzle set</h3>
+                  <p className={compatibilityPassed ? "status-pass" : "status-fail"}>
+                    Theme compatibility checks passed: {compatibilityPassed ? "Yes" : "No"}
+                  </p>
+                  <JuniorGateIntegrationCallout
+                    youthAddOnEnabled={youthAddOnEnabled}
+                    youthAddOnGatesAdultFlow={youthAddOnGatesAdultFlow}
+                    juniorGatingPuzzles={juniorGatingPuzzles}
+                    juniorTrackPuzzles={juniorTrackPuzzles}
+                  />
+                  {youthAddOnEnabled && (juniorTrackPuzzles.length > 0 || juniorRefusedSlots.length > 0) ? (
+                    <>
+                      <h4 className="puzzle-track-heading">Main crew</h4>
+                      <PuzzleWindowsTrack
+                        puzzles={mainTrackPuzzles}
+                        refusedSlots={mainRefusedSlots}
+                        numberOffset={0}
+                        selectedThemeName={selectedThemeName}
+                        selectedThemeDescription={selectedThemeDescription}
+                        authUser={authUser}
+                        arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
+                        puzzleWindowBusy={puzzleWindowBusy}
+                        onToggleArduinoPreview={(id) =>
+                          setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))
+                        }
+                        onReplace={(id) => void replacePuzzle(id)}
+                        onReject={(id) => void rejectPuzzle(id)}
+                        onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+                      />
+                      <h4 className="puzzle-track-heading puzzle-track-heading--junior">Junior add-on track</h4>
+                      <p className="muted puzzle-track-lead">
+                        Easy–medium beats in the same fiction as your theme.
+                        {youthAddOnGatesAdultFlow ? (
+                          <>
+                            {" "}
+                            Cards marked <span className="puzzle-gate-pill junior-gate-pill-inline">Gates adult flow</span> may be
+                            required before the main crew advances a linked beat.
+                          </>
+                        ) : (
+                          <>
+                            {" "}
+                            Parallel play without a mandatory hard gate on adults—still debrief together so the story stays coherent.
+                          </>
+                        )}
+                      </p>
+                      <PuzzleWindowsTrack
+                        puzzles={juniorTrackPuzzles}
+                        refusedSlots={juniorRefusedSlots}
+                        numberOffset={mainTrackPuzzles.length + mainRefusedSlots.length}
+                        selectedThemeName={selectedThemeName}
+                        selectedThemeDescription={selectedThemeDescription}
+                        authUser={authUser}
+                        arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
+                        puzzleWindowBusy={puzzleWindowBusy}
+                        onToggleArduinoPreview={(id) =>
+                          setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))
+                        }
+                        onReplace={(id) => void replacePuzzle(id)}
+                        onReject={(id) => void rejectPuzzle(id)}
+                        onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+                      />
+                      <JuniorTrackEnvironmentIdeas
+                        themeName={selectedThemeName}
+                        environmentType={environmentType}
+                        availableItems={availableItems}
+                      />
+                    </>
+                  ) : (
+                    <PuzzleWindowsTrack
+                      puzzles={puzzles}
+                      refusedSlots={refusedPuzzleSlots}
+                      numberOffset={0}
+                      selectedThemeName={selectedThemeName}
+                      selectedThemeDescription={selectedThemeDescription}
+                      authUser={authUser}
+                      arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
+                      puzzleWindowBusy={puzzleWindowBusy}
+                      onToggleArduinoPreview={(id) =>
+                        setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))
+                      }
+                      onReplace={(id) => void replacePuzzle(id)}
+                      onReject={(id) => void rejectPuzzle(id)}
+                      onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+                    />
+                  )}
+                </>
+              ) : (
+                <p className="muted">
+                  No puzzle output yet. Finish room details and theme selection — a theme-fit set generates automatically when you open{" "}
+                  <strong>Build puzzle set</strong> or continue to this review step.
+                </p>
+              )}
+              {suggestedAdditionsRequired.length > 0 || suggestedAdditions.length > 0 ? (
+                <div className="suggested-additions-panel">
+                  {suggestedAdditionsRequired.length > 0 ? (
+                    <div className="suggested-additions-block suggested-additions-block--required">
+                      <h3>Required staging / props</h3>
+                      <p className="muted suggested-additions-lead">
+                        Address these gaps before you treat the room as ready to rehearse—usually missing lock surfaces, clue boards, or
+                        electronics bench items called out from your inventory and puzzle mix.
+                      </p>
+                      <ul className="suggested-additions-list">
+                        {suggestedAdditionsRequired.map((item) => (
+                          <StagingPropListItem key={`req-${item}`} item={item} />
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {suggestedAdditions.length > 0 ? (
+                    <div className="suggested-additions-block suggested-additions-block--optional">
+                      <h3>Suggested elements to add</h3>
+                      <ul className="suggested-additions-list">
+                        {suggestedAdditions.map((item) => (
+                          <StagingPropListItem key={`opt-${item}`} item={item} />
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {suggestedSafetyProtocols.length > 0 ? (
+                <div className="safety-protocols-panel suggested-additions-panel suggested-additions-panel--safety">
+                  <div className="suggested-additions-block suggested-additions-block--safety">
+                    <h3 className="safety-protocols-panel__title">Safety Protocols &amp; Guidelines</h3>
+                    <p className="muted suggested-additions-lead">
+                      Construction hazards, space constraints, and operational precautions — isolated from general staging copy.
+                    </p>
+                    <ul className="suggested-additions-list suggested-additions-list--safety">
+                      {suggestedSafetyProtocols.map((item) => (
+                        <li key={`safety-${item}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : null}
+              {storyPlan ? (
+                <>
+                <div className="output-review-story output-review-glass-surface">
+                  <h3 className="output-review-section-title">Storyline and progression</h3>
+                  <div className="output-review-narrative-grid">
+                    <OutputReviewNarrativeField label="Situation" text={storyPlan.situation} />
+                    <OutputReviewNarrativeField label="Premise" text={storyPlan.premise} />
+                    <OutputReviewNarrativeField label="Mission objective" text={storyPlan.missionObjective} />
+                    <article className="output-review-field output-review-field--wide">
+                      <h4 className="output-review-field-label">Progression rule</h4>
+                      <OutputReviewProgressionGuide
+                        progressionRule={storyPlan.progressionRule}
+                        puzzleLinks={storyPlan.puzzleLinks}
+                      />
+                    </article>
+                  </div>
+                </div>
+                  {storyPlan.stages && storyPlan.stages.length > 0 ? (
+                    <>
+                      <h3 className="output-review-section-title">Stage flow</h3>
+                      <ol className="output-review-stage-list output-review-glass-surface">
+                        {storyPlan.stages.map((st) => (
+                          <li key={st.stage} className="output-review-stage-card">
+                            <div className="output-review-stage-head">
+                              <span className="output-review-stage-badge">Stage {st.stage}</span>
+                              <strong className="output-review-stage-title">{st.title}</strong>
+                            </div>
+                            <dl className="output-review-stage-dl">
+                              <div>
+                                <dt>Story beat</dt>
+                                <dd>{st.storyBeat}</dd>
+                              </div>
+                              <div>
+                                <dt>Why this stage exists</dt>
+                                <dd>{st.whyThisStageExists}</dd>
+                              </div>
+                              <div>
+                                <dt>Objective</dt>
+                                <dd>
+                                  <OutputReviewProse text={st.objective} />
+                                </dd>
+                              </div>
+                              {st.whatPlayersMustDo?.length ? (
+                                <div>
+                                  <dt>What players must do</dt>
+                                  <dd>
+                                    <ul className="output-review-stage-ul">
+                                      {st.whatPlayersMustDo.map((line, idx) => (
+                                        <li key={idx}>{line}</li>
+                                      ))}
+                                    </ul>
+                                  </dd>
+                                </div>
+                              ) : null}
+                              {st.requiredPuzzleTitles?.length ? (
+                                <div>
+                                  <dt>Required puzzles</dt>
+                                  <dd>{st.requiredPuzzleTitles.join(", ")}</dd>
+                                </div>
+                              ) : null}
+                              {st.reveals ? (
+                                <div>
+                                  <dt>Reveal</dt>
+                                  <dd>
+                                    <OutputReviewProse text={st.reveals} />
+                                  </dd>
+                                </div>
+                              ) : null}
+                            </dl>
+                          </li>
+                        ))}
+                      </ol>
+                    </>
+                  ) : null}
+                  {storyPlan.stagingDiagram ? (
+                    <>
+                      <h3 className="output-review-section-title">Room layout sketch</h3>
+                      <OutputReviewStagingDiagram text={storyPlan.stagingDiagram} />
+                    </>
+                  ) : null}
+                  {targetInterface === "commercial_venue" && selectedTheme && puzzles.length > 0 ? (
+                    <EmptyRoomInstallChecklist environmentType={environmentType} themeName={selectedTheme.name} />
+                  ) : null}
+                  {puzzles.length > 0 ? (
+                    <div className="output-review-flow-block">
+                      <h3 className="output-review-section-title">Room flowchart</h3>
+                      <p className="muted room-flowchart-lead">
+                        Click the chart to enlarge and pan. Download SVG, PNG, or Mermaid source for runbooks.
+                      </p>
+                      <Suspense fallback={<p className="muted">Loading flowchart…</p>}>
+                        <RoomFlowchartPanel
+                          storyPlan={storyPlan}
+                          puzzles={puzzles}
+                          themeName={selectedTheme?.name}
+                          fileBase="room-flow-review"
+                        />
+                      </Suspense>
+                      <NarrativeFlowGuide storyPlan={storyPlan} />
+                    </div>
+                  ) : null}
+                  {isCreativeEnginesEnabled() && puzzles.length > 0 ? (
+                    <Suspense fallback={<p className="muted">Loading creative engines…</p>}>
+                      <CreativeEnginesWorkspace
+                        sessionId={sessionId}
+                        puzzles={puzzles.map((p) => ({
+                          id: p.id,
+                          title: p.title,
+                          audienceTrack: p.audienceTrack,
+                        }))}
+                        storyStages={
+                          storyPlan?.stages?.map((st) => ({
+                            stage: st.stage,
+                            title: st.title,
+                            storyBeat: st.storyBeat,
+                            requiredPuzzleIds: st.requiredPuzzleIds,
+                          })) ?? []
+                        }
+                        progressionGraph={storyPlan?.progressionGraph ?? null}
+                        youthAddOnEnabled={youthAddOnEnabled}
+                      />
+                    </Suspense>
+                  ) : null}
+                </>
+              ) : null}
+      </>
+    ),
+    [
+      puzzles,
+      refusedPuzzleSlots,
+      compatibilityPassed,
+      youthAddOnEnabled,
+      youthAddOnGatesAdultFlow,
+      juniorGatingPuzzles,
+      juniorTrackPuzzles,
+      mainTrackPuzzles,
+      mainRefusedSlots,
+      juniorRefusedSlots,
+      selectedThemeName,
+      selectedThemeDescription,
+      authUser,
+      arduinoPreviewPuzzleId,
+      puzzleWindowBusy,
+      suggestedAdditionsRequired,
+      suggestedAdditions,
+      suggestedSafetyProtocols,
+      storyPlan,
+      targetInterface,
+      selectedTheme,
+      environmentType,
+      availableItems,
+      sessionId,
+    ],
+  );
+
+  const outputExportActionsElement = useMemo(
+    () => (
+              <div className="export-action-flow" role="group" aria-label="Approve, save, then export">
+                <div className="export-action-flow__row">
+                  <div className={`export-action-flow__node${approvedForBuild ? " export-action-flow__node--done" : ""}`}>
+                    <span className="export-action-flow__step-num" aria-hidden>
+                      1
+                    </span>
+                    <button
+                      type="button"
+                      className={approvedForBuild ? "primary-btn export-action-flow__btn" : "secondary-btn export-action-flow__btn"}
+                      onClick={() => {
+                        setApprovedForBuild((current) => {
+                          const next = !current;
+                          if (!next) setPlanSavedSuccessfully(false);
+                          return next;
+                        });
+                      }}
+                    >
+                      {approvedForBuild ? "Approved for build" : "Mark approved for build"}
+                    </button>
+                  </div>
+                  <div className="export-action-flow__rail" aria-hidden />
+                  <div className="export-action-flow__node">
+                    <span className="export-action-flow__step-num" aria-hidden>
+                      2
+                    </span>
+                    <button
+                      type="button"
+                      className="secondary-btn export-action-flow__btn save-plan-btn"
+                      disabled={!authUser?.canSaveRooms}
+                      title={authUser?.canSaveRooms ? undefined : "Purchase a room pack to save plans"}
+                      onClick={() => (authUser?.canSaveRooms ? void saveCurrentPlan() : openUpgradePrompt())}
+                    >
+                      {authUser?.canSaveRooms ? (
+                        <>
+                          <span
+                            className="save-plan-btn__meter"
+                            style={{ ["--save-pct" as string]: `${planCompletionPercent}%` }}
+                            aria-hidden
+                          />
+                          Save plan ({planCompletionPercent}% complete)
+                        </>
+                      ) : (
+                        "Save plan (paid)"
+                      )}
+                    </button>
+                  </div>
+                  <div className="export-action-flow__rail export-action-flow__rail--accent" aria-hidden />
+                  <div className="export-action-flow__node">
+                    <span className="export-action-flow__step-num" aria-hidden>
+                      3
+                    </span>
+                    <button
+                      type="button"
+                      className="primary-btn export-action-flow__btn"
+                      disabled={
+                        exportBusy ||
+                        !authUser?.canExportRunbook ||
+                        !approvedForBuild ||
+                        (!planSavedSuccessfully && !trialEvalExportAllowed)
+                      }
+                      aria-busy={exportBusy}
+                      title={
+                        !authUser?.canExportRunbook
+                          ? "Purchase an export credit or upgrade to export a full runbook."
+                          : !approvedForBuild
+                            ? "Approve the plan for build first."
+                            : !planSavedSuccessfully && !trialEvalExportAllowed
+                              ? "Save the plan successfully before exporting."
+                              : trialEvalExportAllowed && !planSavedSuccessfully
+                                ? "Trial evaluation export — save is optional for your first export."
+                                : undefined
+                      }
+                      onClick={() =>
+                        authUser?.canExportRunbook ? void exportPlan() : openUpgradePrompt()
+                      }
+                    >
+                      {exportBusy ? "Exporting…" : authUser?.canExportRunbook ? "Export plan" : "Export plan (locked)"}
+                    </button>
+                  </div>
+                </div>
+                <p className="muted export-action-flow__hint">
+                  Complete all three steps in order: approve, save without errors, then export. Planning syncs with strict validation when
+                  you export (markdown + PDF).
+                  {trialEvalExportAllowed && !planSavedSuccessfully ? (
+                    <>
+                      {" "}
+                      On trial, you may export once after approval to evaluate the PDF without saving first.
+                    </>
+                  ) : null}
+                </p>
+              </div>
+    ),
+    [
+      approvedForBuild,
+      authUser,
+      planCompletionPercent,
+      exportBusy,
+      planSavedSuccessfully,
+      trialEvalExportAllowed,
+    ],
+  );
+
+  const experienceReviewContent = useMemo(
+    () => (
+      <>
+        <h2 className="text-xl font-bold text-slate-50">Review your room</h2>
+        <p className="muted mb-4 text-sm">
+          Story, puzzles, staging props, and flow — then approve and export when you are ready.
+        </p>
+        <div className="output-review-body">{outputReviewBodyElement}</div>
+        <BuilderLegalDisclaimer compact />
+        <section id="builder-export-anchor" className="output-review-glass-surface mt-6 rounded-lg p-4">
+          <h3 className="output-review-section-title">Export &amp; save</h3>
+          {outputExportActionsElement}
+        </section>
+        {generationTelemetry ? (
+          <Accordion type="single" collapsible className="mt-6">
+            <AccordionItem value="generation-telemetry">
+              <AccordionTrigger className="text-sm text-slate-300">Generation details</AccordionTrigger>
+              <AccordionContent>
+                <CouncilTelemetryPanel telemetry={generationTelemetry} compact serverOpenAiConfigured={serverOpenAiConfigured} browserAiReady={browserAiReady} />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        ) : null}
+      </>
+    ),
+    [
+      outputReviewBodyElement,
+      outputExportActionsElement,
+      generationTelemetry,
+      serverOpenAiConfigured,
+      browserAiReady,
+    ],
+  );
 
   if (!authBootstrapReady && initialAuth.authToken.trim()) {
     return (
