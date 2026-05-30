@@ -5318,6 +5318,16 @@ export default function App() {
   };
 
   const handleThemeSelect = (themeId: string): void => {
+    if (themeId !== selectedThemeId) {
+      setPuzzles([]);
+      setLastRoomSkeleton(null);
+      setRefusedPuzzleSlots([]);
+      setStoryPlan(null);
+      setGenerationTelemetry(null);
+      setExportContent("");
+      setApprovedForBuild(false);
+      setPlanSavedSuccessfully(false);
+    }
     setSelectedThemeId(themeId);
     setValidationFlags((current) => ({ ...current, selectedThemeId: false }));
   };
@@ -7994,6 +8004,7 @@ export default function App() {
                       composeThemeContent={experienceComposeTheme}
                       curateContent={experienceCurateContent}
                       reviewContent={experienceReviewContent}
+                      selectedThemeId={selectedThemeId}
                       workspaceSessionExpired={workspaceSessionExpired.open}
                       workspaceSessionExpiredMessage={workspaceSessionExpired.message}
                       onWorkspaceReauth={() => {

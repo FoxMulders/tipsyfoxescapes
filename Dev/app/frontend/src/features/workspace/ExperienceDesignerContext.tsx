@@ -23,6 +23,7 @@ export type ExperienceDesignerContextValue = {
   composeThemeContent: ReactNode;
   curateContent: ReactNode;
   reviewContent: ReactNode;
+  selectedThemeId: string;
   navMenu: WorkspaceNavMenuProps;
   selectedThemeName?: string;
   planningDialogOpen: boolean;

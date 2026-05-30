@@ -32,6 +32,7 @@ export type BuilderPersistentWorkspaceProps = {
   composeThemeContent: ReactNode;
   curateContent: ReactNode;
   reviewContent: ReactNode;
+  selectedThemeId: string;
   navMenu: WorkspaceNavMenuProps;
   workspaceSessionExpired: boolean;
   workspaceSessionExpiredMessage: string;
@@ -59,6 +60,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     composeThemeContent,
     curateContent,
     reviewContent,
+    selectedThemeId,
     navMenu,
     workspaceSessionExpired,
     workspaceSessionExpiredMessage,
@@ -98,6 +100,13 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       navigate("/builder/compose", { replace: true });
       return;
     }
+    // Stay on compose until the user explicitly generates — do not auto-skip to studio.
+    if (location.pathname.startsWith("/builder/compose")) {
+      if (puzzlesGenerating) {
+        navigate("/builder/generating", { replace: true });
+      }
+      return;
+    }
     const target = routeForStep(resolvedStep);
     if (!location.pathname.startsWith("/builder/")) {
       navigate(target, { replace: true });
@@ -106,7 +115,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
     if (location.pathname !== target && resolvedStep !== "curate") {
       navigate(target, { replace: true });
     }
-  }, [resolvedStep, navigate, location.pathname]);
+  }, [resolvedStep, navigate, location.pathname, puzzlesGenerating]);
 
   const stepContent = useMemo(() => {
     switch (activeStep) {
@@ -164,12 +173,17 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
 
   const handleStepNavigate = useCallback(
     (step: WorkspaceStepId) => {
-      if (step === "generating") return;
+      if (step === "generating") {
+        if (activeStep === "compose" && canGenerateRoom) {
+          void onGenerateRoom();
+        }
+        return;
+      }
       if (step === "studio" && !hasBlueprint) return;
       if (step === "review" && !canReview) return;
       navigate(routeForStep(step));
     },
-    [hasBlueprint, canReview, navigate],
+    [activeStep, canGenerateRoom, hasBlueprint, canReview, navigate, onGenerateRoom],
   );
 
   const contextValue = useMemo(
@@ -191,6 +205,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       composeThemeContent,
       curateContent,
       reviewContent,
+      selectedThemeId,
       navMenu,
       planningDialogOpen,
       setPlanningDialogOpen,
@@ -221,6 +236,7 @@ export function BuilderPersistentWorkspace(props: BuilderPersistentWorkspaceProp
       composeThemeContent,
       curateContent,
       reviewContent,
+      selectedThemeId,
       navMenu,
       planningDialogOpen,
       onGenerateRoom,

@@ -54,6 +54,7 @@ export function ExperienceDesignerShell({
           hasBlueprint={hasBlueprint}
           puzzlesGenerating={puzzlesGenerating}
           canReview={canReview}
+          canGenerateRoom={canGenerateRoom}
         />
         {showStudioSegment ? (
           <StudioSegmentToggle
