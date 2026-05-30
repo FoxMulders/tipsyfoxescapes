@@ -15,9 +15,11 @@ const textareaClass =
 
 type RoomConfigurationFormProps = {
   eventSuggestions: string[];
+  /** Dialog / generate flow: only required planning fields. */
+  primaryOnly?: boolean;
 };
 
-export function RoomConfigurationForm({ eventSuggestions }: RoomConfigurationFormProps) {
+export function RoomConfigurationForm({ eventSuggestions, primaryOnly = false }: RoomConfigurationFormProps) {
   const { state, dispatch, clearValidation, maxConcurrent, plannerMainPuzzleTarget, juniorAddOnPuzzleSlots, estimatePulseKey } =
     usePlanning();
   const invalid = (key: string) => Boolean(state.validationFlags[key]);
@@ -122,7 +124,7 @@ export function RoomConfigurationForm({ eventSuggestions }: RoomConfigurationFor
         <DynamicEstimator target={plannerMainPuzzleTarget} juniorAddOnSlots={juniorAddOnPuzzleSlots} pulseKey={estimatePulseKey} />
       </div>
 
-      {!isCommercial ? (
+      {!primaryOnly && !isCommercial ? (
         <div className="form-field-panel">
           <FieldHint label="Event context" htmlFor="event-context-input" tooltip="e.g., Halloween party, corporate team building.">
             <Input

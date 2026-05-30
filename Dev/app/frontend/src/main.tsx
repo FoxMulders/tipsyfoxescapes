@@ -6,6 +6,7 @@ import { AppRouter } from "./AppRouter.tsx";
 import "./index.css";
 import "./styles/design-system.css";
 import "./App.css";
+import "@/features/workspace/workspace.tokens.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

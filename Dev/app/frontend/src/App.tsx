@@ -14,7 +14,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { computePlanCompletionPercent } from "./planCompletionScore.ts";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
   consumeOAuthReturnSnapshot,
@@ -83,8 +83,8 @@ import { type BillingPlan } from "@/components/account/PlansAndBillingSection";
 import { resolveSquareWebEnvironment } from "@/lib/squareEnv";
 import { EmptyRoomInstallChecklist } from "@/components/planning/EmptyRoomInstallChecklist";
 import { BuilderPersistentWorkspace } from "@/features/workspace/BuilderPersistentWorkspace";
+import { ExperienceThemeSection } from "@/features/workspace/ExperienceThemeSection";
 import { WorkspaceSessionExpiredOverlay } from "@/features/workspace/WorkspaceSessionExpiredOverlay";
-import { ThemeStepWorkspacePanel } from "@/features/workspace/ThemeStepWorkspacePanel";
 import { PuzzleThemesStepShell } from "@/features/workspace/PuzzleThemesStepShell";
 import { ThemeStepPortalOrStatic } from "@/features/workspace/ThemeStepPortalOrStatic";
 import { CouncilTelemetryPanel } from "@/features/planning/components/GenerationTelemetryPanel";
@@ -2625,7 +2625,11 @@ export default function App() {
   const prevWizardStepsRef = useRef(wizardSteps);
   const flowWizardStep: WizardStep = wizardSteps.includes(wizardStep) ? wizardStep : (wizardSteps[0] ?? "setup");
   const persistentCanvasSteps =
-    flowWizardStep === "setup" || flowWizardStep === "themes" || flowWizardStep === "themes-puzzles";
+    flowWizardStep === "setup" ||
+    flowWizardStep === "themes" ||
+    flowWizardStep === "themes-puzzles" ||
+    flowWizardStep === "output-review" ||
+    flowWizardStep === "output-export";
   persistentCanvasStepsRef.current = persistentCanvasSteps;
   const wizardIndex = wizardSteps.indexOf(flowWizardStep);
   const missionStepLabels = useMemo(() => wizardSteps.map(wizardStepLabel), [wizardSteps]);
@@ -3028,6 +3032,7 @@ export default function App() {
     if (!synced) return;
     setWizardStep("themes-puzzles");
     setActivePanel("themes");
+    navigate("/builder/generating");
     if (puzzles.length === 0) {
       const themeForEnhance = themes.find((theme) => theme.id === selectedThemeId) ?? null;
       await requestPuzzles(activeSessionId, selectedThemeId, themeForEnhance);
@@ -3063,6 +3068,22 @@ export default function App() {
     selectedThemeId,
     targetInterface,
   ]);
+
+  const tryGenerateRoom = useCallback((): boolean => {
+    if (!buildPlanningBody("strict")) {
+      flagMissingFields(collectStrictPlanningMissing());
+      return false;
+    }
+    return true;
+  }, [
+    playersConcurrent,
+    participantsTotal,
+    sessionDurationMinutes,
+    environmentType,
+    targetInterface,
+  ]);
+
+  const canReviewWorkspace = Boolean(selectedThemeId.trim() && puzzles.length > 0);
 
   const workspaceVenueSummary = useMemo(
     () =>
@@ -3113,6 +3134,9 @@ export default function App() {
         setWizardStep("output-review");
         setActivePanel("output");
       });
+      if (persistentCanvasStepsRef.current) {
+        navigate("/builder/review", { replace: true });
+      }
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           document.getElementById("builder-output-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -3669,6 +3693,175 @@ export default function App() {
       : isMobileLikeDevice()
         ? "Sign in to generate themes for your room"
         : "Use Chrome on-device AI or upgrade to a room pack for rotating theme ideas";
+
+  const experienceComposeTheme = useMemo(
+    () => (
+      <ExperienceThemeSection
+        serverOpenAiConfigured={serverOpenAiConfigured}
+        browserAiReady={browserAiReady}
+        themePath={themePath}
+        themes={themes}
+        themeIdeasLoading={themeIdeasLoading}
+        themeSessionExpiredNotice={themeSessionExpiredNotice}
+        workspaceSessionExpiredOpen={workspaceSessionExpired.open}
+        canGenerateNewThemes={canGenerateNewThemes}
+        themeGenerateDisabledTitle={themeGenerateDisabledTitle}
+        onGenerateThemes={handleGenerateNewThemes}
+        selectedThemeId={selectedThemeId}
+        simpleThemeView={simpleThemeView}
+        simpleRoomSetup={simpleRoomSetup}
+        hasFullCatalogAccess={hasFullCatalogAccess}
+        validationFlagsSelectedTheme={validationFlags.selectedThemeId}
+        hoverPreviewThemeId={hoverPreviewThemeId}
+        themePlanningContextLine={themePlanningContextLine}
+        resolveThemeTldr={(theme) => resolveThemeTldr(theme as Theme)}
+        onThemeSelect={handleThemeSelect}
+        onHoverTheme={setHoverPreviewThemeId}
+        onUseCustomTheme={() => {
+          cancelThemeGeneration();
+          setThemePath("custom");
+          setThemes([]);
+          setSelectedThemeId("");
+          resetCustomThemeCoach();
+        }}
+        onBrowseGenerated={() => {
+          setThemePath("generated");
+          resetCustomThemeCoach();
+          void loadThemes("/api/themes/generate");
+        }}
+        customThemeName={customThemeName}
+        customThemeDescription={customThemeDescription}
+        customThemeSaving={customThemeSaving}
+        onCustomThemeNameChange={(v) => {
+          setCustomThemeName(v);
+          setValidationFlags((c) => ({ ...c, customThemeName: false }));
+        }}
+        onCustomThemeDescriptionChange={setCustomThemeDescription}
+        onAddCustomTheme={() => void addCustomTheme()}
+        customThemeCoachMessages={customThemeCoachMessages}
+        customThemeCoachBusy={customThemeCoachBusy}
+        customThemeCoachError={customThemeCoachError}
+        coachBrowserAiReady={coachBrowserAiReady}
+        authToken={authToken}
+        customThemeCoachPrereqsOk={customThemeCoachPrereqsOk}
+        coachCoverage={coachCoverage}
+        onStartCoach={() => void handleStartCustomThemeCoach()}
+        onSelectCoachOption={(option) => void handleSelectCoachOption(option)}
+        onSynthesizeCoach={() => void handleSynthesizeCustomThemeCoach()}
+        onClearCoach={resetCustomThemeCoach}
+        briefPolishBusy={briefPolishBusy}
+        onRunPolishBrief={() => void runPolishCurrentBrief()}
+        ThemeDescriptionBlocks={ThemeDescriptionBlocks}
+        inputHistoryCustomThemeNames={inputHistory.customThemeName ?? []}
+      />
+    ),
+    [
+      serverOpenAiConfigured,
+      browserAiReady,
+      themePath,
+      themes,
+      themeIdeasLoading,
+      themeSessionExpiredNotice,
+      workspaceSessionExpired.open,
+      canGenerateNewThemes,
+      themeGenerateDisabledTitle,
+      selectedThemeId,
+      simpleThemeView,
+      simpleRoomSetup,
+      hasFullCatalogAccess,
+      validationFlags.selectedThemeId,
+      hoverPreviewThemeId,
+      themePlanningContextLine,
+      customThemeName,
+      customThemeDescription,
+      customThemeSaving,
+      customThemeCoachMessages,
+      customThemeCoachBusy,
+      customThemeCoachError,
+      coachBrowserAiReady,
+      authToken,
+      customThemeCoachPrereqsOk,
+      coachCoverage,
+      briefPolishBusy,
+      inputHistory.customThemeName,
+    ],
+  );
+
+  const experienceCurateContent = useMemo(
+    () =>
+      puzzles.length > 0 || refusedPuzzleSlots.length > 0 ? (
+        <PuzzleWindowsTrack
+          puzzles={puzzles}
+          refusedSlots={refusedPuzzleSlots}
+          numberOffset={0}
+          selectedThemeName={selectedThemeName}
+          selectedThemeDescription={selectedThemeDescription}
+          authUser={authUser}
+          arduinoPreviewPuzzleId={arduinoPreviewPuzzleId}
+          puzzleWindowBusy={puzzleWindowBusy}
+          onToggleArduinoPreview={(id) => setArduinoPreviewPuzzleId((cur) => (cur === id ? null : id))}
+          onReplace={(id) => void replacePuzzle(id)}
+          onReject={(id) => void rejectPuzzle(id)}
+          onFillSlot={(slotId) => void fillPuzzleSlot(slotId)}
+        />
+      ) : (
+        <p className="muted">Generate a room first to curate puzzles.</p>
+      ),
+    [
+      puzzles,
+      refusedPuzzleSlots,
+      selectedThemeName,
+      selectedThemeDescription,
+      authUser,
+      arduinoPreviewPuzzleId,
+      puzzleWindowBusy,
+    ],
+  );
+
+  const experienceReviewContent = useMemo(
+    () => (
+      <>
+        <h2 className="text-xl font-bold text-slate-50">Output review</h2>
+        <OutputReviewActionBar
+          placement="top"
+          canGoBack={canGoWizardBack}
+          onBack={goWizardBack}
+          onContinueExport={() => {
+            setWizardStep("output-export");
+            navigate("/builder/review");
+          }}
+        />
+        <div className="output-review-body mt-4">
+          {storyPlan ? (
+            <div className="output-review-glass-surface mb-4 rounded-lg p-4">
+              <h3 className="output-review-section-title">Story</h3>
+              <p className="output-review-prose">{storyPlan.situation}</p>
+            </div>
+          ) : null}
+          {puzzles.length > 0 ? (
+            <>
+              <h3 className="output-review-section-title">Puzzle set</h3>
+              <p className={compatibilityPassed ? "status-pass" : "status-fail"}>
+                Theme compatibility checks passed: {compatibilityPassed ? "Yes" : "No"}
+              </p>
+            </>
+          ) : null}
+        </div>
+      </>
+    ),
+    [canGoWizardBack, storyPlan, puzzles.length, compatibilityPassed, navigate],
+  );
+
+  useEffect(() => {
+    if (appView !== "builder" || !persistentCanvasSteps) return;
+    document.documentElement.classList.add("builder-route--fullpage");
+    if (!location.pathname.startsWith("/builder")) {
+      navigate("/builder/compose", { replace: true });
+    }
+    return () => {
+      document.documentElement.classList.remove("builder-route--fullpage");
+    };
+  }, [appView, persistentCanvasSteps, location.pathname, navigate]);
 
   const handleGenerateArchitecturalSkeleton = useCallback((): void => {
     const planning = planningRef.current;
@@ -7271,61 +7464,65 @@ export default function App() {
             </div>
             ) : null}
             {persistentCanvasSteps ? (
-              <BuilderPersistentWorkspace
-                flowWizardStep={flowWizardStep}
-                roomSkeleton={lastRoomSkeleton}
-                generationTelemetry={generationTelemetry}
-                puzzlesGenerating={puzzlesGenerating}
-                puzzles={puzzleInspectorSlices}
-                venueSummary={workspaceVenueSummary}
-                eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
-                itemHistory={inputHistory.availableItems ?? []}
-                onOpenInspiration={() => setInspirationOpen(true)}
-                canGenerateRoom={canGenerateRoom}
-                generateRoomDisabledReason={generateRoomDisabledReason}
-                onGenerateRoom={() => void handleGenerateRoom()}
-                onOpenReview={() => void proceedToOutputReview()}
-                briefThemeContent={
-                  <ThemeStepWorkspacePanel
-                    themeIdeasLoading={themeIdeasLoading}
-                    canGenerateNewThemes={canGenerateNewThemes}
-                    themeGenerateDisabledTitle={themeGenerateDisabledTitle}
-                    themesCount={themes.length}
-                    onGenerateThemes={handleGenerateNewThemes}
-                    selectedThemeId={selectedThemeId}
-                    showContinueButton={false}
-                  >
-                    <div id="workspace-theme-slot" className="workspace-theme-slot" />
-                  </ThemeStepWorkspacePanel>
-                }
-                blueprintExtra={
-                  flowWizardStep === "themes-puzzles" ? (
-                    <div id="workspace-puzzle-slot" className="workspace-puzzle-slot min-h-[200px]" />
-                  ) : undefined
-                }
-                navMenu={{
-                  brandName: BRAND_NAME,
-                  authName: authUser.name,
-                  billingTierLabel: formatBillingTierLabel(authUser.billingTier),
-                  planStatusDetail: `${authUser.roomsRemaining} of ${authUser.roomAllowance} save slots · ${authUser.exportCreditsRemaining} export credits`,
-                  appView,
-                  showAdminTab: authUser.role === "admin" || authUser.isAdmin,
-                  onAppViewChange: (view) => {
-                    if (view === "admin") {
-                      navigate("/admin/dashboard");
-                      return;
-                    }
-                    setAppView(view);
-                  },
-                  onSignOut: signOut,
-                  onOpenSnapshot: () => setSnapshotOpen(true),
-                  themeName: selectedTheme?.name,
-                  puzzleCount: puzzles.length,
-                }}
-              />
+              <Routes>
+                <Route
+                  path="/builder/*"
+                  element={
+                    <BuilderPersistentWorkspace
+                      flowWizardStep={flowWizardStep}
+                      roomSkeleton={lastRoomSkeleton}
+                      generationTelemetry={generationTelemetry}
+                      puzzlesGenerating={puzzlesGenerating}
+                      puzzles={puzzleInspectorSlices}
+                      eventSuggestions={dedupeStringsPreserveOrder([...EVENT_CONTEXT_PRESETS, ...(inputHistory.eventType ?? [])])}
+                      canGenerateRoom={canGenerateRoom}
+                      generateRoomDisabledReason={generateRoomDisabledReason}
+                      canReview={canReviewWorkspace}
+                      simpleThemeView={simpleThemeView}
+                      setSimpleThemeView={setSimpleThemeView}
+                      onGenerateRoom={() => void handleGenerateRoom()}
+                      onGenerateThemes={handleGenerateNewThemes}
+                      onOpenReview={() => void proceedToOutputReview()}
+                      onReplacePuzzle={(id) => void replacePuzzle(id)}
+                      onTryGenerateRoom={tryGenerateRoom}
+                      composeThemeContent={experienceComposeTheme}
+                      curateContent={experienceCurateContent}
+                      reviewContent={experienceReviewContent}
+                      workspaceSessionExpired={workspaceSessionExpired.open}
+                      workspaceSessionExpiredMessage={workspaceSessionExpired.message}
+                      onWorkspaceReauth={() => {
+                        const msg = workspaceSessionExpired.message;
+                        setWorkspaceSessionExpired({ open: false, message: "" });
+                        persistAuth("", null);
+                        setError(msg);
+                        setAppView("account");
+                      }}
+                      navMenu={{
+                        brandName: BRAND_NAME,
+                        authName: authUser.name,
+                        billingTierLabel: formatBillingTierLabel(authUser.billingTier),
+                        planStatusDetail: `${authUser.roomsRemaining} of ${authUser.roomAllowance} save slots · ${authUser.exportCreditsRemaining} export credits`,
+                        appView,
+                        showAdminTab: authUser.role === "admin" || authUser.isAdmin,
+                        onAppViewChange: (view) => {
+                          if (view === "admin") {
+                            navigate("/admin/dashboard");
+                            return;
+                          }
+                          setAppView(view);
+                        },
+                        onSignOut: signOut,
+                        onOpenSnapshot: () => setSnapshotOpen(true),
+                        themeName: selectedTheme?.name,
+                        puzzleCount: puzzles.length,
+                      }}
+                    />
+                  }
+                />
+              </Routes>
             ) : null}
-            {flowWizardStep === "themes" || (persistentCanvasSteps && flowWizardStep === "setup") ? (
-              <ThemeStepPortalOrStatic persistent={persistentCanvasSteps}>
+            {false && flowWizardStep === "themes" ? (
+              <ThemeStepPortalOrStatic persistent={false}>
                 <OpenAiOpsBanner configured={serverOpenAiConfigured} browserAiReady={browserAiReady} />
                 <div className="theme-view-toggle-row theme-view-toggle-row--themes-step">
                   <span className="theme-view-toggle-legend" id="theme-view-toggle-label">
@@ -7650,9 +7847,9 @@ export default function App() {
                 ) : null}
               </ThemeStepPortalOrStatic>
             ) : null}
-            {flowWizardStep === "themes-puzzles" ? (
+            {false && flowWizardStep === "themes-puzzles" ? (
               <PuzzleThemesStepShell
-                persistent={persistentCanvasSteps}
+                persistent={false}
                 serverOpenAiConfigured={serverOpenAiConfigured}
                 browserAiReady={browserAiReady}
                 lastRoomSkeleton={lastRoomSkeleton}
@@ -7808,10 +8005,10 @@ export default function App() {
                   <div className="theme-selected-brief">
                     <p className="muted theme-selected-brief-label">Selected theme</p>
                     <div className="theme-dock-header">
-                      <h3 className="theme-dock-name">{selectedTheme.name}</h3>
+                      <h3 className="theme-dock-name">{selectedTheme!.name}</h3>
                       <div className="theme-dock-tldr-row">
                         <span className="theme-idea-tldr-label">TL;DR</span>
-                        <span className="theme-idea-tldr-text">{resolveThemeTldr(selectedTheme)}</span>
+                        <span className="theme-idea-tldr-text">{resolveThemeTldr(selectedTheme!)}</span>
                       </div>
                     </div>
                     {!simpleThemeView ? (
@@ -7820,7 +8017,7 @@ export default function App() {
                           <button
                             type="button"
                             className="secondary-btn theme-editor-pass-btn"
-                            disabled={briefPolishBusy || !selectedTheme.description.trim()}
+                            disabled={briefPolishBusy || !(selectedTheme as Theme).description.trim()}
                             aria-busy={briefPolishBusy}
                             title={
                               coachBrowserAiReady
@@ -7833,7 +8030,7 @@ export default function App() {
                           </button>
                         </div>
                         <div className="theme-dock-body theme-selected-brief-desc">
-                          <ThemeDescriptionBlocks text={selectedTheme.description} />
+                          <ThemeDescriptionBlocks text={(selectedTheme as Theme).description} />
                         </div>
                       </>
                     ) : null}
@@ -8747,7 +8944,7 @@ export default function App() {
           />
         </Suspense>
       ) : null}
-      {workspaceSessionExpired.open && authUser && appView === "builder" && persistentCanvasSteps ? (
+      {workspaceSessionExpired.open && authUser && appView === "builder" && !persistentCanvasSteps ? (
         <WorkspaceSessionExpiredOverlay
           open
           message={workspaceSessionExpired.message}
